@@ -194,16 +194,19 @@ on:
 
 permissions:
   contents: write  # needed to commit /graph back to repo
+  models: read     # needed for GITHUB_TOKEN to access GitHub Models API
 
 jobs:
   kg:
     runs-on: ubuntu-latest
     env:
-      LLM_PROVIDER: "UNSPECIFIED"      # options: openai | azure_openai | anthropic | local
-      LLM_MODEL: "UNSPECIFIED"
+      LLM_PROVIDER: "github_models"    # options: github_models | openai | azure_openai | anthropic | local
+      LLM_MODEL: "openai/gpt-4o-mini"  # publisher/model format required by models.github.ai
+      LLM_ENDPOINT: "https://models.github.ai/inference"
       MAX_USD_PER_RUN: "1.00"          # hard budget gate
       MAX_CONCURRENCY: "2"             # rate limit safety
       CHUNK_TOKEN_TARGET: "750"        # tune per model/context
+      CHUNK_BATCH_SIZE: "3"            # chunks per LLM request (stay under 8K input tokens)
       GRAPH_BASE_URL: "https://<YOUR_DOMAIN>"
     steps:
       - uses: actions/checkout@v5
@@ -222,7 +225,7 @@ jobs:
 
       - name: Build graph
         env:
-          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}   # required
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # native token; no separate secret needed
         run: |
           python -m tools.kg_build \
             --repo-root . \
@@ -236,17 +239,18 @@ jobs:
       - name: Commit graph artifacts
         if: github.event_name == 'push'
         run: |
-          git config user.name "kg-bot"
-          git config user.email "kg-bot@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add graph
           git diff --cached --quiet || git commit -m "chore(graph): update artifacts [skip ci]"
           git push
 #+end_src
 
 ** Secrets (CI)
-- LLM_API_KEY (required): provider key (OpenAI/Azure OpenAI/etc.)
+- GITHUB_TOKEN (built-in): automatically provided by GitHub Actions; used for GitHub Models API authentication via `permissions: models: read`
 - AZURE_STATIC_WEB_APPS_API_TOKEN (if SWA deploy workflow is enabled)
 - AZURE_CREDENTIALS (only if deploying a separate Function App via az login)
+- Note: No separate LLM_API_KEY is needed when using GitHub Models as the provider
 
 * Concrete extraction steps (tools/)
 ** Chunking strategy (deterministic)
@@ -441,7 +445,7 @@ def sparql(req: func.HttpRequest) -> func.HttpResponse:
 #+begin_src python
 import azure.functions as func
 import json, os, hashlib
-from pyoxigraph import Store
+from pyoxigraph import Store, QueryResultsFormat
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -472,7 +476,8 @@ def sparql(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         r = _STORE.query(query)
-        return func.HttpResponse(r.to_json(), mimetype="application/sparql-results+json")
+        payload = r.serialize(format=QueryResultsFormat.JSON)
+        return func.HttpResponse(payload, mimetype="application/sparql-results+json")
     except Exception as e:
         return func.HttpResponse(json.dumps({"error":str(e)}), status_code=400)
 #+end_src
@@ -657,3 +662,164 @@ SELECT ?entity (COUNT(?article) AS ?n) WHERE {
 Key implementation decisions above follow current official guidance: SWA uses `staticwebapp.config.json` for routing/config and deprecates `routes.json` citeturn3search0; SWA deploy configuration uses `app_location/api_location/output_location` in the GitHub Actions workflow model citeturn3search1turn3search5 and deployments rely on a deployment token stored as a GitHub secret by default. citeturn5search4 GitHub Actions secrets and token usage are handled via standard GitHub mechanisms (repository secrets; `GITHUB_TOKEN` auth; ability to skip workflow runs with commit message directives like `[skip ci]`). citeturn4search3turn4search0turn4search1
 
 On the query side, the `/sparql` function aligns with SPARQL protocol expectations (single `query` string; result formats based on query form) citeturn2search2 and uses either RDFLib’s SPARQL engine (`Graph.query()` with result serialization options like JSON) citeturn1search2turn9search1 or PyOxigraph’s Store abstraction for SPARQL on an RDF dataset. citeturn2search0turn2search15 For data quality enforcement, SHACL is the W3C standard for validating RDF graphs against constraints citeturn2search3 and PROV-O provides a standard RDF vocabulary for exchanging provenance across systems. citeturn7search3
+## Validation corrections (April 2026)
+
+The following corrections were applied to this document after independent validation research.
+
+### Critical fixes applied
+
+1. **GitHub Models endpoint updated**: The Azure inference endpoint `models.inference.ai.azure.com` was deprecated in July 2025 and stopped responding in October 2025. All references updated to the current endpoint: `https://models.github.ai/inference`. See: [GitHub Blog - Deprecation of Azure endpoint for GitHub Models](https://github.blog/changelog/2025-07-17-deprecation-of-azure-endpoint-for-github-models/).
+
+2. **Model naming format**: GitHub Models now requires the `publisher/model` format (e.g., `openai/gpt-4o-mini` instead of `gpt-4o-mini`). Updated throughout.
+
+3. **Authentication simplified**: As of April 2025, `GITHUB_TOKEN` natively supports GitHub Models access from within GitHub Actions workflows. The workflow requires `permissions: models: read`. No separate `LLM_API_KEY` secret is needed. See: [GitHub Blog - GitHub Actions token integration now GA in GitHub Models](https://github.blog/changelog/2025-04-14-github-actions-token-integration-now-generally-available-in-github-models/).
+
+4. **PyOxigraph API corrected**: The `.to_json()` method does not exist on PyOxigraph query results. The correct API is `.serialize(format=QueryResultsFormat.JSON)` which returns bytes conforming to the W3C SPARQL Query Results JSON specification. See: [PyOxigraph SPARQL docs](https://pyoxigraph.readthedocs.io/en/stable/sparql.html).
+
+5. **LLM provider default set**: Changed `LLM_PROVIDER` from `"UNSPECIFIED"` to `"github_models"` and `LLM_MODEL` to `"openai/gpt-4o-mini"` to reflect the chosen provider.
+
+### Important corrections applied
+
+6. **`permissions: models: read` added** to the GitHub Actions workflow YAML - required for `GITHUB_TOKEN` to authenticate with the GitHub Models API.
+
+7. **Bot commit identity** updated to use the standard `github-actions[bot]` convention: `41898282+github-actions[bot]@users.noreply.github.com`.
+
+## GitHub Models - rate limits and batching strategy
+
+### Free tier limits (GPT-4o-mini)
+
+| Metric | Limit |
+|--------|-------|
+| Requests per day | 150 |
+| Input tokens per request | 8,000 |
+| Output tokens per request | 4,000 |
+| Rate (RPM) | ~15-30 |
+
+Other models: GPT-4o is limited to 50 req/day. Phi and Llama models have separate quotas. Each model's limit is tracked independently per user (UserByModelByDay).
+
+### Batching strategy (mandatory)
+
+For a knowledge bank with ~100 content chunks at 750 tokens each:
+
+- **System prompt overhead**: ~2,000 tokens (ontology + rules + few-shot examples)
+- **Per-chunk overhead**: ~750 tokens input + ~200-500 tokens output
+- **Batch 3-5 chunks per request**: 2,000 + (5 x 750) = 5,750 tokens fits in 8K limit
+- **Total API calls**: 100 chunks / 5 per batch = **20 requests** (well within 150/day)
+- **Incremental builds**: Only process changed chunks (git diff detection) - most runs process <20 chunks
+
+### Caching (mandatory)
+
+Per-chunk extraction cache keyed by `(chunk_id, prompt_version, model)`:
+- Location: `/graph/cache/<chunk_id>.<prompt_version>.json`
+- On cache hit: skip LLM call entirely
+- Cache invalidation: chunk content change (new sha256) or prompt version bump
+
+### Python SDK integration
+
+```python
+from openai import OpenAI
+import os
+
+client = OpenAI(
+    base_url="https://models.github.ai/inference",
+    api_key=os.environ["GITHUB_TOKEN"]
+)
+
+response = client.chat.completions.create(
+    model="openai/gpt-4o-mini",
+    messages=[
+        {"role": "system", "content": "...extraction prompt..."},
+        {"role": "user", "content": "...batched chunks..."}
+    ],
+    temperature=0,
+    response_format={"type": "json_object"}
+)
+```
+
+## Azure Static Web Apps - Free plan details
+
+### Resource limits
+
+| Resource | Free plan | Standard plan |
+|----------|-----------|---------------|
+| Storage per environment | 250 MB | 500 MB |
+| Total storage | 500 MB | 2 GB |
+| File count | 15,000 | 15,000 |
+| Bandwidth | 100 GB/month | 100 GB/month (overages billable) |
+| Custom domains | 2 | 5 |
+| Preview environments | 3 | 10 |
+| SLA | None | 99.95% |
+
+### Managed Functions (API) constraints on Free plan
+
+- **Triggers**: HTTP only (no timer, queue, event grid)
+- **Runtime**: Python 3.9-3.11 supported
+- **Execution timeout**: 10 minutes (inherited from Consumption plan)
+- **Free grant**: 1 million requests/month + 400,000 GB-s per subscription
+- **No managed identity**: Cannot use Azure Key Vault references
+- **Not standalone**: API only accessible via the SWA domain (not separately addressable)
+
+### Why this is sufficient for the knowledge bank
+
+- Most reads hit static files (JSON-LD, Turtle, precomputed views) - zero compute cost
+- SPARQL queries are the minority of requests - Consumption plan free grant covers this
+- 250 MB storage is adequate: typical graph artifacts are <10 MB; cache can be excluded from deployment
+- 10-minute timeout is more than enough for SPARQL queries against an in-memory RDF dataset
+
+## Python RDF library stack
+
+### Recommended stack
+
+| Library | Version | Size | Type | Purpose |
+|---------|---------|------|------|---------|
+| RDFLib | >=7.1.1, <8.0 | ~615 KB | Pure Python | SPARQL engine, JSON-LD, Turtle, TriG |
+| pySHACL | >=0.31.0 | ~445 KB | Pure Python | SHACL validation |
+| openai | >=1.0 | ~200 KB | Pure Python | GitHub Models SDK |
+
+**Combined footprint: ~1.3 MB** - excellent for Azure Functions cold start (<1s).
+
+### RDFLib capabilities (validated)
+
+- `Graph.query()` and `Dataset.query()`: Full SPARQL 1.1 support
+- `result.serialize(format="json")`: Produces W3C SPARQL Results JSON
+- Built-in JSON-LD parser/serializer (since v6.0.1; separate `rdflib-jsonld` plugin is archived/deprecated)
+- Supports: Turtle, TriG, N-Triples, N-Quads, RDF/XML, JSON-LD
+- Python requirement: 3.8+
+
+### PyOxigraph (alternative, validated)
+
+- Rust-based bindings (5-8 MB wheel, platform-specific)
+- Faster SPARQL execution than RDFLib for large datasets
+- Correct query API: `store.query(sparql_str)` then result `.serialize(format=QueryResultsFormat.JSON)`
+- **Note**: `.to_json()` does NOT exist - always use `.serialize()`
+- `store.load(path)` auto-detects format by file extension
+
+### Recommendation
+
+Use **RDFLib** for the SWA managed function (pure Python, no binary dependencies, simpler deployment). Consider **PyOxigraph** only if SPARQL query performance becomes a bottleneck with large graph datasets.
+
+## HuggingFace models - assessment for future versions
+
+### Available task-specific models
+
+| Task | Model | Size | CPU Speed | Accuracy |
+|------|-------|------|-----------|----------|
+| NER | `dslim/bert-base-NER` | 330 MB | ~100ms/doc | ~90% F1 (PER/ORG/LOC/MISC) |
+| Entity Linking | `facebook/GENRE` | 1 GB | ~200ms/doc | Good (Wikipedia titles) |
+| Zero-shot Classification | `facebook/bart-large-mnli` | 700 MB | ~150ms/doc | ~85-90% |
+| Relation Extraction | Various | ~700 MB | ~200ms/doc | 75-85% (less mature) |
+
+### Hybrid pipeline (NER then LLM)
+
+A hybrid approach could reduce LLM calls by 5-10x:
+1. **NER** (local, free): Extract entity mentions - PER, ORG, LOC, MISC
+2. **Entity Linking** (local, free): Link entities to Wikidata for sameAs URIs
+3. **LLM** (GitHub Models): Only for relation extraction + schema.org classification
+4. **SHACL** (local, free): Validate output
+
+### Verdict: Skip for v1
+
+- Single LLM prompt produces richer, more schema.org-aligned output
+- HuggingFace NER types (PER/ORG/LOC/MISC) don't map cleanly to schema.org without fine-tuning
+- Adds pipeline orchestration complexity (multiple model downloads, dependency management)
+- **Revisit for v2** when: content volume exceeds GitHub Models daily limits, or extraction quality needs improvement on specific entity types
