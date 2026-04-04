@@ -61,6 +61,58 @@ Write naturally. The LLM pipeline extracts entities and relationships.
 Use [[wikilinks]] to link between articles.
 ```
 
+### Querying the SPARQL Endpoint
+
+The knowledge graph is queryable at `/api/sparql`. It accepts standard [W3C SPARQL 1.1 Protocol](https://www.w3.org/TR/sparql11-protocol/) requests and returns [SPARQL Results JSON](https://www.w3.org/TR/sparql11-results-json/).
+
+**From a browser** — paste the URL with a `query` parameter (URL-encoded):
+```
+https://<your-swa-domain>/api/sparql?query=PREFIX%20schema%3A%20...
+```
+
+**cURL (GET):**
+```bash
+curl "https://<your-swa-domain>/api/sparql?query=$(python3 -c "import urllib.parse; print(urllib.parse.quote('PREFIX schema: <https://schema.org/> SELECT ?name WHERE { ?e schema:name ?name }'))")"
+```
+
+**cURL (POST)** — better for complex queries, no URL-encoding needed:
+```bash
+curl -X POST \
+  -H "Content-Type: application/sparql-query" \
+  -d 'PREFIX schema: <https://schema.org/>
+      SELECT ?article ?mentioned ?name WHERE {
+        ?article schema:mentions ?mentioned .
+        ?mentioned schema:name ?name .
+      }' \
+  https://<your-swa-domain>/api/sparql
+```
+
+**JavaScript:**
+```js
+const query = `PREFIX schema: <https://schema.org/>
+SELECT ?name WHERE { ?e schema:name ?name }`;
+
+const res = await fetch(`/api/sparql?query=${encodeURIComponent(query)}`);
+const data = await res.json();
+// data.results.bindings is the array of result rows
+data.results.bindings.forEach(row => console.log(row.name.value));
+```
+
+**Python:**
+```python
+import requests, urllib.parse
+
+query = """PREFIX schema: <https://schema.org/>
+SELECT ?name WHERE { ?e schema:name ?name }"""
+
+url = f"https://<your-swa-domain>/api/sparql?query={urllib.parse.quote(query)}"
+data = requests.get(url).json()
+for row in data["results"]["bindings"]:
+    print(row["name"]["value"])
+```
+
+> **Note:** Only `SELECT` and `ASK` queries are allowed. Mutating queries (`INSERT`, `DELETE`, etc.) are blocked.
+
 ### Example SPARQL Queries
 
 **Find all entities mentioned in an article:**
