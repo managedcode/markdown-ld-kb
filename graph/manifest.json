@@ -1,0 +1,10 @@
+{
+  "build_timestamp": "2026-04-04T18:32:48.729947+00:00",
+  "git_commit": "8cf0592b73b7c3e4a5fc112b5f6080c7942fda0b",
+  "prompt_version": "v1",
+  "model": "openai/gpt-4o-mini",
+  "docs_processed": 1,
+  "chunks_processed": 1,
+  "entities_extracted": 10,
+  "assertions_extracted": 10
+}

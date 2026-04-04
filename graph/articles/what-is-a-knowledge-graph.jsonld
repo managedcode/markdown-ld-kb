@@ -1,0 +1,134 @@
+{
+  "@context": "../../ontology/context.jsonld",
+  "@graph": [
+    {
+      "@context": "../../ontology/context.jsonld",
+      "id": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "type": "schema:Article",
+      "schema:name": "What is a Knowledge Graph?",
+      "schema:datePublished": "",
+      "schema:dateModified": "",
+      "schema:keywords": "knowledge-graph, sparql, linked-data, markdown"
+    },
+    {
+      "id": "https://example.com/id/knowledge-graph",
+      "type": "schema:Thing",
+      "schema:name": "knowledge graph"
+    },
+    {
+      "id": "https://example.com/id/google",
+      "type": "schema:Organization",
+      "schema:name": "Google"
+    },
+    {
+      "id": "https://example.com/id/google-knowledge-graph",
+      "type": "schema:Thing",
+      "schema:name": "Google Knowledge Graph"
+    },
+    {
+      "id": "https://example.com/id/wikidata",
+      "type": "schema:Organization",
+      "schema:name": "Wikidata"
+    },
+    {
+      "id": "https://example.com/id/rdf",
+      "type": "schema:Thing",
+      "schema:name": "RDF"
+    },
+    {
+      "id": "https://example.com/id/sparql",
+      "type": "schema:Thing",
+      "schema:name": "SPARQL"
+    },
+    {
+      "id": "https://example.com/id/json-ld",
+      "type": "schema:Thing",
+      "schema:name": "JSON-LD"
+    },
+    {
+      "id": "https://example.com/id/shacl",
+      "type": "schema:Thing",
+      "schema:name": "SHACL"
+    },
+    {
+      "id": "https://example.com/id/prov-o",
+      "type": "schema:Thing",
+      "schema:name": "PROV-O"
+    },
+    {
+      "id": "https://example.com/id/schemaorg",
+      "type": "schema:Thing",
+      "schema:name": "Schema.org"
+    },
+    {
+      "type": "kb:Assertion",
+      "schema:subjectOf": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "schema:mentions": "https://example.com/id/knowledge-graph",
+      "confidence": 0.85,
+      "source": "urn:kb:chunk:https://example.com/2026/04/what-is-a-knowledge-graph/:6d1fb26ca130f2a5"
+    },
+    {
+      "type": "kb:Assertion",
+      "schema:subjectOf": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "schema:mentions": "https://example.com/id/google",
+      "confidence": 0.85,
+      "source": "urn:kb:chunk:https://example.com/2026/04/what-is-a-knowledge-graph/:6d1fb26ca130f2a5"
+    },
+    {
+      "type": "kb:Assertion",
+      "schema:subjectOf": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "schema:mentions": "https://example.com/id/google-knowledge-graph",
+      "confidence": 0.85,
+      "source": "urn:kb:chunk:https://example.com/2026/04/what-is-a-knowledge-graph/:6d1fb26ca130f2a5"
+    },
+    {
+      "type": "kb:Assertion",
+      "schema:subjectOf": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "schema:mentions": "https://example.com/id/wikidata",
+      "confidence": 0.85,
+      "source": "urn:kb:chunk:https://example.com/2026/04/what-is-a-knowledge-graph/:6d1fb26ca130f2a5"
+    },
+    {
+      "type": "kb:Assertion",
+      "schema:subjectOf": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "schema:mentions": "https://example.com/id/rdf",
+      "confidence": 0.85,
+      "source": "urn:kb:chunk:https://example.com/2026/04/what-is-a-knowledge-graph/:6d1fb26ca130f2a5"
+    },
+    {
+      "type": "kb:Assertion",
+      "schema:subjectOf": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "schema:mentions": "https://example.com/id/sparql",
+      "confidence": 0.85,
+      "source": "urn:kb:chunk:https://example.com/2026/04/what-is-a-knowledge-graph/:6d1fb26ca130f2a5"
+    },
+    {
+      "type": "kb:Assertion",
+      "schema:subjectOf": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "schema:mentions": "https://example.com/id/json-ld",
+      "confidence": 0.85,
+      "source": "urn:kb:chunk:https://example.com/2026/04/what-is-a-knowledge-graph/:6d1fb26ca130f2a5"
+    },
+    {
+      "type": "kb:Assertion",
+      "schema:subjectOf": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "schema:mentions": "https://example.com/id/shacl",
+      "confidence": 0.85,
+      "source": "urn:kb:chunk:https://example.com/2026/04/what-is-a-knowledge-graph/:6d1fb26ca130f2a5"
+    },
+    {
+      "type": "kb:Assertion",
+      "schema:subjectOf": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "schema:mentions": "https://example.com/id/prov-o",
+      "confidence": 0.85,
+      "source": "urn:kb:chunk:https://example.com/2026/04/what-is-a-knowledge-graph/:6d1fb26ca130f2a5"
+    },
+    {
+      "type": "kb:Assertion",
+      "schema:subjectOf": "https://example.com/2026/04/what-is-a-knowledge-graph/",
+      "schema:mentions": "https://example.com/id/schema-org",
+      "confidence": 0.85,
+      "source": "urn:kb:chunk:https://example.com/2026/04/what-is-a-knowledge-graph/:6d1fb26ca130f2a5"
+    }
+  ]
+}
