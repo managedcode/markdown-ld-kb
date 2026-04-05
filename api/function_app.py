@@ -14,7 +14,7 @@ import azure.functions as func
 import rdflib
 from rdflib import Dataset, Graph
 
-from .nl_to_sparql import translate, validate_sparql, enforce_safety
+from nl_to_sparql import translate, validate_sparql, enforce_safety
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
