@@ -12,7 +12,9 @@ content/*.md → GitHub Actions → LLM (GitHub Models) → graph/*.jsonld + *.t
                                                   Azure Static Web Apps
                                                     ├── Static site
                                                     ├── Graph files
-                                                    └── SPARQL API (RDFLib)
+                                                    └── API (Azure Functions)
+                                                        ├── /api/sparql  (W3C SPARQL 1.1)
+                                                        └── /api/ask     (Natural language → SPARQL)
 ```
 
 ## Quick Start
@@ -77,9 +79,19 @@ The knowledge graph is queryable at `/api/sparql`. It accepts standard [W3C SPAR
 
 Don't know SPARQL? Use the `/api/ask` endpoint to query the knowledge graph with plain English. It uses the same LLM (GitHub Models GPT-4o-mini) to translate your question into SPARQL, execute it, and return the results alongside the generated query.
 
-> **Note:** Requires `GITHUB_TOKEN` environment variable (or configured as an Azure Static Web Apps app setting).
+> **Note:** Requires `GITHUB_TOKEN` configured as an Azure Static Web Apps app setting (see [Deployment](#deployment) below).
 
-**cURL:**
+**From a browser** — paste the URL with a `question` parameter (URL-encoded):
+```
+https://<your-swa-domain>/api/ask?question=What+entities+are+in+the+knowledge+graph?
+```
+
+**cURL (GET):**
+```bash
+curl "https://<your-swa-domain>/api/ask?question=What+entities+are+in+the+knowledge+graph%3F"
+```
+
+**cURL (POST)** — better for longer questions:
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
@@ -122,6 +134,19 @@ The response includes the generated SPARQL query so you can learn the query lang
   "results": { "head": { "vars": ["entity", "name", "type"] }, "results": { "bindings": [...] } }
 }
 ```
+
+### Example NL Questions
+
+These are questions you can ask the `/api/ask` endpoint — it translates them to SPARQL automatically:
+
+| Question | What it finds |
+|----------|--------------|
+| "What entities are in the knowledge graph?" | All named entities (people, orgs, tools, concepts) |
+| "Which articles mention SPARQL?" | Articles that reference SPARQL as an entity |
+| "Find all organizations" | Entities typed as `schema:Organization` |
+| "What topics does the article about knowledge graphs cover?" | Entities mentioned in articles matching "knowledge graph" |
+| "Who authored the articles?" | Authors linked via `schema:author` |
+| "What software tools are mentioned?" | Entities typed as `schema:SoftwareApplication` |
 
 ### Querying with SPARQL Directly
 
@@ -204,6 +229,29 @@ SELECT ?subject ?predicate ?object WHERE {
 LIMIT 50
 ```
 
+## Deployment
+
+The app deploys automatically via GitHub Actions to Azure Static Web Apps on every push to `main`.
+
+### Configuring the NL Query Endpoint
+
+The `/api/ask` endpoint requires a GitHub token to call [GitHub Models](https://github.com/marketplace/models) for NL-to-SPARQL translation. Set it as an app setting:
+
+**Azure CLI:**
+```bash
+az staticwebapp appsettings set \
+  --name <your-swa-name> \
+  --resource-group <your-resource-group> \
+  --setting-names "GITHUB_TOKEN=<your-github-token>"
+```
+
+**Azure Portal:**
+1. Navigate to your Static Web App resource
+2. Go to **Settings → Environment variables**
+3. Add `GITHUB_TOKEN` with a GitHub token that has access to GitHub Models
+
+> **Tip:** The SPARQL endpoint (`/api/sparql`) works without any configuration — only the NL translation endpoint needs the token.
+
 ## Project Structure
 
 ```
@@ -220,7 +268,7 @@ LIMIT 50
 ├── tests/            # Test suite
 └── .github/workflows/
     ├── kg-build.yml  # KG extraction pipeline
-    └── deploy-swa.yml # Azure SWA deployment
+    └── azure-static-web-apps-*.yml # Azure SWA deployment
 ```
 
 ## Key Design Decisions
