@@ -1,0 +1,31 @@
+# AGENTS.md
+
+Project: ManagedCode.MarkdownLd.Kb
+Purpose: Production library for Markdown-LD Knowledge Bank.
+
+## Entry Points
+
+- `ManagedCode.MarkdownLd.Kb` namespace
+- `Pipeline/MarkdownKnowledgePipeline` for end-to-end Markdown-to-graph orchestration
+- `Parsing/*` for Markdown and YAML front matter parsing
+- `Extraction/*` for deterministic and `IChatClient` fact extraction
+- `Rdf/*` and `Query/*` for RDF graph construction, serialization, SPARQL, and search
+
+## Boundaries
+
+- The production library may reference `Microsoft.Extensions.AI` abstractions, Markdig, YamlDotNet, and dotNetRDF.
+- Do not add provider-specific LLM SDKs here.
+- Do not add Microsoft Agent Framework packages here without a new ADR.
+- Keep the root namespace, assembly name, and package ID as `ManagedCode.MarkdownLd.Kb`.
+
+## Commands
+
+- build: `dotnet build ../../MarkdownLd.Kb.slnx --no-restore`
+- test: `dotnet test ../../MarkdownLd.Kb.slnx --no-build`
+- coverage: `dotnet test ../../MarkdownLd.Kb.slnx --collect:"XPlat Code Coverage"`
+
+## Local Risks
+
+- RDF/SPARQL behaviour must be tested through real dotNetRDF execution.
+- LLM extraction must use `IChatClient`; provider SDKs belong in host apps.
+- Keep public contracts compact and stable.

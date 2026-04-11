@@ -1,0 +1,3 @@
+[submodule "external/lqdev-markdown-ld-kb"]
+	path = external/lqdev-markdown-ld-kb
+	url = https://github.com/lqdev/markdown-ld-kb.git

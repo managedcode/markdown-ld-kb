@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>ManagedCode.MarkdownLd.Kb</AssemblyName>
+    <RootNamespace>ManagedCode.MarkdownLd.Kb</RootNamespace>
+    <PackageId>ManagedCode.MarkdownLd.Kb</PackageId>
+    <Title>Markdown-LD Knowledge Bank</Title>
+    <Description>Markdown-LD Knowledge Bank converts Markdown knowledge-base files into RDF/JSON-LD graphs and queryable SPARQL/search results.</Description>
+    <Authors>ManagedCode</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/managedcode/markdown-ld-kb</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="dotNetRdf" Version="3.5.1" />
+    <PackageReference Include="Markdig" Version="1.1.2" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.4.1" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.4.1" />
+    <PackageReference Include="YamlDotNet" Version="17.0.1" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MarkdownLd.Kb/MarkdownLd.Kb.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MarkdownLd.Kb.Tests/MarkdownLd.Kb.Tests.csproj" />
+  </Folder>
+</Solution>
