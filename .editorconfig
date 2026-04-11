@@ -86,15 +86,24 @@ csharp_style_namespace_declarations = file_scoped:warning
 # Brace settings - ALWAYS use braces, even for single-line blocks
 csharp_prefer_braces = true:warning
 
-# Expression-bodied members (modern C#)
-csharp_style_expression_bodied_methods = when_on_single_line:suggestion
-csharp_style_expression_bodied_constructors = false:suggestion
-csharp_style_expression_bodied_operators = when_on_single_line:suggestion
-csharp_style_expression_bodied_properties = true:suggestion
-csharp_style_expression_bodied_indexers = true:suggestion
-csharp_style_expression_bodied_accessors = true:suggestion
-csharp_style_expression_bodied_lambdas = true:suggestion
-csharp_style_expression_bodied_local_functions = when_on_single_line:suggestion
+# Expression-bodied members are style-only noise for this library.
+csharp_style_expression_bodied_methods = false:none
+csharp_style_expression_bodied_constructors = false:none
+csharp_style_expression_bodied_operators = false:none
+csharp_style_expression_bodied_properties = false:none
+csharp_style_expression_bodied_indexers = false:none
+csharp_style_expression_bodied_accessors = false:none
+csharp_style_expression_bodied_lambdas = false:none
+csharp_style_expression_bodied_local_functions = false:none
+dotnet_diagnostic.IDE0021.severity = none
+dotnet_diagnostic.IDE0022.severity = none
+dotnet_diagnostic.IDE0023.severity = none
+dotnet_diagnostic.IDE0024.severity = none
+dotnet_diagnostic.IDE0025.severity = none
+dotnet_diagnostic.IDE0026.severity = none
+dotnet_diagnostic.IDE0053.severity = none
+dotnet_diagnostic.IDE0061.severity = none
+resharper_convert_to_expression_body_highlighting = none
 
 # Pattern matching (C# 7+)
 csharp_style_pattern_matching_over_is_with_cast_check = true:warning
@@ -484,3 +493,11 @@ indent_style = unset
 insert_final_newline = false
 tab_width = unset
 trim_trailing_whitespace = false
+
+[src/MarkdownLd.Kb/Ai/*.cs]
+# These are public root-namespace AI contracts kept in subfolders for file organization.
+resharper_check_namespace_highlighting = none
+
+[src/MarkdownLd.Kb/Models/*.cs]
+# These are public root-namespace models kept in subfolders for file organization.
+resharper_check_namespace_highlighting = none

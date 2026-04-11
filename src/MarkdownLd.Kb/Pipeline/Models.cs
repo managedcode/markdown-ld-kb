@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using ManagedCode.MarkdownLd.Kb.Query;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
@@ -48,7 +49,7 @@ public sealed record KnowledgeEntityFact
 public sealed record KnowledgeAssertionFact
 {
     public string SubjectId { get; init; } = string.Empty;
-    public string Predicate { get; init; } = DefaultKbRelatedTo;
+    public string Predicate { get; init; } = string.Empty;
     public string ObjectId { get; init; } = string.Empty;
     public double Confidence { get; init; } = 0.8;
     public string Source { get; init; } = string.Empty;
@@ -69,12 +70,42 @@ public sealed record MarkdownKnowledgeBuildResult(
     KnowledgeExtractionResult Facts,
     KnowledgeGraph Graph);
 
-public sealed class ReadOnlySparqlQueryException(string message) : InvalidOperationException(message)
-{
-}
+public sealed class ReadOnlySparqlQueryException(string message) : InvalidOperationException(message);
 
 public static class KnowledgeNaming
 {
+    private static readonly IReadOnlyDictionary<string, string> PredicateUriAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        [SchemaAboutText] = ExpectedSchemaAbout,
+        [ExpectedSchemaAbout] = ExpectedSchemaAbout,
+        [SchemaAuthorText] = ExpectedSchemaAuthor,
+        [ExpectedSchemaAuthor] = ExpectedSchemaAuthor,
+        [SchemaCreatorText] = ExpectedSchemaCreator,
+        [ExpectedSchemaCreator] = ExpectedSchemaCreator,
+        [SchemaDescriptionText] = ExpectedSchemaDescription,
+        [ExpectedSchemaDescription] = ExpectedSchemaDescription,
+        [SchemaKeywordsText] = ExpectedSchemaKeywords,
+        [ExpectedSchemaKeywords] = ExpectedSchemaKeywords,
+        [SchemaMentionsText] = ExpectedSchemaMentions,
+        [ExpectedSchemaMentions] = ExpectedSchemaMentions,
+        [SchemaNameText] = ExpectedSchemaName,
+        [ExpectedSchemaName] = ExpectedSchemaName,
+        [SchemaSameAsText] = ExpectedSchemaSameAs,
+        [ExpectedSchemaSameAs] = ExpectedSchemaSameAs,
+    };
+
+    private static readonly IReadOnlyDictionary<string, string> PredicateKeywordAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        [MentionPredicateKey] = ExpectedSchemaMentions,
+        [AboutPredicateKey] = ExpectedSchemaAbout,
+        [AuthorPredicateKey] = ExpectedSchemaAuthor,
+        [CreatorPredicateKey] = ExpectedSchemaCreator,
+        [SameAsPredicateKey] = ExpectedSchemaSameAs,
+        [DescriptionPredicateKey] = ExpectedSchemaDescription,
+        [KeywordsPredicateKey] = ExpectedSchemaKeywords,
+        [RelatedToPredicateKey] = KbRelatedTo,
+    };
+
     private static readonly Regex NonAlphaNumeric = new(NonAlphaNumericPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex Whitespace = new(WhitespacePattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex Dashes = new(DashesPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -118,7 +149,7 @@ public static class KnowledgeNaming
     public static Uri CreateDocumentUri(Uri baseUri, string sourcePath)
     {
         var normalized = NormalizeSourcePath(sourcePath);
-        var withoutExtension = Path.ChangeExtension(normalized, null) ?? normalized;
+        var withoutExtension = Path.ChangeExtension(normalized, null);
         withoutExtension = withoutExtension.Replace('\\', '/').Trim('/');
         if (string.IsNullOrWhiteSpace(withoutExtension))
         {
@@ -151,17 +182,18 @@ public static class KnowledgeNaming
 
     public static bool IsReadOnlySparql(string queryText, out string? failureReason)
     {
-        var normalized = queryText.Trim();
-        if (normalized.Length == 0)
+        if (string.IsNullOrWhiteSpace(queryText))
         {
             failureReason = EmptySparqlQueryMessage;
             return false;
         }
 
-        if (MutatingKeywordRegex.IsMatch(normalized.ToUpperInvariant()))
+        var safety = SparqlSafety.EnforceReadOnly(queryText);
+        if (!safety.IsAllowed)
         {
-            var match = MutatingKeywordRegex.Match(normalized.ToUpperInvariant());
-            failureReason = MutatingKeywordMessagePrefix + match.Value + MutatingKeywordMessageSuffix;
+            failureReason = SparqlSafety.TryGetMutatingKeywordOutsideString(queryText, out var keyword)
+                ? MutatingKeywordMessagePrefix + keyword + MutatingKeywordMessageSuffix
+                : safety.ErrorMessage;
             return false;
         }
 
@@ -173,52 +205,9 @@ public static class KnowledgeNaming
     {
         var trimmed = predicate.Trim();
 
-        if (trimmed.Equals(SchemaAboutText, StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals(ExpectedSchemaAbout, StringComparison.OrdinalIgnoreCase))
+        if (PredicateUriAliases.TryGetValue(trimmed, out var canonicalPredicate))
         {
-            return ExpectedSchemaAbout;
-        }
-
-        if (trimmed.Equals(SchemaAuthorText, StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals(ExpectedSchemaAuthor, StringComparison.OrdinalIgnoreCase))
-        {
-            return ExpectedSchemaAuthor;
-        }
-
-        if (trimmed.Equals(SchemaCreatorText, StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals(ExpectedSchemaCreator, StringComparison.OrdinalIgnoreCase))
-        {
-            return ExpectedSchemaCreator;
-        }
-
-        if (trimmed.Equals(SchemaDescriptionText, StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals(ExpectedSchemaDescription, StringComparison.OrdinalIgnoreCase))
-        {
-            return ExpectedSchemaDescription;
-        }
-
-        if (trimmed.Equals(SchemaKeywordsText, StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals(ExpectedSchemaKeywords, StringComparison.OrdinalIgnoreCase))
-        {
-            return ExpectedSchemaKeywords;
-        }
-
-        if (trimmed.Equals(SchemaMentionsText, StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals(ExpectedSchemaMentions, StringComparison.OrdinalIgnoreCase))
-        {
-            return ExpectedSchemaMentions;
-        }
-
-        if (trimmed.Equals(SchemaNameText, StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals(ExpectedSchemaName, StringComparison.OrdinalIgnoreCase))
-        {
-            return ExpectedSchemaName;
-        }
-
-        if (trimmed.Equals(SchemaSameAsText, StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals(ExpectedSchemaSameAs, StringComparison.OrdinalIgnoreCase))
-        {
-            return ExpectedSchemaSameAs;
+            return canonicalPredicate;
         }
 
         if (trimmed.Contains(':', StringComparison.Ordinal))
@@ -226,21 +215,8 @@ public static class KnowledgeNaming
             return trimmed;
         }
 
-        return trimmed.ToLowerInvariant() switch
-        {
-            MentionPredicateKey => ExpectedSchemaMentions,
-            AboutPredicateKey => ExpectedSchemaAbout,
-            AuthorPredicateKey => ExpectedSchemaAuthor,
-            CreatorPredicateKey => ExpectedSchemaCreator,
-            SameAsPredicateKey => ExpectedSchemaSameAs,
-            DescriptionPredicateKey => ExpectedSchemaDescription,
-            KeywordsPredicateKey => ExpectedSchemaKeywords,
-            RelatedToPredicateKey => DefaultKbRelatedTo,
-            _ => DefaultKbRelatedTo,
-        };
+        return PredicateKeywordAliases.TryGetValue(trimmed, out canonicalPredicate)
+            ? canonicalPredicate
+            : string.Empty;
     }
-
-    private static readonly Regex MutatingKeywordRegex = new(
-        MutatingKeywordPattern,
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 }

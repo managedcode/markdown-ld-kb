@@ -133,7 +133,7 @@ The note explains federated graph lookup through remote endpoints.
 
     private const string GraphAskQuery = """
 PREFIX schema: <https://schema.org/>
-PREFIX kb: <https://example.com/vocab/kb#>
+PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 ASK WHERE {
   <https://kb.example/01-zero-cost-graph/> schema:name "Zero Cost Knowledge Graph" ;

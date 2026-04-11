@@ -2,7 +2,7 @@ namespace ManagedCode.MarkdownLd.Kb;
 
 internal static class KnowledgeFactConstants
 {
-    internal const string DefaultGraphBaseUrl = "https://example.com";
+    internal const string DefaultGraphBaseUrl = MarkdownKnowledgeDefaults.BaseUriText;
     internal const string EntityPathSegment = "/id/";
     internal const string SchemaPerson = "schema:Person";
     internal const string SchemaOrganization = "schema:Organization";
@@ -50,13 +50,13 @@ You are a deterministic RDF extraction engine. Output must be valid JSON and mat
 ONTOLOGY:
 - Types: schema:Article, schema:Person, schema:Organization, schema:SoftwareApplication, schema:CreativeWork, schema:Thing
 - Preferred properties: schema:about, schema:mentions, schema:sameAs, schema:author, schema:creator, schema:datePublished, schema:dateModified
-- Fallback: kb:relatedTo
 - Provenance: prov:wasDerivedFrom (use chunk URI)
 - Confidence: kb:confidence (0..1)
 
 RULES:
 - Only add relations explicitly stated or strongly implied by the text.
 - Prefer schema.org properties.
+- If the predicate cannot be named explicitly, omit the assertion.
 - Every entity must have id, type, and label.
 - Use stable ids for entities.
 - If a wikilink or entity hint provides sameAs, include it.

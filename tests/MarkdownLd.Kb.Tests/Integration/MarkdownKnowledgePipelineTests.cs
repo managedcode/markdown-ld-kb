@@ -2,7 +2,7 @@ using ManagedCode.MarkdownLd.Kb.Pipeline;
 using ManagedCode.MarkdownLd.Kb.Tests.Support;
 using Shouldly;
 
-namespace ManagedCode.MarkdownLd.Kb;
+namespace ManagedCode.MarkdownLd.Kb.Tests.Integration;
 
 public sealed class MarkdownKnowledgePipelineTests
 {
@@ -36,6 +36,30 @@ public sealed class MarkdownKnowledgePipelineTests
     private const string SearchArticlesTerm = "sparql";
     private const string SearchEntitiesTerm = "tool";
     private const string SearchEntitySameAsUri = "https://example.com/tool";
+    private const string InlineMarkdownTitle = "Inline Markdown Knowledge";
+    private const string InlineRdfLabel = "RDF";
+    private const string InlineSearchTerm = "rdf";
+    private const string ArticleBindingKey = "article";
+    private const string EntityBindingKey = "entity";
+    private const string NameBindingKey = "name";
+    private const string InlineMarkdown = """
+---
+title: Inline Markdown Knowledge
+---
+# Inline Markdown Knowledge
+
+This note mentions [RDF](https://www.w3.org/RDF/).
+""";
+    private const string SelectInlineMarkdownFactsQuery = """
+PREFIX schema: <https://schema.org/>
+SELECT ?article ?entity WHERE {
+  ?article a schema:Article ;
+           schema:name "Inline Markdown Knowledge" ;
+           schema:mentions ?entity .
+  ?entity schema:name "RDF" ;
+          schema:sameAs <https://www.w3.org/RDF/> .
+}
+""";
     private const string SelectTitleQuery = """
 PREFIX schema: <https://schema.org/>
 SELECT ?title WHERE {
@@ -64,6 +88,29 @@ SELECT ?mention WHERE {
         EntityRdfSameAs,
     };
     private static readonly Uri ArticleGraphUri = new(GraphUri);
+
+    [Test]
+    public async Task BuildFromMarkdownAsync_uses_library_defaults_for_inline_markdown_graph_and_search_flow()
+    {
+        var pipeline = new MarkdownKnowledgePipeline();
+
+        var result = await pipeline.BuildFromMarkdownAsync(InlineMarkdown);
+
+        result.Documents.Count.ShouldBe(1);
+        result.Documents[0].Title.ShouldBe(InlineMarkdownTitle);
+
+        var graphRows = await result.Graph.ExecuteSelectAsync(SelectInlineMarkdownFactsQuery);
+        graphRows.Rows.Count.ShouldBe(1);
+        graphRows.Rows[0].Values[ArticleBindingKey].ShouldNotBeNullOrWhiteSpace();
+        graphRows.Rows[0].Values[EntityBindingKey].ShouldNotBeNullOrWhiteSpace();
+        graphRows.Rows[0].Values[ArticleBindingKey].ShouldStartWith(MarkdownKnowledgeDefaults.BaseUriText);
+        graphRows.Rows[0].Values[EntityBindingKey].ShouldStartWith(MarkdownKnowledgeDefaults.BaseUriText);
+
+        var searchRows = await result.Graph.SearchAsync(InlineSearchTerm);
+        searchRows.Rows.Any(row =>
+            row.Values.TryGetValue(NameBindingKey, out var name) &&
+            name == InlineRdfLabel).ShouldBeTrue();
+    }
 
     private static readonly string ChatResponse = $$"""
     {

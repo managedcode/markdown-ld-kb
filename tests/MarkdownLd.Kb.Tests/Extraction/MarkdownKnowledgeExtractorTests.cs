@@ -50,12 +50,12 @@ title: [broken
 date_published: 2026-04-04
 ---
 
-# Fallback Title
+# Invalid Front Matter Title
 
 [[RDF]]
 """;
 
-    private const string SourcePathFallback = "docs/fallback-title.md";
+    private const string SourcePathInvalidFrontMatter = "docs/invalid-front-matter.md";
     private const string SourcePathInput = "content/one.md";
     private const string ArticleId = "https://example.com/articles/markdown-ld-knowledge-bank";
     private const string ArticleTitle = "Markdown-LD Knowledge Bank";
@@ -83,14 +83,13 @@ date_published: 2026-04-04
     private const string AliceId = "urn:managedcode:markdown-ld-kb:entity/alice";
     private const string Web3Title = "Web 3.0";
     private const string Web3Id = "urn:managedcode:markdown-ld-kb:article/web-30";
-    private const string FallbackId = "urn:managedcode:markdown-ld-kb:article/fallback-title";
     private const string JsonLdId = "urn:managedcode:markdown-ld-kb:article/docs-mycoolfile";
     private const string MarkdownLdSlug = "markdown ld kb";
     private const string AdaSameAs = "https://example.com/authors/ada-lovelace";
     private const string RdfSameAs = "https://www.w3.org/RDF/";
     private const string SparqlSameAs = "https://www.wikidata.org/wiki/Q54872";
     private const string CanonicalUrl = "https://example.com/articles/markdown-ld-knowledge-bank";
-    private const string FallbackTitle = "Fallback Title";
+    private const string InvalidFrontMatterMessage = "Markdown front matter is invalid.";
     private const string BodyText = "Body text.";
     private const string CppProgramming = "C++ Programming";
     private const string CppProgrammingId = "urn:managedcode:markdown-ld-kb:entity/c-programming";
@@ -104,8 +103,6 @@ date_published: 2026-04-04
     private static readonly string[] ExpectedCanonicalAuthors = [AdaLovelace, "Grace Hopper"];
     private static readonly string[] ExpectedCanonicalTags = ["rdf", "markdown"];
     private static readonly string[] ExpectedCanonicalAbout = ["Graphs", RdfLabel];
-    private static readonly string[] ExpectedFallbackHeadingPath = ["Heading"];
-
     private readonly MarkdownKnowledgeExtractor _extractor = new();
 
     [Test]
@@ -176,16 +173,10 @@ date_published: 2026-04-04
     }
 
     [Test]
-    public Task Falls_back_to_source_path_title_when_front_matter_is_missing_or_invalid()
+    public Task Rejects_invalid_front_matter_instead_of_recovering_from_source_path()
     {
-        var result = _extractor.Extract(MarkdownWithBrokenFrontMatter, SourcePathFallback);
-
-        result.Article.Title.ShouldBe(FallbackTitle);
-        result.Article.Id.ShouldBe(FallbackId);
-        result.Entities.Any(entity => entity.Id == RdfId).ShouldBe(true);
-        result.Assertions.Any(assertion =>
-            assertion.Predicate == SchemaMentions &&
-            assertion.ObjectId == RdfId).ShouldBe(true);
+        Should.Throw<InvalidDataException>(() => _extractor.Extract(MarkdownWithBrokenFrontMatter, SourcePathInvalidFrontMatter))
+            .Message.ShouldBe(InvalidFrontMatterMessage);
 
         return Task.CompletedTask;
     }

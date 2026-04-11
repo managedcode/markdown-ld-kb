@@ -72,6 +72,8 @@ internal static class MarkdownKnowledgeConstants
     internal const string SubjectGroup = "subject";
     internal const string PredicateGroup = "predicate";
     internal const string ObjectGroup = "object";
+    internal const string InvalidFrontMatterMessage = "Markdown front matter is invalid.";
+    internal const string MissingFrontMatterTerminatorMessage = "Markdown front matter closing fence is missing.";
     internal const string CodeFenceBacktick = "```";
     internal const string CodeFenceTilde = "~~~";
     internal const string WikiLinkStart = "[[";

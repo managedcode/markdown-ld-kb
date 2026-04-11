@@ -6,10 +6,15 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 {
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
 
-    public KnowledgeExtractionResult Merge(params KnowledgeExtractionResult[] results)
+    public KnowledgeExtractionResult Merge(params KnowledgeExtractionResult?[]? results)
     {
         var entities = new Dictionary<string, KnowledgeEntityFact>(StringComparer.OrdinalIgnoreCase);
         var assertions = new Dictionary<string, KnowledgeAssertionFact>(StringComparer.OrdinalIgnoreCase);
+
+        if (results is null)
+        {
+            return new KnowledgeExtractionResult();
+        }
 
         foreach (var result in results)
         {
@@ -25,7 +30,11 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 
             foreach (var assertion in result.Assertions)
             {
-                UpsertAssertion(assertions, CanonicalizeAssertion(assertion));
+                var canonical = CanonicalizeAssertion(assertion);
+                if (IsValidAssertion(canonical))
+                {
+                    UpsertAssertion(assertions, canonical);
+                }
             }
         }
 
@@ -82,6 +91,13 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
         }
 
         return KnowledgeNaming.CreateEntityId(_baseUri, nodeId);
+    }
+
+    private static bool IsValidAssertion(KnowledgeAssertionFact assertion)
+    {
+        return !string.IsNullOrWhiteSpace(assertion.SubjectId) &&
+               !string.IsNullOrWhiteSpace(assertion.Predicate) &&
+               !string.IsNullOrWhiteSpace(assertion.ObjectId);
     }
 
     private static void UpsertEntity(IDictionary<string, KnowledgeEntityFact> entities, KnowledgeEntityFact entity)

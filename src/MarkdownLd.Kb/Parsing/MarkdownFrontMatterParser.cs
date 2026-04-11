@@ -28,7 +28,7 @@ internal static class MarkdownFrontMatterParser
 
         if (!TryParseFrontMatter(rawYaml, out var frontMatter))
         {
-            frontMatter = CreateEmptyFrontMatter(rawYaml);
+            throw new InvalidDataException(MarkdownTextConstants.InvalidFrontMatterMessage);
         }
 
         return new MarkdownFrontMatterParseResult(frontMatter, body, true);
@@ -38,7 +38,12 @@ internal static class MarkdownFrontMatterParser
     {
         try
         {
-            var values = Deserializer.Deserialize<Dictionary<object, object?>>(rawYaml) ?? [];
+            var values = Deserializer.Deserialize<Dictionary<object, object?>>(rawYaml);
+            if (values is null)
+            {
+                values = new Dictionary<object, object?>();
+            }
+
             var normalized = NormalizeDictionary(values);
 
             frontMatter = new MarkdownFrontMatter
@@ -128,7 +133,7 @@ internal static class MarkdownFrontMatterParser
             yaml.AppendLine(line);
         }
 
-        return false;
+        throw new InvalidDataException(MarkdownTextConstants.MissingFrontMatterTerminatorMessage);
     }
 
     private static string NormalizeMarkdown(string markdown)
@@ -143,13 +148,13 @@ internal static class MarkdownFrontMatterParser
         var normalized = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in values)
         {
-            var stringKey = key?.ToString()?.Trim();
+            var stringKey = key.ToString()?.Trim();
             if (string.IsNullOrWhiteSpace(stringKey))
             {
                 continue;
             }
 
-            normalized[stringKey!] = NormalizeValue(value);
+            normalized[stringKey] = NormalizeValue(value);
         }
 
         return new ReadOnlyDictionary<string, object?>(normalized);
@@ -282,7 +287,7 @@ internal static class MarkdownFrontMatterParser
         return value switch
         {
             string s => s.Trim(),
-            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture)?.Trim(),
+            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture).Trim(),
             _ => value.ToString()?.Trim(),
         };
     }

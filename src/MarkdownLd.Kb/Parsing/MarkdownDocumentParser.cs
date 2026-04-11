@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace ManagedCode.MarkdownLd.Kb.Parsing;
@@ -53,7 +51,7 @@ public sealed partial class MarkdownDocumentParser
             normalizedPath = normalizedPath[MarkdownTextConstants.ContentPrefix.Length..];
         }
 
-        var withoutExtension = Path.ChangeExtension(normalizedPath, null) ?? normalizedPath;
+        var withoutExtension = Path.ChangeExtension(normalizedPath, null);
         withoutExtension = withoutExtension.Trim('/');
 
         return string.Concat(baseUrl.TrimEnd('/'), MarkdownTextConstants.PathSeparator, withoutExtension, MarkdownTextConstants.PathSeparator);
@@ -114,7 +112,7 @@ public sealed partial class MarkdownDocumentParser
                 headingStack.RemoveAt(headingStack.Count - 1);
             }
 
-            headingStack.Add(new HeadingFrame(headingLevel, headingText, current.Value.TrimEnd()));
+            headingStack.Add(new HeadingFrame(headingText));
             var sectionMarkdown = sectionRaw.Trim();
             var headingPath = headingStack.Select(static frame => frame.Text).ToArray();
             sections.Add(BuildSection(
@@ -225,7 +223,7 @@ public sealed partial class MarkdownDocumentParser
 
         if (currentBlocks.Count > 0)
         {
-            chunks.Add(CreateChunk(sectionId, documentId, headingPath, currentBlocks, baseUri, order++, ref linkOrder));
+            chunks.Add(CreateChunk(sectionId, documentId, headingPath, currentBlocks, baseUri, order, ref linkOrder));
         }
 
         return chunks;
@@ -259,7 +257,7 @@ public sealed partial class MarkdownDocumentParser
     {
         if (!string.IsNullOrWhiteSpace(frontMatter.CanonicalUrl))
         {
-            var canonicalUrl = frontMatter.CanonicalUrl!.Trim();
+            var canonicalUrl = frontMatter.CanonicalUrl.Trim();
             if (Uri.TryCreate(canonicalUrl, UriKind.Absolute, out var canonicalUri))
             {
                 return canonicalUri.AbsoluteUri;
@@ -283,7 +281,7 @@ public sealed partial class MarkdownDocumentParser
             return uri;
         }
 
-        return new Uri(MarkdownTextConstants.DefaultBaseUrl, UriKind.Absolute);
+        throw new ArgumentException(MarkdownTextConstants.InvalidBaseUrlMessage, nameof(baseUrl));
     }
 
     private static string NormalizeMarkdown(string markdown)
@@ -419,7 +417,7 @@ public sealed partial class MarkdownDocumentParser
             path.EndsWith(MarkdownTextConstants.MarkdownExtensionLong, StringComparison.OrdinalIgnoreCase) ||
             path.EndsWith(MarkdownTextConstants.MarkdownExtensionAlternate, StringComparison.OrdinalIgnoreCase))
         {
-            path = Path.ChangeExtension(path, null) ?? path;
+            path = Path.ChangeExtension(path, null);
             if (!path.EndsWith(MarkdownTextConstants.PathSeparator, StringComparison.Ordinal))
             {
                 path = string.Concat(path, MarkdownTextConstants.PathSeparator);
@@ -464,41 +462,4 @@ public sealed partial class MarkdownDocumentParser
         return newlineIndex < 0 ? sectionMarkdown.Trim() : sectionMarkdown[..newlineIndex].TrimEnd();
     }
 
-    private static int EstimateTokens(string text) => Math.Max(1, text.Length / 4);
-
-    private static string ComputeHash(string text)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(text));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
-
-    private static object GetLinkKey(MarkdownLinkReference link) =>
-        (
-            link.Kind,
-            link.Target,
-            link.DisplayText,
-            link.Destination,
-            link.Title,
-            link.IsExternal,
-            link.IsImage,
-            link.IsDocumentLink,
-            link.ResolvedTarget
-        );
-
-    [GeneratedRegex(MarkdownTextConstants.HeadingPattern, RegexOptions.Multiline | RegexOptions.CultureInvariant)]
-    private static partial Regex HeadingRegex();
-
-    [GeneratedRegex(MarkdownTextConstants.WikiLinkPattern, RegexOptions.CultureInvariant)]
-    private static partial Regex WikiLinkRegex();
-
-    [GeneratedRegex(MarkdownTextConstants.MarkdownImageLinkPattern, RegexOptions.CultureInvariant)]
-    private static partial Regex MarkdownImageLinkRegex();
-
-    [GeneratedRegex(MarkdownTextConstants.MarkdownLinkPattern, RegexOptions.CultureInvariant)]
-    private static partial Regex MarkdownLinkRegex();
-
-    [GeneratedRegex(MarkdownTextConstants.WhitespacePattern, RegexOptions.CultureInvariant)]
-    private static partial Regex WhitespaceRegex();
-
-    private sealed record HeadingFrame(int Level, string Text, string Markdown);
 }

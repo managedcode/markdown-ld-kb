@@ -164,9 +164,9 @@ Mitigations:
 ### Test commands
 
 - build: `dotnet build MarkdownLd.Kb.slnx --no-restore`
-- test: `dotnet test MarkdownLd.Kb.slnx --no-build`
+- test: `dotnet test MarkdownLd.Kb.slnx --configuration Release`
 - format: `dotnet format MarkdownLd.Kb.slnx --verify-no-changes`
-- coverage: `dotnet test --solution MarkdownLd.Kb.slnx --no-build --coverlet --coverlet-output-format cobertura --coverlet-include '[ManagedCode.MarkdownLd.Kb]*' --results-directory TestResults/CoverletMtpFiltered`
+- coverage: `dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings"`
 
 ### New or changed tests
 

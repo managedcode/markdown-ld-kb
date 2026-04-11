@@ -29,7 +29,7 @@ public static class SparqlSafety
         }
 
         var trimmed = query.Trim();
-        if (ContainsMutatingKeywordOutsideString(trimmed))
+        if (TryGetMutatingKeywordOutsideString(trimmed, out _))
         {
             return new(false, query, OnlySelectAndAskQueriesAllowedMessage);
         }
@@ -69,7 +69,7 @@ public static class SparqlSafety
             or SparqlQueryType.SelectAllReduced;
     }
 
-    private static bool ContainsMutatingKeywordOutsideString(string query)
+    internal static bool TryGetMutatingKeywordOutsideString(string query, out string? keyword)
     {
         var masked = query.ToCharArray();
         var inString = false;
@@ -103,6 +103,8 @@ public static class SparqlSafety
             }
         }
 
-        return MutatingKeywordRegex.IsMatch(new string(masked));
+        var match = MutatingKeywordRegex.Match(new string(masked));
+        keyword = match.Success ? match.Value : null;
+        return match.Success;
     }
 }

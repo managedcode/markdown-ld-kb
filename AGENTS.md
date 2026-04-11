@@ -62,6 +62,8 @@ Target capabilities:
 - Tests must verify the real Markdown -> graph -> query/search flow, including success, malformed input, and empty/no-match paths where relevant.
 - Tests must not use mocks, stubs, or fakes, except one local test implementation of `Microsoft.Extensions.AI.IChatClient` used to prove the LLM extraction boundary without network access.
 - Use TUnit for tests and Shouldly for assertions.
+- Fallbacks are forbidden. Do not silently substitute generic/default behaviour when parsing, extraction, graph building, query execution, or AI extraction fails; fail explicitly or skip the invalid fact with a caller-visible test.
+- Legacy or leftover old code is forbidden. Do not keep deprecated duplicate paths, compatibility shims, or unused old implementations; remove them immediately unless an ADR documents a temporary migration path.
 
 ## Global Skills
 
@@ -85,9 +87,9 @@ List only the skills this solution actually uses.
 
 - `restore`: `dotnet restore MarkdownLd.Kb.slnx`
 - `build`: `dotnet build MarkdownLd.Kb.slnx --no-restore`
-- `test`: `dotnet test MarkdownLd.Kb.slnx --no-build`
+- `test`: `dotnet test MarkdownLd.Kb.slnx --configuration Release`
 - `format`: `dotnet format MarkdownLd.Kb.slnx --verify-no-changes`
-- `coverage`: `dotnet test MarkdownLd.Kb.slnx --no-build --coverlet --coverlet-output-format cobertura --coverlet-include '[ManagedCode.MarkdownLd.Kb]*' --results-directory TestResults/CoverletMtpFiltered`
+- `coverage`: `dotnet test MarkdownLd.Kb.slnx --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings"`
 
 `.NET` runner policy:
 
@@ -96,7 +98,7 @@ List only the skills this solution actually uses.
 - Test framework: TUnit.
 - Assertion library: Shouldly.
 - Test runner model: TUnit through `dotnet test` / Microsoft.Testing.Platform-compatible execution.
-- Coverage: `coverlet.MTP` through `dotnet test --coverlet` with the production assembly include filter.
+- Coverage: `Microsoft.Testing.Extensions.CodeCoverage` through TUnit / Microsoft Testing Platform with `CodeCoverage.runsettings`.
 
 ### Project AGENTS Policy
 

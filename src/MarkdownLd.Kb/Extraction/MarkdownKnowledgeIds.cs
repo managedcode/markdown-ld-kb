@@ -11,7 +11,7 @@ public static class MarkdownKnowledgeIds
     {
         if (!string.IsNullOrWhiteSpace(canonicalUrl))
         {
-            return canonicalUrl!;
+            return canonicalUrl;
         }
 
         var sourceLabel = !string.IsNullOrWhiteSpace(title)

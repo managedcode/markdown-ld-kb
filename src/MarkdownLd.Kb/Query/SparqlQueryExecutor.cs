@@ -11,7 +11,6 @@ public sealed class SparqlQueryExecutor
     private const string ReadOnlyExecutorExpectedResultsSetMessage = "Read-only executor expected a SPARQL results set";
     private const string UnexpectedSparqlResultTypeMessage = "Unexpected SPARQL result type";
 
-    private readonly IInMemoryQueryableStore _store;
     private readonly SparqlQueryParser _parser;
     private readonly LeviathanQueryProcessor _processor;
 
@@ -19,9 +18,9 @@ public sealed class SparqlQueryExecutor
     {
         ArgumentNullException.ThrowIfNull(graph);
 
-        _store = CreateStore(graph);
+        var store = CreateStore(graph);
         _parser = new SparqlQueryParser();
-        _processor = new LeviathanQueryProcessor(_store, options =>
+        _processor = new LeviathanQueryProcessor(store, options =>
         {
             options.QueryExecutionTimeout = 30_000;
         });

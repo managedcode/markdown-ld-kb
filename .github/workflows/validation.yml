@@ -39,16 +39,16 @@ jobs:
       run: dotnet build MarkdownLd.Kb.slnx --configuration Release --no-restore
 
     - name: Test with coverage
-      run: dotnet test --solution MarkdownLd.Kb.slnx --configuration Release --no-build --verbosity normal --coverlet --coverlet-output-format cobertura --coverlet-include '[ManagedCode.MarkdownLd.Kb]*' --results-directory TestResults/CoverletMtpFiltered
+      run: dotnet test --solution MarkdownLd.Kb.slnx --configuration Release --verbosity normal -- --coverage --coverage-output-format cobertura --coverage-output "${{ github.workspace }}/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "${{ github.workspace }}/CodeCoverage.runsettings"
 
     - name: Pack
-      run: dotnet pack MarkdownLd.Kb.slnx --configuration Release --no-build -p:IncludeSymbols=false -p:SymbolPackageFormat=snupkg --output ./artifacts
+      run: dotnet pack MarkdownLd.Kb.slnx --configuration Release -p:IncludeSymbols=false -p:SymbolPackageFormat=snupkg --output ./artifacts
 
     - name: Upload coverage artifact
       uses: actions/upload-artifact@v4
       with:
         name: coverage
-        path: TestResults/CoverletMtpFiltered/**/coverage.cobertura.xml
+        path: TestResults/TUnitCoverage/coverage.cobertura.xml
         retention-days: 5
 
     - name: Upload package artifact

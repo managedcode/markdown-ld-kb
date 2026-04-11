@@ -1,11 +1,14 @@
 using Microsoft.Extensions.AI;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
+using RootChatClientKnowledgeFactExtractor = ManagedCode.MarkdownLd.Kb.ChatClientKnowledgeFactExtractor;
+using RootKnowledgeFactExtractionRequest = ManagedCode.MarkdownLd.Kb.KnowledgeFactExtractionRequest;
+using RootKnowledgeFactExtractionResult = ManagedCode.MarkdownLd.Kb.KnowledgeFactExtractionResult;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class ChatClientKnowledgeFactExtractor(IChatClient chatClient)
 {
-    private readonly global::ManagedCode.MarkdownLd.Kb.ChatClientKnowledgeFactExtractor _extractor = new(chatClient);
+    private readonly RootChatClientKnowledgeFactExtractor _extractor = new(chatClient);
 
     public async Task<KnowledgeExtractionResult> ExtractAsync(MarkdownDocument document, CancellationToken cancellationToken = default)
     {
@@ -16,7 +19,7 @@ public sealed class ChatClientKnowledgeFactExtractor(IChatClient chatClient)
         return Convert(result);
     }
 
-    private static global::ManagedCode.MarkdownLd.Kb.KnowledgeFactExtractionRequest BuildRequest(MarkdownDocument document)
+    private static RootKnowledgeFactExtractionRequest BuildRequest(MarkdownDocument document)
     {
         var frontMatter = document.FrontMatter.ToDictionary(
             pair => pair.Key,
@@ -27,7 +30,7 @@ public sealed class ChatClientKnowledgeFactExtractor(IChatClient chatClient)
             ? null
             : string.Join(PathSeparator, document.Sections[0].HeadingPath);
 
-        return new global::ManagedCode.MarkdownLd.Kb.KnowledgeFactExtractionRequest(
+        return new RootKnowledgeFactExtractionRequest(
             document.DocumentUri.AbsoluteUri,
             KnowledgeNaming.Slugify(document.SourcePath),
             document.Body,
@@ -36,7 +39,7 @@ public sealed class ChatClientKnowledgeFactExtractor(IChatClient chatClient)
             frontMatter);
     }
 
-    private static KnowledgeExtractionResult Convert(global::ManagedCode.MarkdownLd.Kb.KnowledgeFactExtractionResult result)
+    private static KnowledgeExtractionResult Convert(RootKnowledgeFactExtractionResult result)
     {
         return new KnowledgeExtractionResult
         {

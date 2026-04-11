@@ -6,6 +6,7 @@
     <PackageId>ManagedCode.MarkdownLd.Kb</PackageId>
     <Title>Markdown-LD Knowledge Bank</Title>
     <Description>Markdown-LD Knowledge Bank converts Markdown knowledge-base files into RDF/JSON-LD graphs and queryable SPARQL/search results.</Description>
+    <PackageTags>markdown;markdown-ld;markdownld;markdown-ld-kb;knowledge-bank;knowledge-base;knowledge-graph;rdf;rdf-graph;json-ld;jsonld;turtle;sparql;sparql-query;graph-search;linked-data;semantic-web;front-matter;yaml-front-matter;yaml;local-first;in-memory;retrieval;search;ai;llm;Microsoft.Extensions.AI;IChatClient;dotnet;net10;csharp;dotnetrdf;markdig;yamldotnet</PackageTags>
     <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 

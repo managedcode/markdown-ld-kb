@@ -30,7 +30,7 @@ public sealed class MarkdownDocumentParser(Uri? baseUri = null)
 
     public MarkdownDocument Parse(MarkdownSourceDocument source)
     {
-        var content = (source.Content ?? string.Empty).TrimStart('\uFEFF');
+        var content = source.Content.TrimStart('\uFEFF');
         var (frontMatter, body) = ParseFrontMatter(content);
         var documentUri = source.CanonicalUri ?? DeriveDocumentUri(source.Path);
         var title = ResolveTitle(frontMatter, body, source.Path);
@@ -76,7 +76,7 @@ public sealed class MarkdownDocumentParser(Uri? baseUri = null)
         var lines = content.Split('\n');
         if (lines.Length < 3)
         {
-            return (new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase), content);
+            throw new InvalidDataException(MissingFrontMatterTerminatorMessage);
         }
 
         var endIndex = -1;
@@ -91,31 +91,32 @@ public sealed class MarkdownDocumentParser(Uri? baseUri = null)
 
         if (endIndex < 0)
         {
-            return (new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase), content);
+            throw new InvalidDataException(MissingFrontMatterTerminatorMessage);
         }
 
         var yaml = string.Join(NewLineDelimiter, lines.Skip(1).Take(endIndex - 1));
-        IReadOnlyDictionary<string, object?> frontMatter;
-        try
+        var parsed = _yamlDeserializer.Deserialize<object>(yaml);
+        var frontMatter = NormalizeYamlObject(parsed);
+        if (frontMatter is null)
         {
-            var parsed = _yamlDeserializer.Deserialize<object>(yaml);
-            frontMatter = NormalizeYamlObject(parsed);
-        }
-        catch
-        {
-            frontMatter = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            throw new InvalidDataException(FrontMatterMappingExpectedMessage);
         }
 
         var body = string.Join(NewLineDelimiter, lines.Skip(endIndex + 1));
         return (frontMatter, body.TrimStart('\r', '\n'));
     }
 
-    private static Dictionary<string, object?> NormalizeYamlObject(object? node)
+    private static Dictionary<string, object?>? NormalizeYamlObject(object? node)
     {
         var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        if (node is not IDictionary<object, object> dictionary)
+        if (node is null)
         {
             return result;
+        }
+
+        if (node is not IDictionary<object, object> dictionary)
+        {
+            return null;
         }
 
         foreach (var entry in dictionary)
@@ -178,7 +179,7 @@ public sealed class MarkdownDocumentParser(Uri? baseUri = null)
 
         var sections = new List<MarkdownSection>();
         var headingPath = new List<string>();
-        var headings = Markdig.Markdown.Parse(body, MarkdigPipeline)
+        var headings = Markdown.Parse(body, MarkdigPipeline)
             .Descendants<HeadingBlock>()
             .Where(static heading => heading.Span.Start >= 0)
             .OrderBy(static heading => heading.Span.Start)

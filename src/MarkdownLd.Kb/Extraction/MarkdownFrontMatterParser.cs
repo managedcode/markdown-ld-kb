@@ -30,7 +30,7 @@ internal static class MarkdownFrontMatterParser
 
         var frontMatter = TryParseFrontMatter(frontMatterBlock, out var parsed)
             ? parsed
-            : new MarkdownFrontMatter();
+            : throw new InvalidDataException(InvalidFrontMatterMessage);
 
         return new MarkdownFrontMatterParseResult(frontMatter, body, true);
     }
@@ -43,8 +43,11 @@ internal static class MarkdownFrontMatterParser
                 .IgnoreUnmatchedProperties()
                 .Build();
 
-            var values = deserializer.Deserialize<Dictionary<string, object?>>(new StringReader(frontMatterBlock))
-                ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            var values = deserializer.Deserialize<Dictionary<string, object?>>(new StringReader(frontMatterBlock));
+            if (values is null)
+            {
+                values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            }
 
             frontMatter = new MarkdownFrontMatter
             {
@@ -94,7 +97,7 @@ internal static class MarkdownFrontMatterParser
             frontMatter.AppendLine(line);
         }
 
-        return (string.Empty, markdown, false);
+        throw new InvalidDataException(MissingFrontMatterTerminatorMessage);
     }
 
     private static string? ReadString(IReadOnlyDictionary<string, object?> values, string key)
@@ -107,7 +110,7 @@ internal static class MarkdownFrontMatterParser
         return value switch
         {
             string s => s.Trim(),
-            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture)?.Trim(),
+            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture).Trim(),
             _ => value.ToString()?.Trim(),
         };
     }
@@ -124,7 +127,7 @@ internal static class MarkdownFrontMatterParser
             {
                 null => null,
                 string s => s.Trim(),
-                IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture)?.Trim(),
+                IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture).Trim(),
                 _ => item.ToString()?.Trim(),
             })
             .Where(item => !string.IsNullOrWhiteSpace(item))

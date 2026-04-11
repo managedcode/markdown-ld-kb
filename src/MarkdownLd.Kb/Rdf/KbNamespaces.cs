@@ -14,7 +14,7 @@ public static class KbNamespaces
     public const string Prov = "http://www.w3.org/ns/prov#";
     public const string Rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
     public const string Xsd = "http://www.w3.org/2001/XMLSchema#";
-    public const string Kb = "https://example.com/vocab/kb#";
+    public const string Kb = MarkdownKnowledgeDefaults.KbNamespaceText;
 
     public static readonly Uri SchemaUri = new(Schema);
     public static readonly Uri ProvUri = new(Prov);

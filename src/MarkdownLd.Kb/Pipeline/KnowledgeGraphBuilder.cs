@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using VDS.RDF;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
@@ -62,38 +63,78 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
         graph.Assert(new Triple(article, schemaName, graph.CreateLiteralNode(document.Title)));
         graph.Assert(new Triple(article, provWasDerivedFrom, graph.CreateUriNode(document.DocumentUri)));
 
-        if (TryGetString(document.FrontMatter, SummaryKey, out var summary) ||
-            TryGetString(document.FrontMatter, DescriptionKey, out summary))
-        {
-            graph.Assert(new Triple(article, schemaDescription, graph.CreateLiteralNode(summary ?? string.Empty)));
-        }
+        AddDocumentDescription(graph, article, schemaDescription, document.FrontMatter);
+        AddDocumentDate(graph, article, schemaDatePublished, document.FrontMatter, DatePublishedKey, DatePublishedCamelKey);
+        AddDocumentDate(graph, article, schemaDateModified, document.FrontMatter, DateModifiedKey, DateModifiedCamelKey);
+        AddDocumentKeywords(graph, article, schemaKeywords, document.FrontMatter);
+        AddDocumentAbout(graph, article, schemaAbout, document.FrontMatter, _baseUri);
+        AddDocumentAuthors(graph, article, schemaAuthor, document.FrontMatter, _baseUri);
+    }
 
-        if (TryGetString(document.FrontMatter, DatePublishedKey, out var datePublished) ||
-            TryGetString(document.FrontMatter, DatePublishedCamelKey, out datePublished))
+    private static void AddDocumentDescription(
+        Graph graph,
+        INode article,
+        INode schemaDescription,
+        IReadOnlyDictionary<string, object?> frontMatter)
+    {
+        if (TryGetString(frontMatter, SummaryKey, out var summary) ||
+            TryGetString(frontMatter, DescriptionKey, out summary))
         {
-            graph.Assert(new Triple(article, schemaDatePublished, CreateDateLiteral(graph, datePublished)));
+            graph.Assert(new Triple(article, schemaDescription, graph.CreateLiteralNode(summary)));
         }
+    }
 
-        if (TryGetString(document.FrontMatter, DateModifiedKey, out var dateModified) ||
-            TryGetString(document.FrontMatter, DateModifiedCamelKey, out dateModified))
+    private static void AddDocumentDate(
+        Graph graph,
+        INode article,
+        INode schemaDate,
+        IReadOnlyDictionary<string, object?> frontMatter,
+        string snakeCaseKey,
+        string camelCaseKey)
+    {
+        if (TryGetString(frontMatter, snakeCaseKey, out var date) ||
+            TryGetString(frontMatter, camelCaseKey, out date))
         {
-            graph.Assert(new Triple(article, schemaDateModified, CreateDateLiteral(graph, dateModified)));
+            graph.Assert(new Triple(article, schemaDate, CreateDateLiteral(graph, date)));
         }
+    }
 
-        foreach (var tag in ReadStrings(document.FrontMatter, TagsKey).Concat(ReadStrings(document.FrontMatter, KeywordsKey)).Distinct(StringComparer.OrdinalIgnoreCase))
+    private static void AddDocumentKeywords(
+        Graph graph,
+        INode article,
+        INode schemaKeywords,
+        IReadOnlyDictionary<string, object?> frontMatter)
+    {
+        foreach (var tag in ReadStrings(frontMatter, TagsKey).Concat(ReadStrings(frontMatter, KeywordsKey)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             graph.Assert(new Triple(article, schemaKeywords, graph.CreateLiteralNode(tag)));
         }
+    }
 
-        foreach (var about in ReadStrings(document.FrontMatter, AboutKey))
+    private static void AddDocumentAbout(
+        Graph graph,
+        INode article,
+        INode schemaAbout,
+        IReadOnlyDictionary<string, object?> frontMatter,
+        Uri baseUri)
+    {
+        foreach (var about in ReadStrings(frontMatter, AboutKey))
         {
-            var id = KnowledgeNaming.CreateEntityId(_baseUri, about);
+            var id = KnowledgeNaming.CreateEntityId(baseUri, about);
             graph.Assert(new Triple(article, schemaAbout, graph.CreateUriNode(new Uri(id))));
         }
+    }
 
-        foreach (var author in ReadAuthors(document.FrontMatter))
+    private static void AddDocumentAuthors(
+        Graph graph,
+        INode article,
+        INode schemaAuthor,
+        IReadOnlyDictionary<string, object?> frontMatter,
+        Uri baseUri)
+    {
+        foreach (var author in ReadAuthors(frontMatter))
         {
-            var id = KnowledgeNaming.CreateEntityId(_baseUri, author.Label);
+            var id = KnowledgeNaming.CreateEntityId(baseUri, author.Label);
             graph.Assert(new Triple(article, schemaAuthor, graph.CreateUriNode(new Uri(id))));
         }
     }
@@ -120,12 +161,18 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
     private static void AddAssertion(Graph graph, KnowledgeAssertionFact assertion)
     {
         if (!Uri.TryCreate(assertion.SubjectId, UriKind.Absolute, out var subjectUri) ||
-            !Uri.TryCreate(assertion.ObjectId, UriKind.Absolute, out var objectUri))
+            !Uri.TryCreate(assertion.ObjectId, UriKind.Absolute, out var objectUri) ||
+            string.IsNullOrWhiteSpace(assertion.Predicate))
         {
             return;
         }
 
         var predicateUri = ResolvePredicate(assertion.Predicate);
+        if (predicateUri is null)
+        {
+            return;
+        }
+
         graph.Assert(
             new Triple(
                 graph.CreateUriNode(subjectUri),
@@ -138,7 +185,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
         }
     }
 
-    private static Uri ResolvePredicate(string predicate)
+    private static Uri? ResolvePredicate(string predicate)
     {
         if (predicate.Contains(':', StringComparison.Ordinal))
         {
@@ -154,7 +201,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
                 XsdPrefix => new Uri(XsdNamespaceText + local),
                 _ => Uri.TryCreate(predicate, UriKind.Absolute, out var prefixedAbsolute)
                     ? prefixedAbsolute
-                    : new Uri(KbNamespaceText + KnowledgeNaming.Slugify(predicate)),
+                    : null,
             };
         }
 
@@ -170,7 +217,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
             AuthorPredicateKey => SchemaAuthorUri,
             CreatorPredicateKey => SchemaCreatorUri,
             SameAsPredicateKey => SchemaSameAsUri,
-            _ => new Uri(KbNamespaceText + KnowledgeNaming.Slugify(predicate)),
+            _ => null,
         };
     }
 
@@ -178,10 +225,15 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
     {
         if (type.Contains(':', StringComparison.Ordinal))
         {
-            return ResolvePredicate(type);
+            return ResolvePredicate(type) ?? SchemaThingTypeUri();
         }
 
         return new Uri(SchemaNamespaceText + KnowledgeNaming.Slugify(type));
+    }
+
+    private static Uri SchemaThingTypeUri()
+    {
+        return new Uri(SchemaNamespaceText + KnowledgeNaming.Slugify(SchemaThingTypeText));
     }
 
     private static ILiteralNode CreateDateLiteral(Graph graph, string? value)
@@ -194,7 +246,10 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
         return graph.CreateLiteralNode(value ?? string.Empty);
     }
 
-    private static bool TryGetString(IReadOnlyDictionary<string, object?> frontMatter, string key, out string? value)
+    private static bool TryGetString(
+        IReadOnlyDictionary<string, object?> frontMatter,
+        string key,
+        [NotNullWhen(true)] out string? value)
     {
         foreach (var entry in frontMatter)
         {

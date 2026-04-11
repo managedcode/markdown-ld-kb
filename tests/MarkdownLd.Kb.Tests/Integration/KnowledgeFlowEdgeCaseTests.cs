@@ -491,7 +491,7 @@ ASK WHERE {
 """;
 
     private const string ConverterFallbackAskQuery = """
-PREFIX kb: <https://example.com/vocab/kb#>
+PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
 ASK WHERE {
   <https://kb.example/document/> kb:relatedTo <https://example.com/unknown> .
 }
@@ -552,7 +552,7 @@ SELECT ?title WHERE {
 
     private const string FactMergerAskQuery = """
 PREFIX schema: <https://schema.org/>
-PREFIX kb: <https://example.com/vocab/kb#>
+PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 ASK WHERE {
   <urn:external:subject> schema:sameAs <https://example.com/root-tool> .

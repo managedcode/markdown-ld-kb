@@ -74,14 +74,14 @@ public sealed class ChatClientKnowledgeFactExtractor
             useJsonSchemaResponseFormat: true,
             cancellationToken).ConfigureAwait(false);
 
-        if (!response.TryGetResult(out var envelope) || envelope is null)
+        if (!response.TryGetResult(out var envelope))
         {
             return new KnowledgeFactExtractionResult(
                 request.DocumentId,
                 request.ChunkId,
                 [],
                 [],
-                response.Text ?? string.Empty);
+                response.Text);
         }
 
         var entities = NormalizeEntities(envelope.Entities);
@@ -92,7 +92,7 @@ public sealed class ChatClientKnowledgeFactExtractor
             request.ChunkId,
             entities,
             assertions,
-            response.Text ?? string.Empty);
+            response.Text);
     }
 
     private ChatOptions BuildChatOptions()
@@ -143,7 +143,7 @@ public sealed class ChatClientKnowledgeFactExtractor
         return builder.ToString();
     }
 
-    private IReadOnlyList<KnowledgeFactEntity> NormalizeEntities(IReadOnlyList<KnowledgeFactEntity>? entities)
+    private IReadOnlyList<KnowledgeFactEntity> NormalizeEntities(IReadOnlyList<KnowledgeFactEntityEnvelope?>? entities)
     {
         if (entities is null || entities.Count == 0)
         {
@@ -193,7 +193,7 @@ public sealed class ChatClientKnowledgeFactExtractor
     }
 
     private static IReadOnlyList<KnowledgeFactAssertion> NormalizeAssertions(
-        IReadOnlyList<KnowledgeFactAssertion>? assertions,
+        IReadOnlyList<KnowledgeFactAssertionEnvelope?>? assertions,
         KnowledgeFactExtractionRequest request)
     {
         if (assertions is null || assertions.Count == 0)
@@ -258,7 +258,7 @@ public sealed class ChatClientKnowledgeFactExtractor
         return string.IsNullOrWhiteSpace(type) ? SchemaThing : type.Trim();
     }
 
-    private static IReadOnlyList<string> NormalizeSameAs(IReadOnlyList<string>? sameAs)
+    private static IReadOnlyList<string> NormalizeSameAs(IReadOnlyList<string?>? sameAs)
     {
         if (sameAs is null || sameAs.Count == 0)
         {
@@ -270,7 +270,8 @@ public sealed class ChatClientKnowledgeFactExtractor
             .Where(item => !string.IsNullOrWhiteSpace(item))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(item => item, StringComparer.Ordinal)
-            .ToArray()!;
+            .Select(item => item!)
+            .ToArray();
     }
 
     private static IReadOnlyList<string> MergeSameAs(IReadOnlyList<string>? left, IReadOnlyList<string>? right)
@@ -375,6 +376,19 @@ public sealed class ChatClientKnowledgeFactExtractor
     }
 
     private sealed record KnowledgeFactExtractionEnvelope(
-        [property: JsonPropertyName(EntitiesJsonName)] IReadOnlyList<KnowledgeFactEntity>? Entities,
-        [property: JsonPropertyName(AssertionsJsonName)] IReadOnlyList<KnowledgeFactAssertion>? Assertions);
+        [property: JsonPropertyName(EntitiesJsonName)] IReadOnlyList<KnowledgeFactEntityEnvelope?>? Entities,
+        [property: JsonPropertyName(AssertionsJsonName)] IReadOnlyList<KnowledgeFactAssertionEnvelope?>? Assertions);
+
+    private sealed record KnowledgeFactEntityEnvelope(
+        [property: JsonPropertyName(EntityIdJsonName)] string? Id,
+        [property: JsonPropertyName(EntityTypeJsonName)] string? Type,
+        [property: JsonPropertyName(EntityLabelJsonName)] string? Label,
+        [property: JsonPropertyName(EntitySameAsJsonName)] IReadOnlyList<string?>? SameAs = null);
+
+    private sealed record KnowledgeFactAssertionEnvelope(
+        [property: JsonPropertyName(AssertionSubjectJsonName)] string? SubjectId,
+        [property: JsonPropertyName(AssertionPredicateJsonName)] string? Predicate,
+        [property: JsonPropertyName(AssertionObjectJsonName)] string? ObjectId,
+        [property: JsonPropertyName(AssertionConfidenceJsonName)] double Confidence = 0.5,
+        [property: JsonPropertyName(AssertionSourceJsonName)] string? Source = null);
 }

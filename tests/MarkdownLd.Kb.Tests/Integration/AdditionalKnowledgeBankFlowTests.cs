@@ -19,7 +19,7 @@ public sealed class AdditionalKnowledgeBankFlowTests
     private const string RootParserIgnoredPath = "content/ignored.md";
     private const string RootParserInvalidBaseUri = "not a uri";
     private const string RootParserExpectedDocumentId = "notes/canonical-relative";
-    private const string RootParserExpectedBaseUri = "https://example.com/";
+    private const string RootParserExpectedBaseUri = "urn:managedcode:markdown-ld-kb:/";
     private const string RootParserExpectedSummary = "Root parser summary.";
     private static readonly string[] RootParserExpectedAuthors = ["Ada Lovelace"];
     private static readonly string[] RootParserExpectedTags = ["alpha", "beta"];
@@ -31,14 +31,14 @@ public sealed class AdditionalKnowledgeBankFlowTests
     private const string RootParserWikiTarget = "RDF";
     private const string RootParserWikiDisplayText = "Resource Description Framework";
     private const string RootParserImageTitle = "Diagram title";
-    private const string RootParserImageTarget = "https://example.com/diagram.png";
+    private const string RootParserImageTarget = "urn:managedcode:markdown-ld-kb:/diagram.png";
     private const string RootParserGuideDisplayText = "Guide";
     private const string RootParserGuideTitle = "Guide title";
-    private const string RootParserGuideTarget = "https://example.com/guide/#part";
+    private const string RootParserGuideTarget = "urn:managedcode:markdown-ld-kb:/guide/#part";
     private const string RootParserMailDisplayText = "Mail";
     private const string UntitledDocumentPrefix = "urn:markdown-ld-kb:document/";
     private const string DefaultUntitledDocumentId = "urn:markdown-ld-kb:document/untitled";
-    private const string DefaultBaseUri = "https://example.com/";
+    private const string DefaultBaseUri = "urn:managedcode:markdown-ld-kb:/";
     private const string KbExampleBaseUri = "https://kb.example";
     private const string WhitespaceSample = "  Alpha\r\n  Beta\tGamma  ";
     private const string WhitespaceSampleExpected = "Alpha Beta Gamma";
@@ -418,7 +418,7 @@ ASK WHERE {
 }
 """;
     private const string LargeMarkdownEntityRelatedAskQuery = """
-PREFIX kb: <https://example.com/vocab/kb#>
+PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
 ASK WHERE {
   <https://kb.example/id/entity-extractor> kb:relatedTo <https://kb.example/id/sparql> .
 }

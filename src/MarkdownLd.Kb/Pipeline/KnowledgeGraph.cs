@@ -5,19 +5,44 @@ using VDS.RDF.Query;
 using VDS.RDF.Query.Datasets;
 using VDS.RDF.Writing;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
+using StringWriter = System.IO.StringWriter;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class KnowledgeGraph
 {
     private readonly Graph _graph;
+    private readonly ReaderWriterLockSlim _graphLock = new();
 
     internal KnowledgeGraph(Graph graph)
     {
         _graph = graph;
     }
 
-    public int TripleCount => _graph.Triples.Count;
+    public int TripleCount
+    {
+        get
+        {
+            _graphLock.EnterReadLock();
+            try
+            {
+                return _graph.Triples.Count;
+            }
+            finally
+            {
+                _graphLock.ExitReadLock();
+            }
+        }
+    }
+
+    public Task MergeAsync(KnowledgeGraph graph, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var snapshot = graph.CreateSnapshot();
+        return Task.Run(() => MergeSnapshot(snapshot, cancellationToken), cancellationToken);
+    }
 
     public async Task<SparqlQueryResult> ExecuteSelectAsync(string sparql, CancellationToken cancellationToken = default)
     {
@@ -49,23 +74,37 @@ public sealed class KnowledgeGraph
 
     public string SerializeTurtle()
     {
-        using var writer = new global::System.IO.StringWriter();
-        var turtleWriter = new CompressingTurtleWriter();
-        turtleWriter.Save(_graph, writer);
-        return writer.ToString();
+        _graphLock.EnterReadLock();
+        try
+        {
+            using var writer = new StringWriter();
+            var turtleWriter = new CompressingTurtleWriter();
+            turtleWriter.Save(_graph, writer);
+            return writer.ToString();
+        }
+        finally
+        {
+            _graphLock.ExitReadLock();
+        }
     }
 
     public string SerializeJsonLd()
     {
-        using var writer = new global::System.IO.StringWriter();
-        var store = new TripleStore();
-        store.Add(_graph);
-        var jsonLdWriter = new JsonLdWriter();
-        jsonLdWriter.Save(store, writer, false);
-        return writer.ToString();
+        _graphLock.EnterReadLock();
+        try
+        {
+            using var writer = new StringWriter();
+            var store = new TripleStore();
+            store.Add(_graph);
+            var jsonLdWriter = new JsonLdWriter();
+            jsonLdWriter.Save(store, writer, false);
+            return writer.ToString();
+        }
+        finally
+        {
+            _graphLock.ExitReadLock();
+        }
     }
-
-    internal Graph InnerGraph => _graph;
 
     private async Task<object> ExecuteQueryAsync(string sparql, CancellationToken cancellationToken)
     {
@@ -83,9 +122,54 @@ public sealed class KnowledgeGraph
             throw new ReadOnlySparqlQueryException(SelectAskOnlyMessagePrefix + query.QueryType);
         }
 
-        var dataset = new InMemoryDataset(_graph);
-        var processor = new LeviathanQueryProcessor(dataset);
-        return await Task.Run(() => processor.ProcessQuery(query), cancellationToken).ConfigureAwait(false);
+        return await Task.Run(() => ProcessQuery(query, cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
+
+    private void MergeSnapshot(Graph graph, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _graphLock.EnterWriteLock();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _graph.Merge(graph);
+        }
+        finally
+        {
+            _graphLock.ExitWriteLock();
+        }
+    }
+
+    private Graph CreateSnapshot()
+    {
+        _graphLock.EnterReadLock();
+        try
+        {
+            var snapshot = new Graph();
+            snapshot.Merge(_graph);
+            return snapshot;
+        }
+        finally
+        {
+            _graphLock.ExitReadLock();
+        }
+    }
+
+    private object ProcessQuery(SparqlQuery query, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _graphLock.EnterReadLock();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var dataset = new InMemoryDataset(_graph);
+            var processor = new LeviathanQueryProcessor(dataset);
+            return processor.ProcessQuery(query);
+        }
+        finally
+        {
+            _graphLock.ExitReadLock();
+        }
     }
 
     private static SparqlQueryResult ToResult(SparqlResultSet resultSet)

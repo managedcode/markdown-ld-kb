@@ -1,7 +1,7 @@
 using ManagedCode.MarkdownLd.Kb.Parsing;
 using Shouldly;
 
-namespace ManagedCode.MarkdownLd.Kb.Tests;
+namespace ManagedCode.MarkdownLd.Kb.Tests.Parsing;
 
 public sealed class MarkdownDocumentParserTests
 {

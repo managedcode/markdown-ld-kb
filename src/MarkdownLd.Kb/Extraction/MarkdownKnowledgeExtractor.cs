@@ -41,17 +41,17 @@ public sealed class MarkdownKnowledgeExtractor
     {
         if (!string.IsNullOrWhiteSpace(frontMatterTitle))
         {
-            return frontMatterTitle!.Trim();
+            return frontMatterTitle.Trim();
         }
 
         if (!string.IsNullOrWhiteSpace(scannedTitle))
         {
-            return scannedTitle!.Trim();
+            return scannedTitle.Trim();
         }
 
         if (!string.IsNullOrWhiteSpace(sourcePath))
         {
-            return MarkdownKnowledgeIds.HumanizeLabel(System.IO.Path.GetFileNameWithoutExtension(sourcePath));
+            return MarkdownKnowledgeIds.HumanizeLabel(Path.GetFileNameWithoutExtension(sourcePath));
         }
 
         return UntitledTitle;

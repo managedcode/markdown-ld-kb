@@ -19,12 +19,14 @@ Purpose: Production library for Markdown-LD Knowledge Bank.
 - Do not add localhost, HTTP server, background service, database server, or hosted API dependencies. The production pipeline must build, store, query, and serialize graphs in memory.
 - Do not add embedding/vector provider dependencies to the core pipeline. Future semantic/vector search must be optional and provider-neutral.
 - Keep the root namespace, assembly name, and package ID as `ManagedCode.MarkdownLd.Kb`.
+- Do not implement fallbacks. Invalid parsing, extraction, graph, or query inputs must fail explicitly or be skipped by a documented validation rule with tests.
+- Do not keep legacy or leftover implementation paths in this project. Remove obsolete code instead of wrapping or preserving it.
 
 ## Commands
 
 - build: `dotnet build ../../MarkdownLd.Kb.slnx --no-restore`
-- test: `dotnet test ../../MarkdownLd.Kb.slnx --no-build`
-- coverage: `dotnet test ../../MarkdownLd.Kb.slnx --no-build --coverlet --coverlet-output-format cobertura --coverlet-include '[ManagedCode.MarkdownLd.Kb]*' --results-directory ../../TestResults/CoverletMtpFiltered`
+- test: `(cd ../.. && dotnet test MarkdownLd.Kb.slnx --configuration Release)`
+- coverage: `(cd ../.. && dotnet test MarkdownLd.Kb.slnx --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings")`
 
 ## Local Risks
 

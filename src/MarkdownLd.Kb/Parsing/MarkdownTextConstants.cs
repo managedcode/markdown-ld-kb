@@ -12,7 +12,7 @@ internal static class MarkdownTextConstants
     internal const string CarriageReturnLineFeed = "\r\n";
     internal const string CarriageReturn = "\r";
     internal const string FrontMatterFence = "---";
-    internal const string DefaultBaseUrl = "https://example.com/";
+    internal const string DefaultBaseUrl = MarkdownKnowledgeDefaults.BaseUriText;
     internal const string DocumentIdUntitled = "urn:markdown-ld-kb:document/untitled";
     internal const string DocumentIdPrefix = "urn:markdown-ld-kb:document/";
     internal const string ContentPrefix = "content/";
@@ -54,4 +54,8 @@ internal static class MarkdownTextConstants
     internal const string NameKey = "name";
     internal const string ValueKey = "value";
     internal const string TypeKey = "type";
+    internal const string InvalidBaseUrlMessage = "Markdown base URL is invalid.";
+    internal const string InvalidFrontMatterMessage = "Markdown front matter is invalid.";
+    internal const string MissingFrontMatterTerminatorMessage = "Markdown front matter closing fence is missing.";
+    internal const string FrontMatterMappingExpectedMessage = "Markdown front matter must be a YAML mapping.";
 }

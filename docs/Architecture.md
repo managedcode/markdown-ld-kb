@@ -25,6 +25,7 @@ flowchart LR
     Graph --> Sparql["In-memory SPARQL executor API"]
     Graph --> Search["In-memory graph search API"]
     Graph --> Serializers["Turtle and JSON-LD serializers"]
+    Graph --> Merge["Thread-safe graph merge API"]
     IChatClient["Microsoft.Extensions.AI IChatClient"] --> Extractor
     AgentFramework["Future Microsoft Agent Framework orchestration"] -. "wraps IChatClient" .-> IChatClient
 ```
@@ -79,6 +80,23 @@ flowchart TB
     FlowTests --> Query
 ```
 
+## Graph Thread Safety
+
+`KnowledgeGraph` is the synchronization boundary around dotNetRDF `Graph`. dotNetRDF graphs are safe for concurrent read-only access, but not safe when reads overlap with `Assert`, `Retract`, or `Merge`. The library therefore guards graph operations with a reader/writer lock.
+
+```mermaid
+flowchart LR
+    BuiltGraph["MarkdownKnowledgePipeline build result"] --> Merge["KnowledgeGraph.MergeAsync"]
+    Merge --> WriteLock["write lock"]
+    Search["SearchAsync"] --> ReadLock["read lock"]
+    Select["ExecuteSelectAsync / ExecuteAskAsync"] --> ReadLock
+    Serialize["SerializeTurtle / SerializeJsonLd"] --> ReadLock
+    WriteLock --> DotNetRdf["dotNetRDF Graph"]
+    ReadLock --> DotNetRdf
+```
+
+`MergeAsync` snapshots the source graph under that source graph's read lock, then merges the snapshot into the destination graph under the destination graph's write lock. This keeps shared in-memory graph updates safe without adding a server, database, background worker, or hosted graph service.
+
 ## Upstream Behaviour Mapping
 
 | Upstream reference | C# boundary | First-slice behaviour |
@@ -111,6 +129,7 @@ Required first-slice scenarios:
 - Empty Markdown input produces an empty graph without throwing.
 - Malformed assertion arrows are ignored without poisoning the graph.
 - SPARQL mutating queries are rejected before execution.
+- Shared graph merge can run concurrently with search and read-only SPARQL without corrupting dotNetRDF graph state.
 - `IChatClient` extractor accepts structured extraction output without depending on a provider-specific SDK.
 - No-match search returns an empty result instead of an error.
 - Turtle and JSON-LD serialization produce parseable output where dependency support is available.

@@ -34,7 +34,7 @@ public sealed class KnowledgeSourceDocumentConverter
         SupportedMediaTypes.Keys.OrderBy(extension => extension, StringComparer.OrdinalIgnoreCase).ToArray();
 
     public KnowledgeSourceDocument ConvertContent(
-        string content,
+        string? content,
         string? path = null,
         KnowledgeDocumentConversionOptions? options = null)
     {

@@ -70,10 +70,10 @@ jobs:
       run: dotnet build ${{ env.SOLUTION }} --configuration Release --no-restore
 
     - name: Test
-      run: dotnet test --solution ${{ env.SOLUTION }} --configuration Release --no-build --verbosity normal
+      run: dotnet test --solution ${{ env.SOLUTION }} --configuration Release --verbosity normal
 
     - name: Pack NuGet packages
-      run: dotnet pack ${{ env.SOLUTION }} --configuration Release --no-build -p:IncludeSymbols=false -p:SymbolPackageFormat=snupkg --output ${{ env.ARTIFACTS_DIR }}
+      run: dotnet pack ${{ env.SOLUTION }} --configuration Release -p:IncludeSymbols=false -p:SymbolPackageFormat=snupkg --output ${{ env.ARTIFACTS_DIR }}
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4

@@ -38,6 +38,16 @@ public sealed class MarkdownKnowledgePipeline
         return await BuildAsync([source], cancellationToken).ConfigureAwait(false);
     }
 
+    public Task<MarkdownKnowledgeBuildResult> BuildFromMarkdownAsync(
+        string markdown,
+        string? path = null,
+        KnowledgeDocumentConversionOptions? conversionOptions = null,
+        CancellationToken cancellationToken = default)
+    {
+        var source = _documentConverter.ConvertContent(markdown, path, conversionOptions);
+        return BuildAsync([source], cancellationToken);
+    }
+
     public async Task<MarkdownKnowledgeBuildResult> BuildFromDirectoryAsync(
         string directoryPath,
         KnowledgeDocumentConversionOptions? conversionOptions = null,
@@ -79,19 +89,8 @@ public sealed class MarkdownKnowledgePipeline
 
             if (_chatExtractor is not null)
             {
-                try
-                {
-                    var chatResult = await _chatExtractor.ExtractAsync(document, cancellationToken).ConfigureAwait(false);
-                    chatResults.Add(chatResult);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch
-                {
-                    chatResults.Add(new KnowledgeExtractionResult());
-                }
+                var chatResult = await _chatExtractor.ExtractAsync(document, cancellationToken).ConfigureAwait(false);
+                chatResults.Add(chatResult);
             }
         }
 

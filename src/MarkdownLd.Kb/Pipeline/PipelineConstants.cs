@@ -1,12 +1,10 @@
-using System.Text.RegularExpressions;
-
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal static class PipelineConstants
 {
-    internal const string DefaultBaseUriText = "https://example.com/";
+    internal const string DefaultBaseUriText = MarkdownKnowledgeDefaults.BaseUriText;
     internal const string DefaultSchemaThing = "schema:Thing";
-    internal const string DefaultKbRelatedTo = "kb:relatedTo";
+    internal const string KbRelatedTo = "kb:relatedTo";
     internal const string DefaultItem = "item";
     internal const string DefaultDocument = "document";
     internal const string EntityIdPrefix = "id/";
@@ -15,7 +13,6 @@ internal static class PipelineConstants
     internal const string Slash = "/";
     internal const string Colon = ":";
     internal const string Hyphen = "-";
-    internal const string Underscore = "_";
     internal const string EmptySparqlQueryMessage = "SPARQL query is empty";
     internal const string ReadOnlySparqlQueryMessage = "SPARQL query is not read-only.";
     internal const string ExpectedResultSetMessage = "Expected a SPARQL result set.";
@@ -28,7 +25,7 @@ internal static class PipelineConstants
     internal const string RdfPrefix = "rdf";
     internal const string XsdPrefix = "xsd";
     internal const string SchemaNamespaceText = "https://schema.org/";
-    internal const string KbNamespaceText = "https://example.com/vocab/kb#";
+    internal const string KbNamespaceText = MarkdownKnowledgeDefaults.KbNamespaceText;
     internal const string ProvNamespaceText = "http://www.w3.org/ns/prov#";
     internal const string RdfNamespaceText = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
     internal const string XsdNamespaceText = "http://www.w3.org/2001/XMLSchema#";
@@ -49,10 +46,8 @@ internal static class PipelineConstants
     internal const string SchemaSoftwareApplicationTypeText = "schema:SoftwareApplication";
     internal const string SchemaCreativeWorkTypeText = "schema:CreativeWork";
     internal const string SchemaThingTypeText = "schema:Thing";
-    internal const string KbConfidenceText = "https://example.com/vocab/kb#confidence";
     internal const string RdfTypeText = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
     internal const string XsdDateText = "http://www.w3.org/2001/XMLSchema#date";
-    internal const string XsdIntegerText = "http://www.w3.org/2001/XMLSchema#integer";
     internal const string TitleKey = "title";
     internal const string SummaryKey = "summary";
     internal const string DescriptionKey = "description";
@@ -89,7 +84,7 @@ internal static class PipelineConstants
     internal const string EscapedQuoteText = "\\\"";
     internal const string SearchQueryTemplate = """
 PREFIX schema: <https://schema.org/>
-PREFIX kb: <https://example.com/vocab/kb#>
+PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
 SELECT DISTINCT ?subject ?name ?type WHERE {
   ?subject a ?type .
   OPTIONAL { ?subject schema:name ?name . }
@@ -103,24 +98,6 @@ SELECT DISTINCT ?subject ?name ?type WHERE {
 }
 LIMIT 100
 """;
-    internal const string SearchLimit = "100";
-    internal const string SearchSubjectVariable = "?subject";
-    internal const string SearchNameVariable = "?name";
-    internal const string SearchTypeVariable = "?type";
-    internal const string SearchDescriptionVariable = "?description";
-    internal const string SearchKeywordVariable = "?keyword";
-    internal const string SearchFilterPrefix = "FILTER(";
-    internal const string SearchSelectPrefix = "SELECT DISTINCT ?subject ?name ?type WHERE {";
-    internal const string SearchPrefixSchema = "PREFIX schema: <https://schema.org/>";
-    internal const string SearchPrefixKb = "PREFIX kb: <https://example.com/vocab/kb#>";
-    internal const string SearchOptionalName = "  OPTIONAL { ?subject schema:name ?name . }";
-    internal const string SearchOptionalDescription = "  OPTIONAL { ?subject schema:description ?description . }";
-    internal const string SearchOptionalKeyword = "  OPTIONAL { ?subject schema:keywords ?keyword . }";
-    internal const string SearchFilterName = "(BOUND(?name) && CONTAINS(LCASE(STR(?name)), LCASE(\"{TERM}\")))";
-    internal const string SearchFilterDescription = "(BOUND(?description) && CONTAINS(LCASE(STR(?description)), LCASE(\"{TERM}\")))";
-    internal const string SearchFilterKeyword = "(BOUND(?keyword) && CONTAINS(LCASE(STR(?keyword)), LCASE(\"{TERM}\")))";
-    internal const string SearchEnd = "LIMIT 100";
-    internal const string QueryReadOnlySelectMessage = "Only ASK and SELECT queries are allowed, not ";
     internal const string ExpectedSchemaName = "schema:name";
     internal const string ExpectedSchemaDescription = "schema:description";
     internal const string ExpectedSchemaKeywords = "schema:keywords";
@@ -129,17 +106,8 @@ LIMIT 100
     internal const string ExpectedSchemaMentions = "schema:mentions";
     internal const string ExpectedSchemaSameAs = "schema:sameAs";
     internal const string ExpectedSchemaCreator = "schema:creator";
-    internal const string ExpectedRdfType = "rdf:type";
     internal const string ArrowSeparator = "--";
     internal const string ArrowTail = "-->";
-    internal const string SectionHeaderPrefix = "SECTION: ";
-    internal const string DocumentUriLabel = "DOCUMENT_URI: ";
-    internal const string TitleLabel = "TITLE: ";
-    internal const string BodyLabel = "BODY:";
-    internal const string SectionsLabel = "SECTIONS:";
-    internal const string ExtractPromptStart = "Extract knowledge facts from the Markdown document. ";
-    internal const string ExtractPromptJson = "Return only JSON matching the requested structured output envelope. ";
-    internal const string SpaceSlashSpace = " / ";
     internal const string NonAlphaNumericPattern = @"[^a-z0-9\s-]";
     internal const string WhitespacePattern = @"[\s_]+";
     internal const string DashesPattern = @"-+";
@@ -147,15 +115,10 @@ LIMIT 100
     internal const string WikiLinkPattern = @"\[\[([^\]]+)\]\]";
     internal const string MarkdownLinkPattern = @"\[(?<label>[^\]]+)\]\((?<url>[^)]+)\)";
     internal const string ArrowPattern = @"^(?<subject>.+?)\s*--(?<predicate>[^-]+?)-->\s*(?<object>.+?)\s*$";
-    internal const string MutatingKeywordPattern = @"\b(?:INSERT|DELETE|LOAD|CLEAR|DROP|CREATE|MOVE|COPY|ADD|WITH|MODIFY)\b";
     internal const string FrontMatterMarker = "---";
     internal const string NewLineDelimiter = "\n";
-    internal const string CarriageReturn = "\r";
-    internal const string LeftRightDashDelimiter = "-";
     internal const string ListItemPrefix = "- ";
     internal const string DotNetDateFormat = "yyyy-MM-dd";
-    internal const string SpaceSeparator = " ";
-    internal const string UnderscoreSeparator = "_";
     internal const string MatchLabelGroup = "label";
     internal const string MatchUrlGroup = "url";
     internal const string MatchSubjectGroup = "subject";
@@ -184,9 +147,10 @@ LIMIT 100
     internal const string UnsupportedFileMessagePrefix = "Unsupported text document extension: ";
     internal const string UnsupportedFileMessageSuffix = ". Supported extensions: ";
     internal const string SupportedExtensionsSeparator = ", ";
-    internal const string FilePathRequiredMessage = "A source file path is required.";
-    internal const string DirectoryPathRequiredMessage = "A source directory path is required.";
     internal const string DirectoryNotFoundMessagePrefix = "Source directory was not found: ";
+    internal const string InvalidFrontMatterMessage = "Markdown front matter is invalid.";
+    internal const string MissingFrontMatterTerminatorMessage = "Markdown front matter closing fence is missing.";
+    internal const string FrontMatterMappingExpectedMessage = "Markdown front matter must be a YAML mapping.";
     internal const char DoubleQuoteCharacter = '"';
     internal const char SingleQuoteCharacter = '\'';
     internal const char CommaCharacter = ',';
@@ -208,14 +172,8 @@ LIMIT 100
     internal static readonly Uri SchemaSameAsUri = new(SchemaSameAsText);
     internal static readonly Uri SchemaMentionsUri = new(SchemaMentionsText);
     internal static readonly Uri SchemaCreatorUri = new(SchemaCreatorText);
-    internal static readonly Uri KbConfidenceUri = new(KbConfidenceText);
     internal static readonly Uri RdfTypeUri = new(RdfTypeText);
     internal static readonly Uri XsdDateUri = new(XsdDateText);
-    internal static readonly Uri XsdIntegerUri = new(XsdIntegerText);
     internal static readonly Uri ProvWasDerivedFromUri = new(ProvNamespaceText + ProvWasDerivedFromSuffix);
     internal static readonly char[] ArrowOperandTrimChars = [DoubleQuoteCharacter, SingleQuoteCharacter, CommaCharacter, SemicolonCharacter];
-
-    internal static readonly Regex MutatingKeywordRegex = new(
-        MutatingKeywordPattern,
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 }

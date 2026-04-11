@@ -22,7 +22,7 @@ ORDER BY ?mention
 """;
     private const string AssertionQuery = """
 PREFIX schema: <https://schema.org/>
-PREFIX kb: <https://example.com/vocab/kb#>
+PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
 PREFIX prov: <http://www.w3.org/ns/prov#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 ASK WHERE {
