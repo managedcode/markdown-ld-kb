@@ -58,7 +58,7 @@ public sealed class ChatClientKnowledgeFactExtractor
                 request.ChunkId,
                 [],
                 [],
-                EmptyString);
+                string.Empty);
         }
 
         var messages = new[]
@@ -81,7 +81,7 @@ public sealed class ChatClientKnowledgeFactExtractor
                 request.ChunkId,
                 [],
                 [],
-                response.Text ?? EmptyString);
+                response.Text ?? string.Empty);
         }
 
         var entities = NormalizeEntities(envelope.Entities);
@@ -92,7 +92,7 @@ public sealed class ChatClientKnowledgeFactExtractor
             request.ChunkId,
             entities,
             assertions,
-            response.Text ?? EmptyString);
+            response.Text ?? string.Empty);
     }
 
     private ChatOptions BuildChatOptions()
@@ -128,7 +128,7 @@ public sealed class ChatClientKnowledgeFactExtractor
                     .Append(FrontMatterItemPrefix)
                     .Append(pair.Key)
                     .Append(KeyValueSeparator)
-                    .AppendLine(pair.Value ?? EmptyString);
+                    .AppendLine(pair.Value ?? string.Empty);
             }
         }
 

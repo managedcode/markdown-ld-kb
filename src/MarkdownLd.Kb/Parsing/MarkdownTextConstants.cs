@@ -2,7 +2,6 @@ namespace ManagedCode.MarkdownLd.Kb.Parsing;
 
 internal static class MarkdownTextConstants
 {
-    internal const string Empty = "";
     internal const string Space = " ";
     internal const string Colon = ":";
     internal const string Comma = ",";

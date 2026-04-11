@@ -1,3 +1,4 @@
+using ManagedCode.MarkdownLd.Kb.Query;
 using VDS.RDF;
 using VDS.RDF.Parsing;
 using VDS.RDF.Query;
@@ -69,17 +70,15 @@ public sealed class KnowledgeGraph
     private async Task<object> ExecuteQueryAsync(string sparql, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        KnowledgeQueryValidator.ValidateReadOnly(sparql);
+        var safety = SparqlSafety.EnforceReadOnly(sparql);
+        if (!safety.IsAllowed)
+        {
+            throw new ReadOnlySparqlQueryException(safety.ErrorMessage ?? ReadOnlySparqlQueryMessage);
+        }
 
         var parser = new SparqlQueryParser();
-        var query = parser.ParseFromString(sparql);
-        if (query.QueryType is not (SparqlQueryType.Ask
-            or SparqlQueryType.Select
-            or SparqlQueryType.SelectAll
-            or SparqlQueryType.SelectAllDistinct
-            or SparqlQueryType.SelectAllReduced
-            or SparqlQueryType.SelectDistinct
-            or SparqlQueryType.SelectReduced))
+        var query = parser.ParseFromString(safety.Query);
+        if (!SparqlSafety.IsReadOnlyQuery(query.QueryType))
         {
             throw new ReadOnlySparqlQueryException(SelectAskOnlyMessagePrefix + query.QueryType);
         }
@@ -129,16 +128,5 @@ public sealed class KnowledgeGraph
             .Replace(QuoteText, EscapedQuoteText, StringComparison.Ordinal)
             .Replace('\r', ' ')
             .Replace('\n', ' ');
-    }
-}
-
-internal static class KnowledgeQueryValidator
-{
-    public static void ValidateReadOnly(string sparql)
-    {
-        if (!KnowledgeNaming.IsReadOnlySparql(sparql, out var failureReason))
-        {
-            throw new ReadOnlySparqlQueryException(failureReason ?? ReadOnlySparqlQueryMessage);
-        }
     }
 }

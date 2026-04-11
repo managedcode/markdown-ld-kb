@@ -65,7 +65,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
         if (TryGetString(document.FrontMatter, SummaryKey, out var summary) ||
             TryGetString(document.FrontMatter, DescriptionKey, out summary))
         {
-            graph.Assert(new Triple(article, schemaDescription, graph.CreateLiteralNode(summary ?? BlankString)));
+            graph.Assert(new Triple(article, schemaDescription, graph.CreateLiteralNode(summary ?? string.Empty)));
         }
 
         if (TryGetString(document.FrontMatter, DatePublishedKey, out var datePublished) ||
@@ -191,7 +191,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
             return graph.CreateLiteralNode(dateOnly.ToString(DotNetDateFormat, CultureInfo.InvariantCulture), XsdDateUri);
         }
 
-        return graph.CreateLiteralNode(value ?? BlankString);
+        return graph.CreateLiteralNode(value ?? string.Empty);
     }
 
     private static bool TryGetString(IReadOnlyDictionary<string, object?> frontMatter, string key, out string? value)
@@ -257,7 +257,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
                     {
                         yield return ((map.TryGetValue(LabelKey, out var label) ? label?.ToString() : null)
                             ?? (map.TryGetValue(NameKey, out var name) ? name?.ToString() : null)
-                            ?? BlankString, map.TryGetValue(TypeKey, out var type) ? type?.ToString() : null);
+                            ?? string.Empty, map.TryGetValue(TypeKey, out var type) ? type?.ToString() : null);
                     }
                     else
                     {

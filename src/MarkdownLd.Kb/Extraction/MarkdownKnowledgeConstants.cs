@@ -10,7 +10,6 @@ internal static class MarkdownKnowledgeConstants
     internal const string UntitledTitle = "Untitled";
     internal const string Space = " ";
     internal const string Hyphen = "-";
-    internal const string Empty = "";
     internal const string SameAsKeySeparator = "|";
 
     internal const string SlugInvalidCharactersPattern = @"[^a-z0-9\s-]";

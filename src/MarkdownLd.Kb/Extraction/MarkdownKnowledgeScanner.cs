@@ -131,9 +131,9 @@ internal static class MarkdownKnowledgeScanner
     private static string NormalizeSurfaceText(string value)
     {
         var text = value.Trim();
-        text = text.Replace(WikiLinkStart, Empty, StringComparison.Ordinal).Replace(WikiLinkEnd, Empty, StringComparison.Ordinal);
-        text = text.Replace(InlineCodeMarker, Empty, StringComparison.Ordinal);
-        text = text.Replace(EmphasisMarker, Empty, StringComparison.Ordinal);
+        text = text.Replace(WikiLinkStart, string.Empty, StringComparison.Ordinal).Replace(WikiLinkEnd, string.Empty, StringComparison.Ordinal);
+        text = text.Replace(InlineCodeMarker, string.Empty, StringComparison.Ordinal);
+        text = text.Replace(EmphasisMarker, string.Empty, StringComparison.Ordinal);
         text = text.Replace(Underscore, Space, StringComparison.Ordinal);
         text = Regex.Replace(text, WhitespacePattern, Space, RegexOptions.CultureInvariant);
         return text.Trim(SurfaceTrimCharacters);

@@ -38,20 +38,20 @@ public sealed record MarkdownDocument(
 public sealed record KnowledgeEntityFact
 {
     public string? Id { get; init; }
-    public string Label { get; init; } = BlankString;
+    public string Label { get; init; } = string.Empty;
     public string Type { get; init; } = DefaultSchemaThing;
     public List<string> SameAs { get; init; } = [];
     public double Confidence { get; init; } = 0.8;
-    public string Source { get; init; } = BlankString;
+    public string Source { get; init; } = string.Empty;
 }
 
 public sealed record KnowledgeAssertionFact
 {
-    public string SubjectId { get; init; } = BlankString;
+    public string SubjectId { get; init; } = string.Empty;
     public string Predicate { get; init; } = DefaultKbRelatedTo;
-    public string ObjectId { get; init; } = BlankString;
+    public string ObjectId { get; init; } = string.Empty;
     public double Confidence { get; init; } = 0.8;
-    public string Source { get; init; } = BlankString;
+    public string Source { get; init; } = string.Empty;
 }
 
 public sealed record KnowledgeExtractionResult
@@ -98,7 +98,7 @@ public static class KnowledgeNaming
             builder.Append(char.ToLowerInvariant(c));
         }
 
-        var s = NonAlphaNumeric.Replace(builder.ToString(), BlankString);
+        var s = NonAlphaNumeric.Replace(builder.ToString(), string.Empty);
         s = Whitespace.Replace(s, Hyphen);
         s = Dashes.Replace(s, Hyphen);
         return s.Trim('-');

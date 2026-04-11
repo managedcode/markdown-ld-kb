@@ -1,0 +1,225 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  SOLUTION: MarkdownLd.Kb.slnx
+  ARTIFACTS_DIR: ./artifacts
+
+jobs:
+  build:
+    name: Build, test, and pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        submodules: true
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Extract version from Directory.Build.props
+      id: version
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION="$(python3 - <<'PY'
+        import xml.etree.ElementTree as ET
+
+        root = ET.parse("Directory.Build.props").getroot()
+
+        def read(name: str) -> str:
+            for element in root.iter():
+                if element.tag.endswith(name) and element.text and element.text.strip():
+                    return element.text.strip()
+            return ""
+
+        print(read("PackageVersion") or read("Version"))
+        PY
+        )"
+
+        if [ -z "${VERSION}" ]; then
+          echo "::error::Could not read <PackageVersion>/<Version> from Directory.Build.props"
+          exit 1
+        fi
+
+        echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+        echo "Version from Directory.Build.props: ${VERSION}"
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION }}
+
+    - name: Verify formatting
+      run: dotnet format ${{ env.SOLUTION }} --verify-no-changes --no-restore
+
+    - name: Build
+      run: dotnet build ${{ env.SOLUTION }} --configuration Release --no-restore
+
+    - name: Test
+      run: dotnet test --solution ${{ env.SOLUTION }} --configuration Release --no-build --verbosity normal
+
+    - name: Pack NuGet packages
+      run: dotnet pack ${{ env.SOLUTION }} --configuration Release --no-build -p:IncludeSymbols=false -p:SymbolPackageFormat=snupkg --output ${{ env.ARTIFACTS_DIR }}
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages
+        path: ${{ env.ARTIFACTS_DIR }}/*.nupkg
+        retention-days: 5
+
+  publish-nuget:
+    name: Publish to NuGet
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+      version: ${{ needs.build.outputs.version }}
+
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v5
+      with:
+        name: nuget-packages
+        path: ${{ env.ARTIFACTS_DIR }}
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Publish to NuGet
+      id: publish
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        PUBLISHED=false
+        shopt -s nullglob
+
+        for package in ${{ env.ARTIFACTS_DIR }}/*.nupkg; do
+          echo "Publishing ${package}..."
+          set +e
+          RESULT="$(dotnet nuget push "${package}" \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate 2>&1)"
+          EXIT_CODE=$?
+          set -e
+          echo "${RESULT}"
+
+          if [ ${EXIT_CODE} -eq 0 ]; then
+            PUBLISHED=true
+          elif echo "${RESULT}" | grep -qi "already exists"; then
+            echo "Package already exists, skipping ${package}."
+          else
+            echo "::error::Failed to publish ${package}"
+            exit ${EXIT_CODE}
+          fi
+        done
+
+        echo "published=${PUBLISHED}" >> "${GITHUB_OUTPUT}"
+
+  create-release:
+    name: Create GitHub release and tag
+    needs: publish-nuget
+    runs-on: ubuntu-latest
+    if: needs.publish-nuget.outputs.published == 'true'
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v5
+      with:
+        name: nuget-packages
+        path: ${{ env.ARTIFACTS_DIR }}
+
+    - name: Create and push tag
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION="${{ needs.publish-nuget.outputs.version }}"
+        TAG="v${VERSION}"
+
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        if git rev-parse "${TAG}" >/dev/null 2>&1; then
+          echo "Tag ${TAG} already exists."
+        else
+          git tag -a "${TAG}" -m "Release ${VERSION}"
+          git push origin "${TAG}"
+        fi
+
+    - name: Generate release notes
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION="${{ needs.publish-nuget.outputs.version }}"
+        TAG="v${VERSION}"
+        PREVIOUS_TAG="$(git tag --sort=-version:refname | grep -v "^${TAG}$" | head -n1 || true)"
+
+        {
+          echo "# Release ${VERSION}"
+          echo
+          echo "Released on $(date +'%Y-%m-%d')"
+          echo
+
+          if [ -n "${PREVIOUS_TAG}" ]; then
+            echo "## Changes since ${PREVIOUS_TAG}"
+            echo
+            git log --pretty=format:"- %s (%h)" "${PREVIOUS_TAG}..HEAD" || true
+          else
+            echo "## Initial release"
+            echo
+            git log --pretty=format:"- %s (%h)" --max-count=20 || true
+          fi
+
+          echo
+          echo "## NuGet packages"
+          echo
+          shopt -s nullglob
+          for package in ${{ env.ARTIFACTS_DIR }}/*.nupkg; do
+            file="$(basename "${package}")"
+            base="${file%.nupkg}"
+            package_id="${base%.${VERSION}}"
+            echo "- [${package_id} ${VERSION}](https://www.nuget.org/packages/${package_id}/${VERSION})"
+          done
+        } > release_notes.md
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ needs.publish-nuget.outputs.version }}
+        name: v${{ needs.publish-nuget.outputs.version }}
+        body_path: release_notes.md
+        files: ${{ env.ARTIFACTS_DIR }}/*.nupkg
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

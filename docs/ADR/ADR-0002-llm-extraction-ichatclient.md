@@ -10,10 +10,10 @@ Related Features: `docs/Architecture.md`
 
 - [x] Update project rules and architecture to require `IChatClient`.
 - [x] Add `Microsoft.Extensions.AI` and `Microsoft.Extensions.AI.Abstractions` to the production project.
-- [ ] Implement `ChatClientKnowledgeFactExtractor` behind the `IKnowledgeFactExtractor` port.
-- [ ] Use structured output records for entities and assertions.
-- [ ] Add non-network integration tests for the adapter contract.
-- [ ] Run build, test, format, and coverage commands.
+- [x] Implement `ChatClientKnowledgeFactExtractor` behind the pipeline extraction boundary.
+- [x] Use structured output records for entities and assertions.
+- [x] Add non-network integration tests for the adapter contract.
+- [x] Run final build, test, format, and coverage commands after the latest flow tests.
 
 ## Context
 

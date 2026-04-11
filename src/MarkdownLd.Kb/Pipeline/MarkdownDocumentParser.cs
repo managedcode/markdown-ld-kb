@@ -30,7 +30,7 @@ public sealed class MarkdownDocumentParser(Uri? baseUri = null)
 
     public MarkdownDocument Parse(MarkdownSourceDocument source)
     {
-        var content = (source.Content ?? BlankString).TrimStart('\uFEFF');
+        var content = (source.Content ?? string.Empty).TrimStart('\uFEFF');
         var (frontMatter, body) = ParseFrontMatter(content);
         var documentUri = source.CanonicalUri ?? DeriveDocumentUri(source.Path);
         var title = ResolveTitle(frontMatter, body, source.Path);
@@ -120,7 +120,7 @@ public sealed class MarkdownDocumentParser(Uri? baseUri = null)
 
         foreach (var entry in dictionary)
         {
-            result[entry.Key.ToString() ?? BlankString] = NormalizeYamlValue(entry.Value);
+            result[entry.Key.ToString() ?? string.Empty] = NormalizeYamlValue(entry.Value);
         }
 
         return result;
@@ -138,7 +138,7 @@ public sealed class MarkdownDocumentParser(Uri? baseUri = null)
             var converted = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in dictionary)
             {
-                converted[entry.Key.ToString() ?? BlankString] = NormalizeYamlValue(entry.Value);
+                converted[entry.Key.ToString() ?? string.Empty] = NormalizeYamlValue(entry.Value);
             }
 
             return converted;
@@ -188,7 +188,7 @@ public sealed class MarkdownDocumentParser(Uri? baseUri = null)
         {
             return string.IsNullOrWhiteSpace(body)
                 ? []
-                : [new MarkdownSection(0, BlankString, [], body.Trim(), 0, body.Length)];
+                : [new MarkdownSection(0, string.Empty, [], body.Trim(), 0, body.Length)];
         }
 
         var currentStart = 0;
@@ -230,7 +230,7 @@ public sealed class MarkdownDocumentParser(Uri? baseUri = null)
 
         sections.Add(new MarkdownSection(
             headingPath.Count,
-            headingPath.Count == 0 ? BlankString : string.Join(PathSeparator, headingPath),
+            headingPath.Count == 0 ? string.Empty : string.Join(PathSeparator, headingPath),
             headingPath.ToArray(),
             trimmed,
             startOffset,

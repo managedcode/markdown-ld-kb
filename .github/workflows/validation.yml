@@ -1,0 +1,59 @@
+name: PR validation
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+
+jobs:
+  validate:
+    name: Build, test, and pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        submodules: true
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore MarkdownLd.Kb.slnx
+
+    - name: Verify formatting
+      run: dotnet format MarkdownLd.Kb.slnx --verify-no-changes --no-restore
+
+    - name: Build
+      run: dotnet build MarkdownLd.Kb.slnx --configuration Release --no-restore
+
+    - name: Test with coverage
+      run: dotnet test --solution MarkdownLd.Kb.slnx --configuration Release --no-build --verbosity normal --coverlet --coverlet-output-format cobertura --coverlet-include '[ManagedCode.MarkdownLd.Kb]*' --results-directory TestResults/CoverletMtpFiltered
+
+    - name: Pack
+      run: dotnet pack MarkdownLd.Kb.slnx --configuration Release --no-build -p:IncludeSymbols=false -p:SymbolPackageFormat=snupkg --output ./artifacts
+
+    - name: Upload coverage artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage
+        path: TestResults/CoverletMtpFiltered/**/coverage.cobertura.xml
+        retention-days: 5
+
+    - name: Upload package artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-validation-packages
+        path: ./artifacts/*.nupkg
+        retention-days: 5

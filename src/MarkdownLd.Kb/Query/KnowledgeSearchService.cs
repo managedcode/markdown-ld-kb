@@ -86,7 +86,6 @@ LIMIT {LIMIT}
     private const string EscapedCarriageReturn = "\\r";
     private const string LineFeed = "\n";
     private const string EscapedLineFeed = "\\n";
-    private const string EmptyString = "";
 
     private readonly SparqlQueryExecutor _queryExecutor;
 
@@ -144,7 +143,7 @@ LIMIT {LIMIT}
                 continue;
             }
 
-            var label = TryGetString(row.Bindings, LabelVariable) ?? EmptyString;
+            var label = TryGetString(row.Bindings, LabelVariable) ?? string.Empty;
             var type = TryGetString(row.Bindings, TypeVariable) ?? KbNamespaces.SchemaThing.AbsoluteUri;
 
             if (TryGetUri(row.Bindings, SameAsVariable, out var sameAsUri))
@@ -190,7 +189,7 @@ LIMIT {LIMIT}
                 continue;
             }
 
-            var title = TryGetString(row.Bindings, TitleVariable) ?? EmptyString;
+            var title = TryGetString(row.Bindings, TitleVariable) ?? string.Empty;
             var summary = TryGetString(row.Bindings, SummaryVariable);
             var keywords = TryGetString(row.Bindings, KeywordsVariable);
 

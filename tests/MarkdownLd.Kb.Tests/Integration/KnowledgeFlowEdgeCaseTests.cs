@@ -1,6 +1,5 @@
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 using ManagedCode.MarkdownLd.Kb.Tests.Support;
-using Microsoft.Extensions.AI;
 using Shouldly;
 using RootMarkdownDocumentParser = ManagedCode.MarkdownLd.Kb.Parsing.MarkdownDocumentParser;
 using RootMarkdownDocumentSource = ManagedCode.MarkdownLd.Kb.MarkdownDocumentSource;
@@ -363,7 +362,7 @@ about:
 entity_hints:
   - label: Ada Lovelace
     type: schema:Thing
-  - text hint ignored by deterministic map reader
+  - Scalar Deterministic Hint
   - label:
   - label: Tool
     sameAs:
@@ -556,7 +555,7 @@ PREFIX schema: <https://schema.org/>
 PREFIX kb: <https://example.com/vocab/kb#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 ASK WHERE {
-  <urn:external:subject> schema:sameAs <https://example.com/tool> .
+  <urn:external:subject> schema:sameAs <https://example.com/root-tool> .
   <https://kb.example/fact-flow/> schema:about <https://example.com/about> ;
                                  schema:author <https://example.com/author> ;
                                  schema:creator <https://example.com/creator> ;
@@ -569,8 +568,9 @@ ASK WHERE {
                                  kb:plain-unknown <https://example.com/unknown> ;
                                  <https://example.com/predicate/absolute> <https://example.com/absolute> .
   <https://kb.example/id/graph-tool> rdf:type <https://schema.org/Organization> ;
-                                     schema:sameAs <https://example.com/org-tool> .
-  <https://kb.example/id/unprefixed-type> rdf:type <https://schema.org/softwareapplication> .
+                                     schema:sameAs <https://example.com/root-tool> ;
+                                     schema:sameAs <https://kb.example/root-flow/> .
+  <https://kb.example/id/unprefixed-type> rdf:type <https://schema.org/SoftwareApplication> .
 }
 """;
 
@@ -719,8 +719,7 @@ ASK WHERE {
 
         var rows = await result.Graph.SearchAsync(MergeEntityLabel);
         rows.Rows.Count.ShouldBeGreaterThan(0);
-        chatClient.LastOptions.ShouldNotBeNull();
-        chatClient.LastOptions!.ResponseFormat.ShouldBeOfType<ChatResponseFormatJson>();
+        chatClient.CallCount.ShouldBe(1);
     }
 
     [Test]

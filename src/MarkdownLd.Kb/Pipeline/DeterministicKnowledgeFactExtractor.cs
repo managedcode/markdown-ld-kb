@@ -36,21 +36,16 @@ public sealed class DeterministicKnowledgeFactExtractor(Uri? baseUri = null)
     {
         foreach (var hint in ReadFrontMatterSequence(document.FrontMatter, EntityHintsKey))
         {
-            if (hint is not IDictionary<string, object?> hintMap)
-            {
-                continue;
-            }
-
-            var label = ReadString(hintMap, LabelKey);
+            var (label, sameAs, type) = ReadNamedEntity(hint, DefaultSchemaThing);
             if (string.IsNullOrWhiteSpace(label))
             {
                 continue;
             }
 
-            var entity = CreateEntityFact(label, ReadString(hintMap, TypeKey) ?? DefaultSchemaThing);
+            var entity = CreateEntityFact(label, type);
             entity = entity with
             {
-                SameAs = ReadStringSequence(hintMap, SameAsKey).ToList(),
+                SameAs = sameAs.ToList(),
                 Confidence = 0.95,
                 Source = document.DocumentUri.AbsoluteUri,
             };
@@ -242,7 +237,7 @@ public sealed class DeterministicKnowledgeFactExtractor(Uri? baseUri = null)
         var trimmed = raw.Trim();
         if (trimmed.Length == 0)
         {
-            id = BlankString;
+            id = string.Empty;
             return false;
         }
 
@@ -378,10 +373,10 @@ public sealed class DeterministicKnowledgeFactExtractor(Uri? baseUri = null)
 
         if (node is not IDictionary<string, object?> map)
         {
-            return (BlankString, [], defaultType);
+            return (string.Empty, [], defaultType);
         }
 
-        var label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? BlankString;
+        var label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? string.Empty;
         var type = NormalizeEntityTypeText(ReadString(map, TypeKey), defaultType);
         var sameAs = ReadStringSequence(map, SameAsKey);
         return (label, sameAs, type);

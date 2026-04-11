@@ -22,8 +22,8 @@ ORDER BY ?mention
 """;
     private const string AssertionQuery = """
 PREFIX schema: <https://schema.org/>
-PREFIX kb: <https://managedcode.dev/ns/markdown-ld-kb#>
-PREFIX prov: <https://www.w3.org/ns/prov#>
+PREFIX kb: <https://example.com/vocab/kb#>
+PREFIX prov: <http://www.w3.org/ns/prov#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 ASK WHERE {
   ?statement a kb:Assertion ;

@@ -91,7 +91,7 @@ public sealed partial class MarkdownDocumentParser
             {
                 sections.Add(BuildSection(
                     looseSectionMarkdown,
-                    MarkdownTextConstants.Empty,
+                    string.Empty,
                     [],
                     0,
                     documentId,
@@ -145,7 +145,7 @@ public sealed partial class MarkdownDocumentParser
         }
 
         return [
-            BuildSection(markdown, MarkdownTextConstants.Empty, [], 0, documentId, baseUri, order, chunkTokenTarget),
+            BuildSection(markdown, string.Empty, [], 0, documentId, baseUri, order, chunkTokenTarget),
         ];
     }
 

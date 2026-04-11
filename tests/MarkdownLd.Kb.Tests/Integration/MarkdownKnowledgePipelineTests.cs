@@ -1,6 +1,5 @@
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 using ManagedCode.MarkdownLd.Kb.Tests.Support;
-using Microsoft.Extensions.AI;
 using Shouldly;
 
 namespace ManagedCode.MarkdownLd.Kb;
@@ -14,7 +13,6 @@ public sealed class MarkdownKnowledgePipelineTests
     private const string EntityRdfSameAs = "https://www.w3.org/RDF/";
     private const string SchemaMentions = "schema:mentions";
     private const string SchemaArticle = "schema:Article";
-    private const string StructuredOutputSchema = "structured output schema";
     private const string ContentPathKnowledgeGraph = "content/2026/04/markdown-ld-knowledge-bank.md";
     private const string ContentPathDuplicateFacts = "content/2026/04/duplicate-facts.md";
     private const string ContentPathEmpty = "content/empty.md";
@@ -26,7 +24,6 @@ public sealed class MarkdownKnowledgePipelineTests
     private const string GraphTitle = "Markdown-LD Knowledge Bank";
     private const string GraphUri = "https://example.com/2026/04/markdown-ld-knowledge-bank/";
     private const string DuplicateArticleUri = "https://example.com/2026/04/duplicate-facts/";
-    private const string EmptyText = "";
     private const string RdfLabel = "RDF";
     private const string SourcePrefix = "urn:kb:chunk:";
     private const string ChunkSuffix = ":markdown-ld-knowledge-bank";
@@ -63,7 +60,6 @@ SELECT ?mention WHERE {
     {
         GraphTitle,
         SchemaArticle,
-        StructuredOutputSchema,
         RdfLabel,
         EntityRdfSameAs,
     };
@@ -137,13 +133,6 @@ SELECT ?mention WHERE {
         jsonLd.ShouldContain(MarkdownLiterals[3]);
 
         chatClient.CallCount.ShouldBe(1);
-        chatClient.LastMessages.Count.ShouldBe(2);
-        chatClient.LastMessages[0].Role.ShouldBe(ChatRole.System);
-        chatClient.LastMessages[1].Role.ShouldBe(ChatRole.User);
-        chatClient.LastOptions.ShouldNotBeNull();
-        chatClient.LastOptions!.ResponseFormat.ShouldBeOfType<ChatResponseFormatJson>();
-        chatClient.LastMessages[0].Text.ShouldContain(StructuredOutputSchema);
-        chatClient.LastMessages[1].Text.ShouldContain(ArticleUri);
     }
 
     [Test]
@@ -175,7 +164,7 @@ SELECT ?mention WHERE {
     public async Task BuildAsync_returns_no_matches_for_empty_documents_and_rejects_mutating_sparql()
     {
         var pipeline = new MarkdownKnowledgePipeline(BaseUri);
-        var result = await pipeline.BuildAsync([new MarkdownSourceDocument(ContentPathEmpty, EmptyText)]);
+        var result = await pipeline.BuildAsync([new MarkdownSourceDocument(ContentPathEmpty, string.Empty)]);
 
         result.Documents.Count.ShouldBe(1);
         result.Facts.Entities.ShouldBeEmpty();

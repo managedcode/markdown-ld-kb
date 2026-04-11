@@ -17,7 +17,7 @@ internal static class MarkdownFrontMatterParser
     {
         if (string.IsNullOrWhiteSpace(markdown))
         {
-            return new MarkdownFrontMatterParseResult(CreateEmptyFrontMatter(), MarkdownTextConstants.Empty, false);
+            return new MarkdownFrontMatterParseResult(CreateEmptyFrontMatter(), string.Empty, false);
         }
 
         var normalized = NormalizeMarkdown(markdown);
@@ -74,7 +74,12 @@ internal static class MarkdownFrontMatterParser
         }
     }
 
-    private static MarkdownFrontMatter CreateEmptyFrontMatter(string rawYaml = MarkdownTextConstants.Empty)
+    private static MarkdownFrontMatter CreateEmptyFrontMatter()
+    {
+        return CreateEmptyFrontMatter(string.Empty);
+    }
+
+    private static MarkdownFrontMatter CreateEmptyFrontMatter(string rawYaml)
     {
         return new MarkdownFrontMatter
         {
@@ -94,7 +99,7 @@ internal static class MarkdownFrontMatterParser
 
     private static bool TrySplitFrontMatter(string markdown, out string rawYaml, out string body)
     {
-        rawYaml = MarkdownTextConstants.Empty;
+        rawYaml = string.Empty;
         body = markdown;
 
         using var reader = new StringReader(markdown);
@@ -217,7 +222,7 @@ internal static class MarkdownFrontMatterParser
             .Select(ReadEntityHint)
             .Where(hint => hint is not null && !string.IsNullOrWhiteSpace(hint.Label))
             .Select(hint => hint!)
-            .DistinctBy(hint => string.Concat(hint.Label, MarkdownTextConstants.Pipe, hint.Type ?? MarkdownTextConstants.Empty, MarkdownTextConstants.Pipe, string.Join(MarkdownTextConstants.Comma, hint.SameAs ?? [])), StringComparer.OrdinalIgnoreCase)
+            .DistinctBy(hint => string.Concat(hint.Label, MarkdownTextConstants.Pipe, hint.Type ?? string.Empty, MarkdownTextConstants.Pipe, string.Join(MarkdownTextConstants.Comma, hint.SameAs ?? [])), StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -237,7 +242,7 @@ internal static class MarkdownFrontMatterParser
         {
             var sameAs = ReadStringList(dictionary, MarkdownTextConstants.SameAsKey);
             return new MarkdownEntityHint(
-                NormalizeLabel(GetString(dictionary, MarkdownTextConstants.LabelKey) ?? GetString(dictionary, MarkdownTextConstants.NameKey) ?? GetString(dictionary, MarkdownTextConstants.ValueKey) ?? MarkdownTextConstants.Empty),
+                NormalizeLabel(GetString(dictionary, MarkdownTextConstants.LabelKey) ?? GetString(dictionary, MarkdownTextConstants.NameKey) ?? GetString(dictionary, MarkdownTextConstants.ValueKey) ?? string.Empty),
                 GetString(dictionary, MarkdownTextConstants.TypeKey),
                 sameAs.Count == 0 ? [] : sameAs);
         }
@@ -248,7 +253,7 @@ internal static class MarkdownFrontMatterParser
             return ReadEntityHint(normalizedDictionary);
         }
 
-        return new MarkdownEntityHint(NormalizeLabel(ConvertToString(item) ?? MarkdownTextConstants.Empty));
+        return new MarkdownEntityHint(NormalizeLabel(ConvertToString(item) ?? string.Empty));
     }
 
     private static IEnumerable<object?> ReadSequence(object? value)
@@ -348,7 +353,7 @@ internal static class MarkdownFrontMatterParser
 
     private static string NormalizeLabel(string value)
     {
-        return ConvertToString(value) ?? MarkdownTextConstants.Empty;
+        return ConvertToString(value) ?? string.Empty;
     }
 }
 

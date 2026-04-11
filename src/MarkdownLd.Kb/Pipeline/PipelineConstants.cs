@@ -140,7 +140,6 @@ LIMIT 100
     internal const string ExtractPromptStart = "Extract knowledge facts from the Markdown document. ";
     internal const string ExtractPromptJson = "Return only JSON matching the requested structured output envelope. ";
     internal const string SpaceSlashSpace = " / ";
-    internal const string BlankString = "";
     internal const string NonAlphaNumericPattern = @"[^a-z0-9\s-]";
     internal const string WhitespacePattern = @"[\s_]+";
     internal const string DashesPattern = @"-+";
