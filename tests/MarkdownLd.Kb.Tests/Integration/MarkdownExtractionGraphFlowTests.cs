@@ -78,13 +78,6 @@ ASK WHERE {
   <urn:managedcode:markdown-ld-kb:entity/tool> schema:sameAs <https://example.com/tool> .
 }
 """;
-    private const string BrokenTitleQuery = """
-PREFIX schema: <https://schema.org/>
-SELECT ?article ?title WHERE {
-  ?article a schema:Article ;
-           schema:name ?title .
-}
-""";
     private const string ScalarAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
@@ -92,16 +85,13 @@ ASK WHERE {
                                       schema:mentions <urn:managedcode:markdown-ld-kb:entity/654> .
 }
 """;
-    private const string TitleBindingKey = "title";
     private const string SummaryBindingKey = "summary";
     private const string KeywordBindingKey = "keyword";
     private const string PublishedBindingKey = "published";
-    private const string ArticleBindingKey = "article";
     private const string SchemaPrefix = "schema:";
     private const string KbPrefix = "kb:";
-    private const string SchemaArticle = "schema:Article";
-    private const string SchemaName = "schema:name";
     private const string InvalidInsertQuery = "INSERT DATA { <a> <b> <c> }";
+    private const string InvalidFrontMatterMessage = "Markdown front matter is invalid.";
     private const string TestUrnPrefix = "urn:managedcode:markdown-ld-kb:test/";
     private const string BrokenMarkdownSourcePath = "content/markdown-broken.md";
     private const string SearchArticlesTerm = "sparql";
@@ -109,7 +99,6 @@ ASK WHERE {
     private const string SummaryValue = "Markdown summary.";
     private const string GraphKeyword = "graph";
     private const string PublishedValue = "2026-04-11";
-    private const string BrokenTitleValue = "Markdown Broken";
     private const string MarkdownComplexCanonicalUri = "https://kb.example/markdown-complex";
     private const string SearchEntitySameAsUri = "https://example.com/tool";
 
@@ -134,13 +123,13 @@ ASK WHERE {
     }
 
     [Test]
-    public void Markdown_extraction_flow_keeps_broken_front_matter_queryable_and_rejects_bad_sparql()
+    public void Markdown_extraction_flow_rejects_broken_front_matter_and_bad_sparql()
     {
-        var graph = BuildMarkdownExtractionGraph(MarkdownBroken, BrokenMarkdownSourcePath);
+        Should.Throw<InvalidDataException>(() => BuildMarkdownExtractionGraph(MarkdownBroken, BrokenMarkdownSourcePath))
+            .Message.ShouldBe(InvalidFrontMatterMessage);
 
+        var graph = BuildMarkdownExtractionGraph(MarkdownComplex);
         var executor = new SparqlQueryExecutor(graph);
-        var title = executor.ExecuteReadOnly(BrokenTitleQuery);
-        title.Rows.Single().Bindings[TitleBindingKey].Value.ShouldBe(BrokenTitleValue);
 
         Should.Throw<InvalidOperationException>(() =>
             executor.ExecuteReadOnly(InvalidInsertQuery));

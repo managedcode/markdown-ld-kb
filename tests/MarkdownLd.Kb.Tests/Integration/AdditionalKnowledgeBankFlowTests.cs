@@ -437,7 +437,7 @@ ASK WHERE {
 
         var parser = new RootMarkdownDocumentParser();
         var document = parser.Parse(
-            new RootMarkdownDocumentSource(markdown, RootParserIgnoredPath, RootParserInvalidBaseUri),
+            new RootMarkdownDocumentSource(markdown, RootParserIgnoredPath, DefaultBaseUri),
             new RootMarkdownParsingOptions { ChunkTokenTarget = 2 });
 
         document.DocumentId.ShouldBe(RootParserCanonicalUrl);
@@ -524,11 +524,13 @@ ASK WHERE {
     public void Root_parser_handles_empty_unclosed_and_static_identity_flows()
     {
         var parser = new RootMarkdownDocumentParser();
-        var empty = parser.Parse(new RootMarkdownDocumentSource(string.Empty, null, RootParserInvalidBaseUri));
+        var empty = parser.Parse(new RootMarkdownDocumentSource(string.Empty, null, DefaultBaseUri));
         empty.BaseUri!.AbsoluteUri.ShouldBe(DefaultBaseUri);
         empty.DocumentId.ShouldStartWith(UntitledDocumentPrefix);
         empty.Sections.ShouldBeEmpty();
         empty.Chunks.ShouldBeEmpty();
+
+        Should.Throw<ArgumentException>(() => parser.Parse(new RootMarkdownDocumentSource(string.Empty, null, RootParserInvalidBaseUri)));
 
         RootMarkdownDocumentParser.DocumentIdFromPath(string.Empty, KbExampleBaseUri)
             .ShouldBe(DefaultUntitledDocumentId);
@@ -537,11 +539,7 @@ ASK WHERE {
         RootMarkdownDocumentParser.ComputeChunkId(AlphaValue)
             .ShouldNotBe(RootMarkdownDocumentParser.ComputeChunkId(BetaValue));
 
-        var unclosed = parser.Parse(new RootMarkdownDocumentSource(UnclosedMarkdown, null, KbExampleBaseUri));
-
-        unclosed.FrontMatter.Values.ShouldBeEmpty();
-        unclosed.BodyMarkdown.ShouldContain(UnclosedContainsTitle);
-        unclosed.DocumentId.ShouldStartWith(UntitledDocumentPrefix);
+        Should.Throw<InvalidDataException>(() => parser.Parse(new RootMarkdownDocumentSource(UnclosedMarkdown, null, KbExampleBaseUri)));
     }
 
     [Test]
@@ -597,10 +595,7 @@ ASK WHERE {
             assertion.SubjectId == noFrontMatter.Article.Id &&
             assertion.ObjectId == MissingFrontMatterTargetEntity).ShouldBeTrue();
 
-        var unclosed = extractor.Extract(MissingFenceMarkdown, MissingFenceDocumentPath);
-
-        unclosed.Article.Title.ShouldBe(MissingFenceExpectedTitle);
-        unclosed.Article.Id.ShouldBe(MissingFenceExpectedArticleId);
+        Should.Throw<InvalidDataException>(() => extractor.Extract(MissingFenceMarkdown, MissingFenceDocumentPath));
 
         var scalar = extractor.Extract(ScalarExtractionMarkdown);
 
@@ -686,7 +681,7 @@ ASK WHERE {
         KnowledgeNaming.NormalizePredicate(ReadOnlySchemaName).ShouldBe(SchemaName);
         KnowledgeNaming.NormalizePredicate(ReadOnlySchemaSameAs).ShouldBe(SchemaSameAs);
         KnowledgeNaming.NormalizePredicate(ReadOnlyCustomPredicate).ShouldBe(ReadOnlyCustomPredicateExpected);
-        KnowledgeNaming.NormalizePredicate(ReadOnlyUnknownPredicate).ShouldBe(ReadOnlyKbRelatedTo);
+        KnowledgeNaming.NormalizePredicate(ReadOnlyUnknownPredicate).ShouldBeEmpty();
     }
 
     [Test]

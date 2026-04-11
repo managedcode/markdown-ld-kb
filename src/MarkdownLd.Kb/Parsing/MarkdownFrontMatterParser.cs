@@ -38,11 +38,8 @@ internal static class MarkdownFrontMatterParser
     {
         try
         {
-            var values = Deserializer.Deserialize<Dictionary<object, object?>>(rawYaml);
-            if (values is null)
-            {
-                values = new Dictionary<object, object?>();
-            }
+            var values = Deserializer.Deserialize<Dictionary<object, object?>>(rawYaml)
+                ?? new Dictionary<object, object?>();
 
             var normalized = NormalizeDictionary(values);
 

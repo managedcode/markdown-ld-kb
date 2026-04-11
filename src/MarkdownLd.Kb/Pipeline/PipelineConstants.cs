@@ -82,6 +82,23 @@ internal static class PipelineConstants
     internal const string EscapedBackslashText = "\\\\";
     internal const string QuoteText = "\"";
     internal const string EscapedQuoteText = "\\\"";
+    internal const string SpaceText = " ";
+    internal const string LiteralNodePrefix = "literal:";
+    internal const string MermaidHeader = "graph LR";
+    internal const string MermaidNodeIdPrefix = "n";
+    internal const string MermaidIndent = "  ";
+    internal const string MermaidNodeLabelOpen = "[\"";
+    internal const string MermaidNodeLabelClose = "\"]";
+    internal const string MermaidEdgeLabelOpen = " -->|\"";
+    internal const string MermaidEdgeLabelClose = "\"| ";
+    internal const string DotHeader = "digraph KnowledgeGraph {";
+    internal const string DotRankDirection = "  rankdir=LR;";
+    internal const string DotClose = "}";
+    internal const string DotNodeLabelOpen = " [label=\"";
+    internal const string DotLabelClose = "\"];";
+    internal const string DotEdgeConnector = " -> ";
+    internal const string DotEdgeLabelOpen = " [label=\"";
+    internal const string UnsupportedGraphNodeMessagePrefix = "Unsupported RDF node type: ";
     internal const string SearchQueryTemplate = """
 PREFIX schema: <https://schema.org/>
 PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>

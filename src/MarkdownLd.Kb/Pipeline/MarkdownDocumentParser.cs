@@ -96,11 +96,8 @@ public sealed class MarkdownDocumentParser(Uri? baseUri = null)
 
         var yaml = string.Join(NewLineDelimiter, lines.Skip(1).Take(endIndex - 1));
         var parsed = _yamlDeserializer.Deserialize<object>(yaml);
-        var frontMatter = NormalizeYamlObject(parsed);
-        if (frontMatter is null)
-        {
-            throw new InvalidDataException(FrontMatterMappingExpectedMessage);
-        }
+        var frontMatter = NormalizeYamlObject(parsed)
+            ?? throw new InvalidDataException(FrontMatterMappingExpectedMessage);
 
         var body = string.Join(NewLineDelimiter, lines.Skip(endIndex + 1));
         return (frontMatter, body.TrimStart('\r', '\n'));

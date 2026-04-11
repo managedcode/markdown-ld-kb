@@ -9,7 +9,7 @@ using StringWriter = System.IO.StringWriter;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed class KnowledgeGraph
+public sealed partial class KnowledgeGraph
 {
     private readonly Graph _graph;
     private readonly ReaderWriterLockSlim _graphLock = new();
@@ -70,6 +70,45 @@ public sealed class KnowledgeGraph
     {
         var searchQuery = SearchQueryTemplate.Replace(SearchTermToken, EscapeSparqlLiteral(term), StringComparison.Ordinal);
         return ExecuteSelectAsync(searchQuery, cancellationToken);
+    }
+
+    public KnowledgeGraphSnapshot ToSnapshot()
+    {
+        _graphLock.EnterReadLock();
+        try
+        {
+            return CreateGraphSnapshot(_graph.Triples);
+        }
+        finally
+        {
+            _graphLock.ExitReadLock();
+        }
+    }
+
+    public string SerializeMermaidFlowchart()
+    {
+        _graphLock.EnterReadLock();
+        try
+        {
+            return BuildMermaidFlowchart(CreateGraphSnapshot(_graph.Triples));
+        }
+        finally
+        {
+            _graphLock.ExitReadLock();
+        }
+    }
+
+    public string SerializeDotGraph()
+    {
+        _graphLock.EnterReadLock();
+        try
+        {
+            return BuildDotGraph(CreateGraphSnapshot(_graph.Triples));
+        }
+        finally
+        {
+            _graphLock.ExitReadLock();
+        }
     }
 
     public string SerializeTurtle()

@@ -135,14 +135,7 @@ public sealed class KnowledgeFlowEdgeCaseTests
     private const string ConverterDescriptionObject = "https://example.com/description";
     private const string ConverterKeywordsObject = "https://example.com/keywords";
     private const string ConverterIgnoredObject = "https://example.com/ignored";
-    private const string ConverterFallbackRoot = "https://kb.example/document/";
-    private const string ConverterFallbackObject = "https://example.com/unknown";
-
     private const string DirectoryPlainRoot = "https://kb.example/plain/";
-    private const string DirectoryUnclosedRoot = "https://kb.example/unclosed/";
-    private const string DirectoryListRoot = "https://kb.example/list-yaml/";
-    private const string DirectoryMarkerRoot = "https://kb.example/marker-only/";
-    private const string DirectoryTitleValue = "marker only";
 
     private const string FactMergerSubjectRoot = "https://kb.example/fact-flow/";
     private const string FactMergerExternalSubject = "urn:external:subject";
@@ -228,14 +221,6 @@ title: [unterminated
 # Invalid Root Flow
 
 Invalid Root Flow --mentions--> RDF
-""";
-
-    private const string InvalidRootFlowAskQuery = """
-PREFIX schema: <https://schema.org/>
-ASK WHERE {
-  <https://kb.example/invalid-root-flow/> schema:name "Invalid Root Flow" ;
-                                           schema:mentions <https://kb.example/id/rdf> .
-}
 """;
 
     private const string ScalarRootMarkdown = """
@@ -331,20 +316,6 @@ title: [unterminated
 # Still Parsed
 
 Still Parsed --mentions--> RDF
-""";
-
-    private const string BrokenYamlSelectQuery = """
-PREFIX schema: <https://schema.org/>
-SELECT ?title WHERE {
-  <https://kb.example/invalid-yaml/> schema:name ?title .
-}
-""";
-
-    private const string BrokenYamlMentionAskQuery = """
-PREFIX schema: <https://schema.org/>
-ASK WHERE {
-  <https://kb.example/invalid-yaml/> schema:mentions <https://kb.example/id/rdf> .
-}
 """;
 
     private const string EdgeMarkdown = """
@@ -490,10 +461,10 @@ ASK WHERE {
 }
 """;
 
-    private const string ConverterFallbackAskQuery = """
+    private const string ConverterUnknownPredicateAskQuery = """
 PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
 ASK WHERE {
-  <https://kb.example/document/> kb:relatedTo <https://example.com/unknown> .
+  <https://kb.example/document/> kb:unknown-predicate <https://example.com/unknown> .
 }
 """;
 
@@ -538,15 +509,6 @@ List YAML --mentions--> Graph
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/plain/> schema:mentions <https://kb.example/id/rdf> .
-  <https://kb.example/unclosed/> schema:mentions <https://kb.example/id/sparql> .
-  <https://kb.example/list-yaml/> schema:mentions <https://kb.example/id/graph> .
-}
-""";
-
-    private const string DirectoryTitleSelectQuery = """
-PREFIX schema: <https://schema.org/>
-SELECT ?title WHERE {
-  <https://kb.example/marker-only/> schema:name ?title .
 }
 """;
 
@@ -565,12 +527,18 @@ ASK WHERE {
                                  schema:creator <https://example.com/direct-creator> ;
                                  schema:sameAs <https://example.com/direct-same-as> ;
                                  kb:relatedTo <https://example.com/related> ;
-                                 kb:plain-unknown <https://example.com/unknown> ;
                                  <https://example.com/predicate/absolute> <https://example.com/absolute> .
   <https://kb.example/id/graph-tool> rdf:type <https://schema.org/Organization> ;
                                      schema:sameAs <https://example.com/root-tool> ;
                                      schema:sameAs <https://kb.example/root-flow/> .
   <https://kb.example/id/unprefixed-type> rdf:type <https://schema.org/SoftwareApplication> .
+}
+""";
+
+    private const string FactMergerUnknownPredicateAskQuery = """
+PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
+ASK WHERE {
+  <https://kb.example/fact-flow/> kb:plain-unknown <https://example.com/unknown> .
 }
 """;
 
@@ -596,18 +564,13 @@ ASK WHERE {
     }
 
     [Test]
-    public async Task Root_document_parser_invalid_yaml_output_still_feeds_graph_queries()
+    public async Task Root_document_parser_rejects_invalid_yaml_output()
     {
         var rootParser = new RootMarkdownDocumentParser();
-        var parsed = rootParser.Parse(new RootMarkdownDocumentSource(InvalidRootFlowMarkdown, ContentInvalidRootFlowPath, BaseUrl));
+        Should.Throw<InvalidDataException>(() =>
+            rootParser.Parse(new RootMarkdownDocumentSource(InvalidRootFlowMarkdown, ContentInvalidRootFlowPath, BaseUrl)));
 
-        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
-        var graph = await pipeline.BuildAsync([
-            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
-        ]);
-
-        var ask = await graph.Graph.ExecuteAskAsync(InvalidRootFlowAskQuery);
-        ask.ShouldBeTrue();
+        await Task.CompletedTask;
     }
 
     [Test]
@@ -657,7 +620,7 @@ ASK WHERE {
     }
 
     [Test]
-    public async Task Broken_markdown_file_flow_preserves_body_and_rejects_bad_queries()
+    public async Task Broken_markdown_file_flow_rejects_bad_yaml_and_bad_queries()
     {
         var root = Path.Combine(Path.GetTempPath(), string.Concat(TempRootPrefix, Guid.NewGuid().ToString(GuidFormat)));
         Directory.CreateDirectory(root);
@@ -668,13 +631,11 @@ ASK WHERE {
             await File.WriteAllTextAsync(filePath, BrokenYamlMarkdown);
 
             var pipeline = new MarkdownKnowledgePipeline(BaseUri);
-            var result = await pipeline.BuildFromFileAsync(filePath);
+            await Should.ThrowAsync<Exception>(async () => await pipeline.BuildFromFileAsync(filePath));
 
-            var title = await result.Graph.ExecuteSelectAsync(BrokenYamlSelectQuery);
-            title.Rows.Single().Values[TitleDictionaryKey].ShouldBe(BrokenYamlTitle);
-
-            var mention = await result.Graph.ExecuteAskAsync(BrokenYamlMentionAskQuery);
-            mention.ShouldBeTrue();
+            var result = await pipeline.BuildAsync([
+                new MarkdownSourceDocument(ContentEdgePath, EdgeMarkdown),
+            ]);
 
             await Should.ThrowAsync<ReadOnlySparqlQueryException>(async () =>
                 await result.Graph.ExecuteSelectAsync(BrokenYamlInsertQuery));
@@ -754,8 +715,8 @@ ASK WHERE {
         var related = await result.Graph.ExecuteAskAsync(ConverterRelatedAskQuery);
         related.ShouldBeTrue();
 
-        var fallback = await result.Graph.ExecuteAskAsync(ConverterFallbackAskQuery);
-        fallback.ShouldBeTrue();
+        var unknown = await result.Graph.ExecuteAskAsync(ConverterUnknownPredicateAskQuery);
+        unknown.ShouldBeFalse();
 
         var normalizedPredicates = await result.Graph.ExecuteAskAsync(ConverterNormalizedPredicatesAskQuery);
         normalizedPredicates.ShouldBeTrue();
@@ -770,9 +731,6 @@ ASK WHERE {
         try
         {
             await File.WriteAllTextAsync(Path.Combine(root, PlainMarkdownFileName), DirectoryPlainMarkdown);
-            await File.WriteAllTextAsync(Path.Combine(root, MarkerOnlyFileName), DirectoryMarkerOnlyMarkdown);
-            await File.WriteAllTextAsync(Path.Combine(root, UnclosedFileName), DirectoryUnclosedMarkdown);
-            await File.WriteAllTextAsync(Path.Combine(root, ListYamlFileName), DirectoryListMarkdown);
             await File.WriteAllBytesAsync(Path.Combine(root, BrokenBinFileName), BrokenBinaryContent);
 
             var pipeline = new MarkdownKnowledgePipeline(BaseUri);
@@ -781,8 +739,10 @@ ASK WHERE {
             var positive = await result.Graph.ExecuteAskAsync(DirectoryPositiveAskQuery);
             positive.ShouldBeTrue();
 
-            var titleRows = await result.Graph.ExecuteSelectAsync(DirectoryTitleSelectQuery);
-            titleRows.Rows.Single().Values[TitleDictionaryKey].ShouldBe(DirectoryTitleValue);
+            await File.WriteAllTextAsync(Path.Combine(root, MarkerOnlyFileName), DirectoryMarkerOnlyMarkdown);
+            await File.WriteAllTextAsync(Path.Combine(root, UnclosedFileName), DirectoryUnclosedMarkdown);
+            await File.WriteAllTextAsync(Path.Combine(root, ListYamlFileName), DirectoryListMarkdown);
+            await Should.ThrowAsync<Exception>(async () => await pipeline.BuildFromDirectoryAsync(root));
 
             var converter = new KnowledgeSourceDocumentConverter();
             await Should.ThrowAsync<NotSupportedException>(async () =>
@@ -806,7 +766,6 @@ ASK WHERE {
         var baseUri = BaseUri;
         var merger = new KnowledgeFactMerger(baseUri);
         var merged = merger.Merge(
-            null!,
             new KnowledgeExtractionResult
             {
                 Entities =
@@ -947,5 +906,8 @@ ASK WHERE {
 
         var ask = await graph.ExecuteAskAsync(FactMergerAskQuery);
         ask.ShouldBeTrue();
+
+        var unknown = await graph.ExecuteAskAsync(FactMergerUnknownPredicateAskQuery);
+        unknown.ShouldBeFalse();
     }
 }

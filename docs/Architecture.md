@@ -90,6 +90,8 @@ flowchart LR
     Merge --> WriteLock["write lock"]
     Search["SearchAsync"] --> ReadLock["read lock"]
     Select["ExecuteSelectAsync / ExecuteAskAsync"] --> ReadLock
+    Snapshot["ToSnapshot"] --> ReadLock
+    Diagram["SerializeMermaidFlowchart / SerializeDotGraph"] --> ReadLock
     Serialize["SerializeTurtle / SerializeJsonLd"] --> ReadLock
     WriteLock --> DotNetRdf["dotNetRDF Graph"]
     ReadLock --> DotNetRdf

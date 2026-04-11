@@ -43,11 +43,8 @@ internal static class MarkdownFrontMatterParser
                 .IgnoreUnmatchedProperties()
                 .Build();
 
-            var values = deserializer.Deserialize<Dictionary<string, object?>>(new StringReader(frontMatterBlock));
-            if (values is null)
-            {
-                values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-            }
+            var values = deserializer.Deserialize<Dictionary<string, object?>>(new StringReader(frontMatterBlock))
+                ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
             frontMatter = new MarkdownFrontMatter
             {

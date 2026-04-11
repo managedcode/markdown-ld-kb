@@ -110,10 +110,8 @@ public sealed class MarkdownDocumentParserTests
     private const string GraceHopper = "Grace Hopper";
     private const string Graphs = "Graphs";
     private const string BodyText = "Body text.";
-    private const string FallbackDocumentId = "https://kb.example/broken/";
-    private const string FallbackTitle = "Fallback Title";
-    private const string FallbackSourcePath = "content/broken.md";
-    private const string BrokenTitle = "title: [broken";
+    private const string InvalidFrontMatterSourcePath = "content/broken.md";
+    private const string InvalidFrontMatterMessage = "Markdown front matter is invalid.";
     private const string Heading = "Heading";
     private const string MarkdownKnowledgeBankHeading = "Markdown-LD Knowledge Bank";
     private const string ReferenceLinkTarget = "https://www.w3.org/TR/sparql11-query/";
@@ -132,8 +130,6 @@ public sealed class MarkdownDocumentParserTests
     private static readonly string[] ExpectedCanonicalAuthors = [AdaLovelace, GraceHopper];
     private static readonly string[] ExpectedCanonicalTags = ["rdf", "markdown"];
     private static readonly string[] ExpectedCanonicalAbout = [Graphs, RdfLabel];
-    private static readonly string[] ExpectedFallbackHeadingPath = [Heading];
-
     [Test]
     public async Task Parse_reads_front_matter_sections_chunks_and_links_from_fixture()
     {
@@ -228,18 +224,11 @@ public sealed class MarkdownDocumentParserTests
     }
 
     [Test]
-    public async Task Parse_preserves_malformed_front_matter_and_still_builds_sections()
+    public async Task Parse_rejects_malformed_front_matter()
     {
         var parser = new MarkdownDocumentParser();
-        var document = parser.Parse(new MarkdownDocumentSource(MarkdownMalformedFrontMatter, FallbackSourcePath, BaseUri));
-
-        document.DocumentId.ShouldBe(FallbackDocumentId);
-        document.FrontMatter.Values.Count.ShouldBe(0);
-        document.FrontMatter.RawYaml.ShouldContain(BrokenTitle);
-        document.Sections.Count.ShouldBe(1);
-        document.Sections[0].HeadingPath.ShouldBe(ExpectedFallbackHeadingPath);
-        document.Chunks.Count.ShouldBe(1);
-        document.Chunks[0].Markdown.ShouldBe(BodyText);
+        Should.Throw<InvalidDataException>(() => parser.Parse(new MarkdownDocumentSource(MarkdownMalformedFrontMatter, InvalidFrontMatterSourcePath, BaseUri)))
+            .Message.ShouldBe(InvalidFrontMatterMessage);
 
         await Task.CompletedTask;
     }

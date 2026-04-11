@@ -6,22 +6,16 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 {
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
 
-    public KnowledgeExtractionResult Merge(params KnowledgeExtractionResult?[]? results)
+    public KnowledgeExtractionResult Merge(params KnowledgeExtractionResult[] results)
     {
+        ArgumentNullException.ThrowIfNull(results);
+
         var entities = new Dictionary<string, KnowledgeEntityFact>(StringComparer.OrdinalIgnoreCase);
         var assertions = new Dictionary<string, KnowledgeAssertionFact>(StringComparer.OrdinalIgnoreCase);
 
-        if (results is null)
-        {
-            return new KnowledgeExtractionResult();
-        }
-
         foreach (var result in results)
         {
-            if (result is null)
-            {
-                continue;
-            }
+            ArgumentNullException.ThrowIfNull(result);
 
             foreach (var entity in result.Entities)
             {

@@ -70,6 +70,28 @@ public sealed record MarkdownKnowledgeBuildResult(
     KnowledgeExtractionResult Facts,
     KnowledgeGraph Graph);
 
+public sealed record KnowledgeGraphSnapshot(
+    IReadOnlyList<KnowledgeGraphNode> Nodes,
+    IReadOnlyList<KnowledgeGraphEdge> Edges);
+
+public sealed record KnowledgeGraphNode(
+    string Id,
+    string Label,
+    KnowledgeGraphNodeKind Kind);
+
+public sealed record KnowledgeGraphEdge(
+    string SubjectId,
+    string PredicateId,
+    string PredicateLabel,
+    string ObjectId);
+
+public enum KnowledgeGraphNodeKind
+{
+    Uri,
+    Literal,
+    Blank,
+}
+
 public sealed class ReadOnlySparqlQueryException(string message) : InvalidOperationException(message);
 
 public static class KnowledgeNaming
