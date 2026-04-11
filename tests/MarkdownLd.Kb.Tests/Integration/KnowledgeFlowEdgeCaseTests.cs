@@ -10,12 +10,181 @@ namespace ManagedCode.MarkdownLd.Kb.Tests.Integration;
 
 public sealed class KnowledgeFlowEdgeCaseTests
 {
-    [Test]
-    public async Task Root_document_parser_output_feeds_pipeline_graph_queries()
-    {
-        var rootParser = new RootMarkdownDocumentParser();
-        var parsed = rootParser.Parse(
-            new RootMarkdownDocumentSource("""
+    private const string BaseUrl = "https://kb.example/";
+    private static readonly Uri BaseUri = new(BaseUrl);
+    private const string TempRootPrefix = "markdown-ld-kb-flow-";
+    private const string GuidFormat = "N";
+    private const string CustomMediaType = "application/custom-markdown";
+
+    private const string ContentRootFlowPath = "content/root-flow.md";
+    private const string ContentInvalidRootFlowPath = "content/invalid-root-flow.md";
+    private const string ContentScalarRootPath = "content/scalar-root.md";
+    private const string ContentMergePath = "content/merge.md";
+    private const string ContentEmptyChatPath = "content/empty-chat.md";
+    private const string ContentEdgePath = "content/edge.md";
+    private const string ComplexFileName = "complex.md";
+    private const string InvalidYamlFileName = "invalid-yaml.md";
+    private const string PlainMarkdownFileName = "plain.md";
+    private const string MarkerOnlyFileName = "marker-only.md";
+    private const string UnclosedFileName = "unclosed.md";
+    private const string ListYamlFileName = "list-yaml.md";
+    private const string BrokenBinFileName = "broken.bin";
+
+    private const string RootFlowTitle = "Root Flow";
+    private const string RootFlowSummary = "Root summary.";
+    private const string RootFlowCanonicalUrl = "https://kb.example/root-flow/";
+    private const string RootFlowDatePublished = "2026-04-11T12:30:00Z";
+    private const string RootFlowDateModified = "2026-04-12";
+    private const string RootFlowAuthorAda = "Ada Lovelace";
+    private const string RootFlowAuthorValue = "Value Author";
+    private const string KnowledgeGraphLabel = "Knowledge Graph";
+    private const string RootToolLabel = "Root Tool";
+    private const string RootToolType = "SoftwareApplication";
+    private const string RootToolSameAs = "https://example.com/root-tool";
+    private const string ValueHintLabel = "Value Hint";
+    private const string RootFlowAskRoot = "https://kb.example/root-flow/";
+    private const string RootToolEntityId = "https://kb.example/id/root-tool";
+
+    private const string InvalidRootFlowTitle = "Invalid Root Flow";
+    private const string InvalidRootFlowAskRoot = "https://kb.example/invalid-root-flow/";
+    private const string InvalidRootFlowEntityId = "https://kb.example/id/rdf";
+
+    private const string ScalarRootTitle = "123";
+    private const string ScalarRootDescription = "456";
+    private const string ScalarRootAuthor = "789";
+    private const string ScalarRootTag = "scalar";
+    private const string ScalarRootAbout = "321";
+    private const string ScalarRootEntityHint = "654";
+    private const string ScalarRootAskRoot = "https://kb.example/scalar-root/";
+    private const string ScalarRootEntityId = "https://kb.example/id/654";
+
+    private const string ComplexTitle = "Complex YAML";
+    private const string ComplexSummary = "Complex summary.";
+    private const string ComplexAuthorLabel = "Label Author";
+    private const string ComplexAuthorValue = "Value Author";
+    private const string ComplexHintLabel = "Hint Entity";
+    private const string ComplexHintSameAs = "https://example.com/hint";
+    private const string ComplexKeywordAlpha = "alpha";
+    private const string ComplexKeywordBeta = "beta";
+    private const string ComplexMetadataRoot = "https://kb.example/complex/";
+    private const string ComplexAuthorId = "https://kb.example/id/label-author";
+    private const string ComplexHintId = "https://kb.example/id/hint-entity";
+    private const string ComplexSummaryKey = "summary";
+    private const string ComplexKeywordKey = "keyword";
+
+    private const string BrokenYamlTitle = "Still Parsed";
+    private const string BrokenYamlAskRoot = "https://kb.example/invalid-yaml/";
+    private const string BrokenYamlEntityId = "https://kb.example/id/rdf";
+    private const string BrokenYamlInsertQuery = "INSERT DATA { <a> <b> <c> }";
+    private const string BrokenYamlMalformedSelectQuery = "SELECT ?s WHERE { ?s ?p }";
+
+    private const string EdgeTitle = "Edge Flow";
+    private const string EdgeAdaLabel = "Ada Lovelace";
+    private const string EdgeAdaSameAs = "https://example.com/ada";
+    private const string EdgeToolLabel = "Tool";
+    private const string EdgeToolSameAs = "https://example.com/tool";
+    private const string EdgeToolType = "schema:SoftwareApplication";
+    private const string EdgeMarkdownRoot = "https://kb.example/edge/";
+    private const string EdgeAbsolutePredicate = "https://example.com/predicate/absolute";
+    private const string EdgeAbsoluteObject = "https://example.com/object";
+    private const string EdgeCustomObject = "https://example.com/custom";
+    private const string EdgeRelativeId = "https://kb.example/id/relative";
+    private const string EdgeAbsoluteId = "https://kb.example/id/absolute";
+    private const string EdgeToolEntityId = "https://kb.example/id/tool";
+    private const string EdgeOpinionPredicate = "custom:predicate";
+
+    private const string MergeTitle = "Merge Flow";
+    private const string MergeEntityLabel = "RDF";
+    private const string MergeEntitySameAs = "https://example.com/rdf";
+    private const string MergeEntityW3CSameAs = "https://www.w3.org/RDF/";
+    private const string MergeChatSource = "https://kb.example/source/chat";
+    private const string MergeSubjectId = "https://kb.example/merge/";
+    private const string MergeEntityId = "https://kb.example/id/rdf";
+    private const string MergeAskObject = "https://kb.example/id/rdf";
+    private const string MergeGraphToolLabel = "Graph Tool";
+    private const string MergeSchemaThingType = "schema:Thing";
+    private const string MergeSchemaOrganizationType = "schema:Organization";
+    private const string MergeMentionPredicateValue = "mentions";
+    private const string MergeSameAsPredicateValue = "sameas";
+    private const string MergeAboutPredicateValue = "about";
+    private const string MergeAuthorPredicateValue = "author";
+    private const string MergeCreatorPredicateValue = "creator";
+    private const string MergeRelatedToPredicateValue = "relatedTo";
+    private const string MergePlainUnknownPredicateValue = "plain unknown";
+    private const string MergeAbsolutePredicateValue = "https://example.com/predicate/absolute";
+    private const string MergeNotAUriValue = "not a uri";
+    private const string MergeSkippedObjectValue = "https://example.com/skipped";
+    private const string MergeDirectMentionObjectValue = "https://example.com/direct-mention";
+    private const string MergeDirectAboutObjectValue = "https://example.com/direct-about";
+    private const string MergeDirectAuthorObjectValue = "https://example.com/direct-author";
+    private const string MergeDirectCreatorObjectValue = "https://example.com/direct-creator";
+    private const string MergeDirectSameAsObjectValue = "https://example.com/direct-same-as";
+    private const string MergeDirectIgnoredObjectValue = "https://example.com/ignored";
+    private const string MergeUnprefixedTypeLabel = "Unprefixed Type";
+    private const string EmptyJsonPayload = "{}";
+
+    private const string EmptyChatTitle = "Empty Chat";
+    private const string EmptyChatRoot = "https://kb.example/empty-chat/";
+    private const string EmptyChatEntityId = "https://kb.example/id/rdf";
+
+    private const string ConverterTitle = "Converted Content";
+    private const string ConverterRelatedPredicate = "https://example.com/predicate/related";
+    private const string ConverterRelatedObject = "https://example.com/object";
+    private const string ConverterUnknownObject = "https://example.com/unknown";
+    private const string ConverterAboutObject = "https://example.com/about";
+    private const string ConverterAuthorObject = "https://example.com/author";
+    private const string ConverterDescriptionObject = "https://example.com/description";
+    private const string ConverterKeywordsObject = "https://example.com/keywords";
+    private const string ConverterIgnoredObject = "https://example.com/ignored";
+    private const string ConverterFallbackRoot = "https://kb.example/document/";
+    private const string ConverterFallbackObject = "https://example.com/unknown";
+
+    private const string DirectoryPlainRoot = "https://kb.example/plain/";
+    private const string DirectoryUnclosedRoot = "https://kb.example/unclosed/";
+    private const string DirectoryListRoot = "https://kb.example/list-yaml/";
+    private const string DirectoryMarkerRoot = "https://kb.example/marker-only/";
+    private const string DirectoryTitleValue = "marker only";
+
+    private const string FactMergerSubjectRoot = "https://kb.example/fact-flow/";
+    private const string FactMergerExternalSubject = "urn:external:subject";
+    private const string FactMergerToolId = "https://kb.example/id/tool";
+    private const string FactMergerAboutObject = "https://example.com/about";
+    private const string FactMergerAuthorObject = "https://example.com/author";
+    private const string FactMergerCreatorObject = "https://example.com/creator";
+    private const string FactMergerRelatedObject = "https://example.com/related";
+    private const string FactMergerUnknownObject = "https://example.com/unknown";
+    private const string FactMergerAbsolutePredicateObject = "https://example.com/absolute";
+    private const string FactMergerDirectMentionObject = "https://example.com/direct-mention";
+    private const string FactMergerDirectAboutObject = "https://example.com/direct-about";
+    private const string FactMergerDirectAuthorObject = "https://example.com/direct-author";
+    private const string FactMergerDirectCreatorObject = "https://example.com/direct-creator";
+    private const string FactMergerDirectSameAsObject = "https://example.com/direct-same-as";
+    private const string FactMergerDirectUnknownObject = "https://example.com/unknown";
+    private const string FactMergerOrgId = "https://kb.example/id/org-tool";
+    private const string FactMergerUnprefixedId = "https://kb.example/id/unprefixed-type";
+    private const string FactMergerUnprefixedType = "schema:SoftwareApplication";
+
+    private const string SummaryDictionaryKey = "summary";
+    private const string KeywordDictionaryKey = "keyword";
+    private const string TitleDictionaryKey = "title";
+    private const string MentionDictionaryKey = "mention";
+    private const string ObjectDictionaryKey = "object";
+
+    private const string SchemaMentionsPredicate = "schema:mentions";
+    private const string SchemaNamePredicate = "schema:name";
+    private const string SchemaDescriptionPredicate = "schema:description";
+    private const string SchemaKeywordsPredicate = "schema:keywords";
+    private const string SchemaAuthorPredicate = "schema:author";
+    private const string SchemaSameAsPredicate = "schema:sameAs";
+    private const string SchemaCreatorPredicate = "schema:creator";
+    private const string SchemaAboutPredicate = "schema:about";
+    private const string RdfTypePredicate = "rdf:type";
+    private const string KbRelatedToPredicate = "kb:relatedTo";
+    private const string KbPlainUnknownPredicate = "kb:plain-unknown";
+    private const string AbsolutePredicate = "<https://example.com/predicate/absolute>";
+    private const string CustomPredicate = "<custom:predicate>";
+
+    private const string RootFlowMarkdown = """
 ---
 title: Root Flow
 canonicalUrl: https://kb.example/root-flow/
@@ -34,7 +203,7 @@ about:
   - value: RDF
 entityHints:
   - label: Root Tool
-    type: schema:SoftwareApplication
+    type: SoftwareApplication
     sameAs:
       - https://example.com/root-tool
   - value: Value Hint
@@ -43,57 +212,34 @@ entityHints:
 # Root Flow
 
 Root Flow --mentions--> Root Tool
-""", "content/root-flow.md", "https://kb.example/"),
-            new RootMarkdownParsingOptions { ChunkTokenTarget = 3 });
+""";
 
-        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
-        var graph = await pipeline.BuildAsync([
-            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
-        ]);
-
-        var ask = await graph.Graph.ExecuteAskAsync("""
+    private const string RootFlowAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/root-flow/> schema:mentions <https://kb.example/id/root-tool> .
   <https://kb.example/id/root-tool> schema:name "Root Tool" .
 }
-""");
-        ask.ShouldBeTrue();
-    }
+""";
 
-    [Test]
-    public async Task Root_document_parser_invalid_yaml_output_still_feeds_graph_queries()
-    {
-        var rootParser = new RootMarkdownDocumentParser();
-        var parsed = rootParser.Parse(new RootMarkdownDocumentSource("""
+    private const string InvalidRootFlowMarkdown = """
 ---
 title: [unterminated
 ---
 # Invalid Root Flow
 
 Invalid Root Flow --mentions--> RDF
-""", "content/invalid-root-flow.md", "https://kb.example/"));
+""";
 
-        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
-        var graph = await pipeline.BuildAsync([
-            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
-        ]);
-
-        var ask = await graph.Graph.ExecuteAskAsync("""
+    private const string InvalidRootFlowAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/invalid-root-flow/> schema:name "Invalid Root Flow" ;
                                            schema:mentions <https://kb.example/id/rdf> .
 }
-""");
-        ask.ShouldBeTrue();
-    }
+""";
 
-    [Test]
-    public async Task Root_document_parser_scalar_and_blank_yaml_items_feed_graph_queries()
-    {
-        var rootParser = new RootMarkdownDocumentParser();
-        var parsed = rootParser.Parse(new RootMarkdownDocumentSource("""
+    private const string ScalarRootMarkdown = """
 ---
 title: 123
 description: 456
@@ -116,33 +262,17 @@ entityHints:
 # 123
 
 123 --mentions--> 654
-""", "content/scalar-root.md", "https://kb.example/"));
+""";
 
-        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
-        var graph = await pipeline.BuildAsync([
-            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
-        ]);
-
-        var ask = await graph.Graph.ExecuteAskAsync("""
+    private const string ScalarRootAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/scalar-root/> schema:name "123" ;
                                       schema:mentions <https://kb.example/id/654> .
 }
-""");
-        ask.ShouldBeTrue();
-    }
+""";
 
-    [Test]
-    public async Task Valid_markdown_file_flow_converts_yaml_to_queryable_graph()
-    {
-        var root = Path.Combine(Path.GetTempPath(), string.Concat("markdown-ld-kb-flow-", Guid.NewGuid().ToString("N")));
-        Directory.CreateDirectory(root);
-
-        try
-        {
-            var filePath = Path.Combine(root, "complex.md");
-            await File.WriteAllTextAsync(filePath, """
+    private const string ComplexMarkdown = """
 ---
 title: Complex YAML
 description: Complex summary.
@@ -160,7 +290,7 @@ about:
   - value: Value Topic
 entity_hints:
   - label: Hint Entity
-    type: schema:SoftwareApplication
+    type: SoftwareApplication
     sameAs: https://example.com/hint
   - value: Value Hint
   - 777
@@ -168,101 +298,57 @@ entity_hints:
 # Complex YAML
 
 Complex YAML --mentions--> Hint Entity
-""");
+""";
 
-            var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
-            var result = await pipeline.BuildFromFileAsync(filePath);
-
-            var metadata = await result.Graph.ExecuteSelectAsync("""
+    private const string ComplexSelectQuery = """
 PREFIX schema: <https://schema.org/>
 SELECT ?summary ?keyword WHERE {
   <https://kb.example/complex/> schema:description ?summary ;
                                     schema:keywords ?keyword .
 }
 ORDER BY ?keyword
-""");
-            metadata.Rows.Count.ShouldBe(2);
-            metadata.Rows.All(row => row.Values["summary"] == "Complex summary.").ShouldBeTrue();
-            metadata.Rows.Select(row => row.Values["keyword"]).ShouldBe(new[] { "alpha", "beta" });
+""";
 
-            var author = await result.Graph.ExecuteAskAsync("""
+    private const string ComplexAuthorAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/complex/> schema:author <https://kb.example/id/label-author> .
   <https://kb.example/id/label-author> schema:name "Label Author" .
 }
-""");
-            author.ShouldBeTrue();
+""";
 
-            var hint = await result.Graph.ExecuteAskAsync("""
+    private const string ComplexHintAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/complex/> schema:mentions <https://kb.example/id/hint-entity> .
   <https://kb.example/id/hint-entity> schema:sameAs <https://example.com/hint> .
 }
-""");
-            hint.ShouldBeTrue();
-        }
-        finally
-        {
-            Directory.Delete(root, true);
-        }
-    }
+""";
 
-    [Test]
-    public async Task Broken_markdown_file_flow_preserves_body_and_rejects_bad_queries()
-    {
-        var root = Path.Combine(Path.GetTempPath(), string.Concat("markdown-ld-kb-flow-", Guid.NewGuid().ToString("N")));
-        Directory.CreateDirectory(root);
-
-        try
-        {
-            var filePath = Path.Combine(root, "invalid-yaml.md");
-            await File.WriteAllTextAsync(filePath, """
+    private const string BrokenYamlMarkdown = """
 ---
 title: [unterminated
 ---
 # Still Parsed
 
 Still Parsed --mentions--> RDF
-""");
+""";
 
-            var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
-            var result = await pipeline.BuildFromFileAsync(filePath);
-
-            var title = await result.Graph.ExecuteSelectAsync("""
+    private const string BrokenYamlSelectQuery = """
 PREFIX schema: <https://schema.org/>
 SELECT ?title WHERE {
   <https://kb.example/invalid-yaml/> schema:name ?title .
 }
-""");
-            title.Rows.Single().Values["title"].ShouldBe("Still Parsed");
+""";
 
-            var mention = await result.Graph.ExecuteAskAsync("""
+    private const string BrokenYamlMentionAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/invalid-yaml/> schema:mentions <https://kb.example/id/rdf> .
 }
-""");
-            mention.ShouldBeTrue();
+""";
 
-            await Should.ThrowAsync<ReadOnlySparqlQueryException>(async () =>
-                await result.Graph.ExecuteSelectAsync("INSERT DATA { <a> <b> <c> }"));
-            await Should.ThrowAsync<Exception>(async () =>
-                await result.Graph.ExecuteSelectAsync("SELECT ?s WHERE { ?s ?p }"));
-        }
-        finally
-        {
-            Directory.Delete(root, true);
-        }
-    }
-
-    [Test]
-    public async Task Pipeline_deterministic_extraction_handles_front_matter_and_link_edge_cases()
-    {
-        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
-        var result = await pipeline.BuildAsync([
-            new MarkdownSourceDocument("content/edge.md", """
+    private const string EdgeMarkdown = """
 ---
 title: Edge Flow
 author:
@@ -275,6 +361,8 @@ about:
   -
   - RDF
 entity_hints:
+  - label: Ada Lovelace
+    type: schema:Thing
   - text hint ignored by deterministic map reader
   - label:
   - label: Tool
@@ -285,47 +373,50 @@ entity_hints:
 Intro mentions [[   ]] and [   ](https://example.com/blank) and [Relative](./relative.md) and [Absolute](https://example.com/absolute).
 
 article --mentions--> Tool
+   --mentions--> Tool
 https://example.com/subject --creator--> https://example.com/object
 Tool --rdf:type--> https://schema.org/SoftwareApplication
 Tool --custom:predicate--> https://example.com/custom
-"""),
-        ]);
+""";
 
-        var positive = await result.Graph.ExecuteAskAsync("""
+    private const string EdgePositiveAskQuery = """
 PREFIX schema: <https://schema.org/>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 ASK WHERE {
   <https://kb.example/edge/> schema:mentions <https://kb.example/id/tool> .
   <https://kb.example/edge/> schema:author <https://kb.example/id/ada-lovelace> .
+  <https://kb.example/id/ada-lovelace> rdf:type <https://schema.org/Person> .
   <https://kb.example/id/tool> schema:sameAs <https://example.com/tool> ;
                                rdf:type <https://schema.org/SoftwareApplication> .
   <https://example.com/subject> schema:creator <https://example.com/object> .
   <https://kb.example/id/absolute> schema:sameAs <https://example.com/absolute> .
 }
-""");
-        positive.ShouldBeTrue();
+""";
 
-        var negative = await result.Graph.ExecuteAskAsync("""
+    private const string EdgeNegativeAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/id/relative> schema:sameAs <https://kb.example/relative.md> .
 }
-""");
-        negative.ShouldBeFalse();
+""";
 
-        var custom = await result.Graph.ExecuteSelectAsync("""
+    private const string EdgeCustomSelectQuery = """
 PREFIX custom: <custom:>
 SELECT ?object WHERE {
   <https://kb.example/id/tool> <custom:predicate> ?object .
 }
-""");
-        custom.Rows.Single().Values["object"].ShouldBe("https://example.com/custom");
-    }
+""";
 
-    [Test]
-    public async Task Pipeline_merges_deterministic_and_chat_duplicates_into_queryable_rdf()
-    {
-        var payload = """
+    private const string MergeMarkdown = """
+---
+title: Merge Flow
+tags:
+  - rdf
+---
+Merge Flow --mentions--> RDF
+""";
+
+    private const string MergePayload = """
 {
   "entities": [
     {
@@ -357,20 +448,7 @@ SELECT ?object WHERE {
 }
 """;
 
-        var chatClient = new TestChatClient((_, _) => payload);
-        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"), chatClient);
-        var result = await pipeline.BuildAsync([
-            new MarkdownSourceDocument("content/merge.md", """
----
-title: Merge Flow
-tags:
-  - rdf
----
-Merge Flow --mentions--> RDF
-"""),
-        ]);
-
-        var merged = await result.Graph.ExecuteAskAsync("""
+    private const string MergeAskQuery = """
 PREFIX schema: <https://schema.org/>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 ASK WHERE {
@@ -379,21 +457,23 @@ ASK WHERE {
   <https://kb.example/id/rdf> rdf:type <https://schema.org/SoftwareApplication> ;
                               schema:sameAs <https://www.w3.org/RDF/> .
 }
-""");
-        merged.ShouldBeTrue();
+""";
 
-        var rows = await result.Graph.SearchAsync("rdf");
-        rows.Rows.Count.ShouldBeGreaterThan(0);
-        chatClient.LastOptions.ShouldNotBeNull();
-        chatClient.LastOptions!.ResponseFormat.ShouldBeOfType<ChatResponseFormatJson>();
-    }
+    private const string EmptyChatMarkdown = """
+---
+title: Empty Chat
+---
+Empty Chat --mentions--> RDF
+""";
 
-    [Test]
-    public async Task Converter_content_flow_builds_graph_with_media_override_and_generated_document_path()
-    {
-        var converter = new KnowledgeSourceDocumentConverter();
-        var document = converter.ConvertContent(
-            """
+    private const string EmptyChatAskQuery = """
+PREFIX schema: <https://schema.org/>
+ASK WHERE {
+  <https://kb.example/empty-chat/> schema:mentions <https://kb.example/id/rdf> .
+}
+""";
+
+    private const string ConverterMarkdown = """
 # Converted Content
 
 Converted Content --https://example.com/predicate/related--> https://example.com/object
@@ -403,31 +483,22 @@ Converted Content --author--> https://example.com/author
 Converted Content --description--> https://example.com/description
 Converted Content --keywords--> https://example.com/keywords
 Converted Content --   --> https://example.com/ignored
-""",
-            options: new KnowledgeDocumentConversionOptions
-            {
-                MediaType = "application/custom-markdown",
-            });
+""";
 
-        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
-        var result = await pipeline.BuildAsync([document]);
-
-        var related = await result.Graph.ExecuteAskAsync("""
+    private const string ConverterRelatedAskQuery = """
 ASK WHERE {
   <https://kb.example/document/> <https://example.com/predicate/related> <https://example.com/object> .
 }
-""");
-        related.ShouldBeTrue();
+""";
 
-        var fallback = await result.Graph.ExecuteAskAsync("""
+    private const string ConverterFallbackAskQuery = """
 PREFIX kb: <https://example.com/vocab/kb#>
 ASK WHERE {
   <https://kb.example/document/> kb:relatedTo <https://example.com/unknown> .
 }
-""");
-        fallback.ShouldBeTrue();
+""";
 
-        var normalizedPredicates = await result.Graph.ExecuteAskAsync("""
+    private const string ConverterNormalizedPredicatesAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/document/> schema:about <https://example.com/about> ;
@@ -435,33 +506,26 @@ ASK WHERE {
                                  schema:description <https://example.com/description> ;
                                  schema:keywords <https://example.com/keywords> .
 }
-""");
-        normalizedPredicates.ShouldBeTrue();
-    }
+""";
 
-    [Test]
-    public async Task Directory_flow_handles_parser_edge_cases_and_unsupported_file_policy()
-    {
-        var root = Path.Combine(Path.GetTempPath(), string.Concat("markdown-ld-kb-flow-", Guid.NewGuid().ToString("N")));
-        Directory.CreateDirectory(root);
-
-        try
-        {
-            await File.WriteAllTextAsync(Path.Combine(root, "plain.md"), """
+    private const string DirectoryPlainMarkdown = """
 plain --mentions--> RDF
-""");
-            await File.WriteAllTextAsync(Path.Combine(root, "marker-only.md"), """
+""";
+
+    private const string DirectoryMarkerOnlyMarkdown = """
 ---
-""");
-            await File.WriteAllTextAsync(Path.Combine(root, "unclosed.md"), """
+""";
+
+    private const string DirectoryUnclosedMarkdown = """
 ---
 title: Not Closed
 
 # Unclosed Heading
 
 Unclosed Heading --mentions--> SPARQL
-""");
-            await File.WriteAllTextAsync(Path.Combine(root, "list-yaml.md"), """
+""";
+
+    private const string DirectoryListMarkdown = """
 ---
 - list
 - frontmatter
@@ -469,29 +533,257 @@ Unclosed Heading --mentions--> SPARQL
 # List YAML
 
 List YAML --mentions--> Graph
-""");
-            await File.WriteAllBytesAsync(Path.Combine(root, "broken.bin"), [9, 8, 7]);
+""";
 
-            var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
-            var result = await pipeline.BuildFromDirectoryAsync(root);
-
-            var positive = await result.Graph.ExecuteAskAsync("""
+    private const string DirectoryPositiveAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/plain/> schema:mentions <https://kb.example/id/rdf> .
   <https://kb.example/unclosed/> schema:mentions <https://kb.example/id/sparql> .
   <https://kb.example/list-yaml/> schema:mentions <https://kb.example/id/graph> .
 }
-""");
-            positive.ShouldBeTrue();
+""";
 
-            var titleRows = await result.Graph.ExecuteSelectAsync("""
+    private const string DirectoryTitleSelectQuery = """
 PREFIX schema: <https://schema.org/>
 SELECT ?title WHERE {
   <https://kb.example/marker-only/> schema:name ?title .
 }
-""");
-            titleRows.Rows.Single().Values["title"].ShouldBe("marker only");
+""";
+
+    private const string FactMergerAskQuery = """
+PREFIX schema: <https://schema.org/>
+PREFIX kb: <https://example.com/vocab/kb#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+ASK WHERE {
+  <urn:external:subject> schema:sameAs <https://example.com/tool> .
+  <https://kb.example/fact-flow/> schema:about <https://example.com/about> ;
+                                 schema:author <https://example.com/author> ;
+                                 schema:creator <https://example.com/creator> ;
+                                 schema:mentions <https://example.com/direct-mention> ;
+                                 schema:about <https://example.com/direct-about> ;
+                                 schema:author <https://example.com/direct-author> ;
+                                 schema:creator <https://example.com/direct-creator> ;
+                                 schema:sameAs <https://example.com/direct-same-as> ;
+                                 kb:relatedTo <https://example.com/related> ;
+                                 kb:plain-unknown <https://example.com/unknown> ;
+                                 <https://example.com/predicate/absolute> <https://example.com/absolute> .
+  <https://kb.example/id/graph-tool> rdf:type <https://schema.org/Organization> ;
+                                     schema:sameAs <https://example.com/org-tool> .
+  <https://kb.example/id/unprefixed-type> rdf:type <https://schema.org/softwareapplication> .
+}
+""";
+
+    private static readonly string[] ExpectedComplexKeywords = [ComplexKeywordAlpha, ComplexKeywordBeta];
+    private static readonly byte[] BrokenBinaryContent = [9, 8, 7];
+    private static readonly string[] ExpectedMergeFactKeywords = [ComplexKeywordAlpha, ComplexKeywordBeta];
+
+    [Test]
+    public async Task Root_document_parser_output_feeds_pipeline_graph_queries()
+    {
+        var rootParser = new RootMarkdownDocumentParser();
+        var parsed = rootParser.Parse(
+            new RootMarkdownDocumentSource(RootFlowMarkdown, ContentRootFlowPath, BaseUrl),
+            new RootMarkdownParsingOptions { ChunkTokenTarget = 3 });
+
+        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+        var graph = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
+        ]);
+
+        var ask = await graph.Graph.ExecuteAskAsync(RootFlowAskQuery);
+        ask.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Root_document_parser_invalid_yaml_output_still_feeds_graph_queries()
+    {
+        var rootParser = new RootMarkdownDocumentParser();
+        var parsed = rootParser.Parse(new RootMarkdownDocumentSource(InvalidRootFlowMarkdown, ContentInvalidRootFlowPath, BaseUrl));
+
+        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+        var graph = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
+        ]);
+
+        var ask = await graph.Graph.ExecuteAskAsync(InvalidRootFlowAskQuery);
+        ask.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Root_document_parser_scalar_and_blank_yaml_items_feed_graph_queries()
+    {
+        var rootParser = new RootMarkdownDocumentParser();
+        var parsed = rootParser.Parse(new RootMarkdownDocumentSource(ScalarRootMarkdown, ContentScalarRootPath, BaseUrl));
+
+        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+        var graph = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
+        ]);
+
+        var ask = await graph.Graph.ExecuteAskAsync(ScalarRootAskQuery);
+        ask.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Valid_markdown_file_flow_converts_yaml_to_queryable_graph()
+    {
+        var root = Path.Combine(Path.GetTempPath(), string.Concat(TempRootPrefix, Guid.NewGuid().ToString(GuidFormat)));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var filePath = Path.Combine(root, ComplexFileName);
+            await File.WriteAllTextAsync(filePath, ComplexMarkdown);
+
+            var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+            var result = await pipeline.BuildFromFileAsync(filePath);
+
+            var metadata = await result.Graph.ExecuteSelectAsync(ComplexSelectQuery);
+            metadata.Rows.Count.ShouldBe(2);
+            metadata.Rows.All(row => row.Values[SummaryDictionaryKey] == ComplexSummary).ShouldBeTrue();
+            metadata.Rows.Select(row => row.Values[KeywordDictionaryKey]).ShouldBe(ExpectedComplexKeywords);
+
+            var author = await result.Graph.ExecuteAskAsync(ComplexAuthorAskQuery);
+            author.ShouldBeTrue();
+
+            var hint = await result.Graph.ExecuteAskAsync(ComplexHintAskQuery);
+            hint.ShouldBeTrue();
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Test]
+    public async Task Broken_markdown_file_flow_preserves_body_and_rejects_bad_queries()
+    {
+        var root = Path.Combine(Path.GetTempPath(), string.Concat(TempRootPrefix, Guid.NewGuid().ToString(GuidFormat)));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var filePath = Path.Combine(root, InvalidYamlFileName);
+            await File.WriteAllTextAsync(filePath, BrokenYamlMarkdown);
+
+            var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+            var result = await pipeline.BuildFromFileAsync(filePath);
+
+            var title = await result.Graph.ExecuteSelectAsync(BrokenYamlSelectQuery);
+            title.Rows.Single().Values[TitleDictionaryKey].ShouldBe(BrokenYamlTitle);
+
+            var mention = await result.Graph.ExecuteAskAsync(BrokenYamlMentionAskQuery);
+            mention.ShouldBeTrue();
+
+            await Should.ThrowAsync<ReadOnlySparqlQueryException>(async () =>
+                await result.Graph.ExecuteSelectAsync(BrokenYamlInsertQuery));
+            await Should.ThrowAsync<Exception>(async () =>
+                await result.Graph.ExecuteSelectAsync(BrokenYamlMalformedSelectQuery));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Test]
+    public async Task Pipeline_deterministic_extraction_handles_front_matter_and_link_edge_cases()
+    {
+        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+        var result = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(ContentEdgePath, EdgeMarkdown),
+        ]);
+
+        var positive = await result.Graph.ExecuteAskAsync(EdgePositiveAskQuery);
+        positive.ShouldBeTrue();
+
+        var negative = await result.Graph.ExecuteAskAsync(EdgeNegativeAskQuery);
+        negative.ShouldBeFalse();
+
+        var custom = await result.Graph.ExecuteSelectAsync(EdgeCustomSelectQuery);
+        custom.Rows.Single().Values[ObjectDictionaryKey].ShouldBe(EdgeCustomObject);
+    }
+
+    [Test]
+    public async Task Pipeline_merges_deterministic_and_chat_duplicates_into_queryable_rdf()
+    {
+        var chatClient = new TestChatClient((_, _) => MergePayload);
+        var pipeline = new MarkdownKnowledgePipeline(BaseUri, chatClient);
+        var result = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(ContentMergePath, MergeMarkdown),
+        ]);
+
+        var merged = await result.Graph.ExecuteAskAsync(MergeAskQuery);
+        merged.ShouldBeTrue();
+
+        var rows = await result.Graph.SearchAsync(MergeEntityLabel);
+        rows.Rows.Count.ShouldBeGreaterThan(0);
+        chatClient.LastOptions.ShouldNotBeNull();
+        chatClient.LastOptions!.ResponseFormat.ShouldBeOfType<ChatResponseFormatJson>();
+    }
+
+    [Test]
+    public async Task Pipeline_keeps_markdown_graph_queryable_when_chat_returns_empty_payload()
+    {
+        var chatClient = new TestChatClient((_, _) => EmptyJsonPayload);
+        var pipeline = new MarkdownKnowledgePipeline(BaseUri, chatClient);
+
+        var result = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(ContentEmptyChatPath, EmptyChatMarkdown),
+        ]);
+
+        var ask = await result.Graph.ExecuteAskAsync(EmptyChatAskQuery);
+        ask.ShouldBeTrue();
+        chatClient.CallCount.ShouldBe(1);
+    }
+
+    [Test]
+    public async Task Converter_content_flow_builds_graph_with_media_override_and_generated_document_path()
+    {
+        var converter = new KnowledgeSourceDocumentConverter();
+        var document = converter.ConvertContent(
+            ConverterMarkdown,
+            options: new KnowledgeDocumentConversionOptions
+            {
+                MediaType = CustomMediaType,
+            });
+
+        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+        var result = await pipeline.BuildAsync([document]);
+
+        var related = await result.Graph.ExecuteAskAsync(ConverterRelatedAskQuery);
+        related.ShouldBeTrue();
+
+        var fallback = await result.Graph.ExecuteAskAsync(ConverterFallbackAskQuery);
+        fallback.ShouldBeTrue();
+
+        var normalizedPredicates = await result.Graph.ExecuteAskAsync(ConverterNormalizedPredicatesAskQuery);
+        normalizedPredicates.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Directory_flow_handles_parser_edge_cases_and_unsupported_file_policy()
+    {
+        var root = Path.Combine(Path.GetTempPath(), string.Concat(TempRootPrefix, Guid.NewGuid().ToString(GuidFormat)));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, PlainMarkdownFileName), DirectoryPlainMarkdown);
+            await File.WriteAllTextAsync(Path.Combine(root, MarkerOnlyFileName), DirectoryMarkerOnlyMarkdown);
+            await File.WriteAllTextAsync(Path.Combine(root, UnclosedFileName), DirectoryUnclosedMarkdown);
+            await File.WriteAllTextAsync(Path.Combine(root, ListYamlFileName), DirectoryListMarkdown);
+            await File.WriteAllBytesAsync(Path.Combine(root, BrokenBinFileName), BrokenBinaryContent);
+
+            var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+            var result = await pipeline.BuildFromDirectoryAsync(root);
+
+            var positive = await result.Graph.ExecuteAskAsync(DirectoryPositiveAskQuery);
+            positive.ShouldBeTrue();
+
+            var titleRows = await result.Graph.ExecuteSelectAsync(DirectoryTitleSelectQuery);
+            titleRows.Rows.Single().Values[TitleDictionaryKey].ShouldBe(DirectoryTitleValue);
 
             var converter = new KnowledgeSourceDocumentConverter();
             await Should.ThrowAsync<NotSupportedException>(async () =>
@@ -507,5 +799,154 @@ SELECT ?title WHERE {
         {
             Directory.Delete(root, true);
         }
+    }
+
+    [Test]
+    public async Task Fact_merger_and_graph_builder_flow_loads_public_fact_batches_into_queryable_graph()
+    {
+        var baseUri = BaseUri;
+        var merger = new KnowledgeFactMerger(baseUri);
+        var merged = merger.Merge(
+            null!,
+            new KnowledgeExtractionResult
+            {
+                Entities =
+                [
+                    new KnowledgeEntityFact
+                    {
+                        Label = MergeGraphToolLabel,
+                        Type = MergeSchemaThingType,
+                        SameAs = [RootToolSameAs],
+                    },
+                    new KnowledgeEntityFact
+                    {
+                        Label = MergeGraphToolLabel,
+                        Type = MergeSchemaOrganizationType,
+                        SameAs = [RootToolSameAs, RootFlowCanonicalUrl],
+                        Confidence = 0.95,
+                    },
+                ],
+                Assertions =
+                [
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = string.Empty,
+                        Predicate = MergeMentionPredicateValue,
+                        ObjectId = MergeSkippedObjectValue,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerExternalSubject,
+                        Predicate = MergeSameAsPredicateValue,
+                        ObjectId = RootToolSameAs,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergeAboutPredicateValue,
+                        ObjectId = FactMergerAboutObject,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergeAuthorPredicateValue,
+                        ObjectId = FactMergerAuthorObject,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergeCreatorPredicateValue,
+                        ObjectId = FactMergerCreatorObject,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergeRelatedToPredicateValue,
+                        ObjectId = FactMergerRelatedObject,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergePlainUnknownPredicateValue,
+                        ObjectId = FactMergerUnknownObject,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergeAbsolutePredicateValue,
+                        ObjectId = FactMergerAbsolutePredicateObject,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = MergeNotAUriValue,
+                        Predicate = MergeMentionPredicateValue,
+                        ObjectId = MergeDirectIgnoredObjectValue,
+                    },
+                ],
+            });
+
+        var graph = new KnowledgeGraphBuilder(baseUri).Build(
+            [],
+            merged with
+            {
+                Entities =
+                [
+                    .. merged.Entities,
+                    new KnowledgeEntityFact
+                    {
+                        Label = MergeUnprefixedTypeLabel,
+                        Type = FactMergerUnprefixedType,
+                    },
+                ],
+                Assertions =
+                [
+                    .. merged.Assertions,
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergePlainUnknownPredicateValue,
+                        ObjectId = FactMergerUnknownObject,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergeMentionPredicateValue,
+                        ObjectId = MergeDirectMentionObjectValue,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergeAboutPredicateValue,
+                        ObjectId = MergeDirectAboutObjectValue,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergeAuthorPredicateValue,
+                        ObjectId = MergeDirectAuthorObjectValue,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergeCreatorPredicateValue,
+                        ObjectId = MergeDirectCreatorObjectValue,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = FactMergerSubjectRoot,
+                        Predicate = MergeSameAsPredicateValue,
+                        ObjectId = MergeDirectSameAsObjectValue,
+                    },
+                    new KnowledgeAssertionFact
+                    {
+                        SubjectId = MergeNotAUriValue,
+                        Predicate = MergeMentionPredicateValue,
+                        ObjectId = MergeDirectIgnoredObjectValue,
+                    },
+                ],
+            });
+
+        var ask = await graph.ExecuteAskAsync(FactMergerAskQuery);
+        ask.ShouldBeTrue();
     }
 }

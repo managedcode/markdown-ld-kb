@@ -48,7 +48,9 @@ Target capabilities:
 ## Durable Project Rules
 
 - Keep the core Markdown-to-graph pipeline deterministic and testable without network access.
+- Keep the core runtime in-memory. Do not introduce localhost, HTTP server, background service, database server, or hosted API dependencies into the production library.
 - Treat LLM/entity extraction as an adapter behind a small interface and implement that adapter through `Microsoft.Extensions.AI.IChatClient` from the start.
+- Do not add an embedding dependency to the core graph pipeline. If vector/semantic indexing is added later, expose it as an optional adapter boundary through `Microsoft.Extensions.AI.IEmbeddingGenerator<,>` or a similarly small port, with the concrete provider owned by the host app.
 - It is allowed for the production library to reference `Microsoft.Extensions.AI.Abstractions`; concrete OpenAI/Azure/Foundry providers must remain app-level dependencies unless an ADR says otherwise.
 - The product/library name is `Markdown-LD Knowledge Bank`; do not rename it to a shorter marketing name.
 - The C# root namespace, assembly identity, and package ID MUST be `ManagedCode.MarkdownLd.Kb`.
@@ -85,7 +87,7 @@ List only the skills this solution actually uses.
 - `build`: `dotnet build MarkdownLd.Kb.slnx --no-restore`
 - `test`: `dotnet test MarkdownLd.Kb.slnx --no-build`
 - `format`: `dotnet format MarkdownLd.Kb.slnx --verify-no-changes`
-- `coverage`: `dotnet test MarkdownLd.Kb.slnx --collect:"XPlat Code Coverage"`
+- `coverage`: `dotnet test MarkdownLd.Kb.slnx --no-build --coverlet --coverlet-output-format cobertura --coverlet-include '[ManagedCode.MarkdownLd.Kb]*' --results-directory TestResults/CoverletMtpFiltered`
 
 `.NET` runner policy:
 
@@ -94,7 +96,7 @@ List only the skills this solution actually uses.
 - Test framework: TUnit.
 - Assertion library: Shouldly.
 - Test runner model: TUnit through `dotnet test` / Microsoft.Testing.Platform-compatible execution.
-- Coverage: Coverlet XPlat collector unless a later ADR moves coverage to `coverlet.MTP` or another .NET 10-compatible collector.
+- Coverage: `coverlet.MTP` through `dotnet test --coverlet` with the production assembly include filter.
 
 ### Project AGENTS Policy
 

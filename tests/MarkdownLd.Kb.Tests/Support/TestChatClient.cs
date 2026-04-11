@@ -2,16 +2,11 @@ using Microsoft.Extensions.AI;
 
 namespace ManagedCode.MarkdownLd.Kb.Tests.Support;
 
-public sealed class TestChatClient : IChatClient
+public sealed class TestChatClient(Func<IReadOnlyList<ChatMessage>, ChatOptions?, string> responseFactory) : IChatClient
 {
     private const string StreamingNotSupportedMessage = "Streaming is not used in these tests.";
-    private readonly Func<IReadOnlyList<ChatMessage>, ChatOptions?, string> _responseFactory;
+    private readonly Func<IReadOnlyList<ChatMessage>, ChatOptions?, string> _responseFactory = responseFactory;
     private readonly List<IReadOnlyList<ChatMessage>> _requests = [];
-
-    public TestChatClient(Func<IReadOnlyList<ChatMessage>, ChatOptions?, string> responseFactory)
-    {
-        _responseFactory = responseFactory;
-    }
 
     public IReadOnlyList<IReadOnlyList<ChatMessage>> Requests => _requests;
 

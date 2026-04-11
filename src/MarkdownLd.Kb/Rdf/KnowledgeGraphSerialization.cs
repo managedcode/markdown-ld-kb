@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.IO;
 using VDS.RDF;
 using VDS.RDF.Writing;
 

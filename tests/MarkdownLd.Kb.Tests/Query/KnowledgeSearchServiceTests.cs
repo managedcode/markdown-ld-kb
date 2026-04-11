@@ -1,22 +1,34 @@
-using Shouldly;
 using ManagedCode.MarkdownLd.Kb.Query;
 using ManagedCode.MarkdownLd.Kb.Rdf;
 using ManagedCode.MarkdownLd.Kb.Tests.Rdf;
+using Shouldly;
 
 namespace ManagedCode.MarkdownLd.Kb.Tests.Query;
 
 public sealed class KnowledgeSearchServiceTests
 {
+    private const string RdfTerm = "rdf";
+    private const string NoSuchTerm = "no-such-term";
+    private const string NoSuchEntityTerm = "no-such-entity";
+    private const string KnowledgeGraphTerm = "knowledge graph";
+    private const string SparqlTerm = "sparql";
+    private const string RdfLabel = "RDF";
+    private const string KnowledgeGraphTitle = "What is a Knowledge Graph?";
+    private const string RdfEntityUriText = "https://example.com/id/rdf";
+    private const string KnowledgeGraphArticleUriText = "https://example.com/articles/what-is-a-knowledge-graph/";
+    private static readonly Uri RdfEntityUri = new(RdfEntityUriText);
+    private static readonly Uri KnowledgeGraphArticleUri = new(KnowledgeGraphArticleUriText);
+
     [Test]
     public void SearchEntitiesFindsMatchingEntity()
     {
         var service = new KnowledgeSearchService(TestKnowledgeGraphFactory.BuildGraph());
 
-        var results = service.SearchEntities("rdf");
+        var results = service.SearchEntities(RdfTerm);
 
         results.Count.ShouldBe(1);
-        results[0].Id.ShouldBe(new Uri("https://example.com/id/rdf"));
-        results[0].Label.ShouldBe("RDF");
+        results[0].Id.ShouldBe(RdfEntityUri);
+        results[0].Label.ShouldBe(RdfLabel);
         results[0].Type.ShouldBe(KbNamespaces.SchemaThing.AbsoluteUri);
     }
 
@@ -25,7 +37,7 @@ public sealed class KnowledgeSearchServiceTests
     {
         var service = new KnowledgeSearchService(TestKnowledgeGraphFactory.BuildGraph());
 
-        var results = service.SearchEntities("no-such-term");
+        var results = service.SearchEntities(NoSuchTerm);
 
         results.ShouldBeEmpty();
     }
@@ -35,13 +47,13 @@ public sealed class KnowledgeSearchServiceTests
     {
         var service = new KnowledgeSearchService(TestKnowledgeGraphFactory.BuildGraph());
 
-        var byTitle = service.SearchArticles("knowledge graph");
+        var byTitle = service.SearchArticles(KnowledgeGraphTerm);
         byTitle.Count.ShouldBe(1);
-        byTitle[0].Title.ShouldBe("What is a Knowledge Graph?");
+        byTitle[0].Title.ShouldBe(KnowledgeGraphTitle);
 
-        var byEntity = service.SearchArticles("sparql");
+        var byEntity = service.SearchArticles(SparqlTerm);
         byEntity.Count.ShouldBe(1);
-        byEntity[0].Title.ShouldBe("What is a Knowledge Graph?");
+        byEntity[0].Title.ShouldBe(KnowledgeGraphTitle);
     }
 
     [Test]
@@ -49,7 +61,7 @@ public sealed class KnowledgeSearchServiceTests
     {
         var service = new KnowledgeSearchService(TestKnowledgeGraphFactory.BuildGraph());
 
-        var results = service.SearchArticles("no-such-term");
+        var results = service.SearchArticles(NoSuchTerm);
 
         results.ShouldBeEmpty();
     }
@@ -59,10 +71,10 @@ public sealed class KnowledgeSearchServiceTests
     {
         var service = new KnowledgeSearchService(TestKnowledgeGraphFactory.BuildGraph());
 
-        var results = service.SearchArticlesByEntityLabel("sparql");
+        var results = service.SearchArticlesByEntityLabel(SparqlTerm);
 
         results.Count.ShouldBe(1);
-        results[0].Id.ShouldBe(new Uri("https://example.com/articles/what-is-a-knowledge-graph/"));
+        results[0].Id.ShouldBe(KnowledgeGraphArticleUri);
     }
 
     [Test]
@@ -70,7 +82,7 @@ public sealed class KnowledgeSearchServiceTests
     {
         var service = new KnowledgeSearchService(TestKnowledgeGraphFactory.BuildGraph());
 
-        var results = service.SearchArticlesByEntityLabel("no-such-entity");
+        var results = service.SearchArticlesByEntityLabel(NoSuchEntityTerm);
 
         results.ShouldBeEmpty();
     }

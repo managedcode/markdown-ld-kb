@@ -163,7 +163,7 @@ internal static class MarkdownKnowledgeCanonicalizer
             return entityId;
         }
 
-        if (Uri.TryCreate(value, UriKind.Absolute, out var uri) || value.StartsWith(UrnSchemePrefix, StringComparison.OrdinalIgnoreCase))
+        if (Uri.TryCreate(value, UriKind.Absolute, out _) || value.StartsWith(UrnSchemePrefix, StringComparison.OrdinalIgnoreCase))
         {
             return value;
         }

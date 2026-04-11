@@ -41,7 +41,7 @@ public sealed class KnowledgeSourceDocumentConverter
         var sourcePath = string.IsNullOrWhiteSpace(path) ? ConverterDefaultPath : path;
         return new KnowledgeSourceDocument(
             sourcePath,
-            content ?? string.Empty,
+            content ?? BlankString,
             options?.CanonicalUri,
             ResolveMediaType(sourcePath, options?.MediaType));
     }

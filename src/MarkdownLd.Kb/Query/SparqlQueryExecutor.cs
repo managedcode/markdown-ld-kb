@@ -1,8 +1,6 @@
-using ManagedCode.MarkdownLd.Kb.Rdf;
 using VDS.RDF;
 using VDS.RDF.Parsing;
 using VDS.RDF.Query;
-using VDS.RDF.Query.Datasets;
 
 namespace ManagedCode.MarkdownLd.Kb.Query;
 

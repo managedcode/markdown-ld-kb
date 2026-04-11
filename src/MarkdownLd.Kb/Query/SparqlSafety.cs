@@ -12,6 +12,7 @@ public static class SparqlSafety
     private const string OnlySelectAndAskQueriesAllowedMessage = "Only SELECT and ASK queries are allowed";
     private const string LimitClausePrefix = "LIMIT ";
     private const string MutatingKeywordPattern = @"\b(INSERT|DELETE|LOAD|CLEAR|DROP|CREATE)\b";
+    private const string EmptyString = "";
     private const char SemicolonCharacter = ';';
     private const char DoubleQuoteCharacter = '"';
     private const char SingleQuoteCharacter = '\'';
@@ -25,7 +26,7 @@ public static class SparqlSafety
     {
         if (string.IsNullOrWhiteSpace(query))
         {
-            return new(false, string.Empty, SparqlQueryRequiredMessage);
+            return new(false, EmptyString, SparqlQueryRequiredMessage);
         }
 
         var trimmed = query.Trim();

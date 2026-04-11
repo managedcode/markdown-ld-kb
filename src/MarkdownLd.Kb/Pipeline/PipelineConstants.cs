@@ -13,6 +13,7 @@ internal static class PipelineConstants
     internal const string ContentPrefix = "content/";
     internal const string PathSeparator = " / ";
     internal const string Slash = "/";
+    internal const string Colon = ":";
     internal const string Hyphen = "-";
     internal const string Underscore = "_";
     internal const string EmptySparqlQueryMessage = "SPARQL query is empty";
@@ -152,6 +153,7 @@ LIMIT 100
     internal const string NewLineDelimiter = "\n";
     internal const string CarriageReturn = "\r";
     internal const string LeftRightDashDelimiter = "-";
+    internal const string ListItemPrefix = "- ";
     internal const string DotNetDateFormat = "yyyy-MM-dd";
     internal const string SpaceSeparator = " ";
     internal const string UnderscoreSeparator = "_";
@@ -186,6 +188,10 @@ LIMIT 100
     internal const string FilePathRequiredMessage = "A source file path is required.";
     internal const string DirectoryPathRequiredMessage = "A source directory path is required.";
     internal const string DirectoryNotFoundMessagePrefix = "Source directory was not found: ";
+    internal const char DoubleQuoteCharacter = '"';
+    internal const char SingleQuoteCharacter = '\'';
+    internal const char CommaCharacter = ',';
+    internal const char SemicolonCharacter = ';';
 
     internal static readonly Uri SchemaNamespaceUri = new(SchemaNamespaceText);
     internal static readonly Uri KbNamespaceUri = new(KbNamespaceText);
@@ -208,6 +214,7 @@ LIMIT 100
     internal static readonly Uri XsdDateUri = new(XsdDateText);
     internal static readonly Uri XsdIntegerUri = new(XsdIntegerText);
     internal static readonly Uri ProvWasDerivedFromUri = new(ProvNamespaceText + ProvWasDerivedFromSuffix);
+    internal static readonly char[] ArrowOperandTrimChars = [DoubleQuoteCharacter, SingleQuoteCharacter, CommaCharacter, SemicolonCharacter];
 
     internal static readonly Regex MutatingKeywordRegex = new(
         MutatingKeywordPattern,

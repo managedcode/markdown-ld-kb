@@ -10,6 +10,7 @@ internal static class KnowledgeFactConstants
     internal const string SchemaCreativeWork = "schema:CreativeWork";
     internal const string SchemaArticle = "schema:Article";
     internal const string SchemaThing = "schema:Thing";
+    internal const string EmptyString = "";
 
     internal const string ArticleIdLabel = "ARTICLE_ID: ";
     internal const string ChunkIdLabel = "CHUNK_ID: ";

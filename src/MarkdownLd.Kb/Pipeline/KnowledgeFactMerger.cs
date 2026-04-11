@@ -2,14 +2,9 @@ using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed class KnowledgeFactMerger
+public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 {
-    private readonly Uri _baseUri;
-
-    public KnowledgeFactMerger(Uri? baseUri = null)
-    {
-        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
-    }
+    private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
 
     public KnowledgeExtractionResult Merge(params KnowledgeExtractionResult[] results)
     {

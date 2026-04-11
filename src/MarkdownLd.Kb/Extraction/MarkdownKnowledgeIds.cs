@@ -37,7 +37,7 @@ public static class MarkdownKnowledgeIds
         }
 
         var slug = value.Trim().ToLowerInvariant();
-        slug = Regex.Replace(slug, SlugInvalidCharactersPattern, string.Empty, RegexOptions.CultureInvariant);
+        slug = Regex.Replace(slug, SlugInvalidCharactersPattern, Empty, RegexOptions.CultureInvariant);
         slug = Regex.Replace(slug, SlugWhitespacePattern, Hyphen, RegexOptions.CultureInvariant);
         slug = Regex.Replace(slug, SlugHyphenPattern, Hyphen, RegexOptions.CultureInvariant);
         return slug.Trim('-') is { Length: > 0 } normalized ? normalized : ItemLabel;
@@ -47,7 +47,7 @@ public static class MarkdownKnowledgeIds
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return string.Empty;
+            return Empty;
         }
 
         var text = value.Trim();
@@ -65,7 +65,7 @@ public static class MarkdownKnowledgeIds
         }
 
         var normalized = sourcePath.Replace('\\', '/');
-        normalized = Regex.Replace(normalized, ExtensionPattern, string.Empty, RegexOptions.CultureInvariant);
+        normalized = Regex.Replace(normalized, ExtensionPattern, Empty, RegexOptions.CultureInvariant);
         normalized = normalized.Replace('/', '-');
         return normalized;
     }

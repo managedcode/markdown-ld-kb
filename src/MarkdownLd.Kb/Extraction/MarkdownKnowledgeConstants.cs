@@ -81,4 +81,37 @@ internal static class MarkdownKnowledgeConstants
     internal const string EmphasisMarker = "*";
     internal const string Underscore = "_";
     internal const string UriSchemeSeparator = "://";
+
+    internal const char SpaceCharacter = ' ';
+    internal const char TabCharacter = '\t';
+    internal const char DotCharacter = '.';
+    internal const char CommaCharacter = ',';
+    internal const char SemicolonCharacter = ';';
+    internal const char ColonCharacter = ':';
+    internal const char ExclamationCharacter = '!';
+    internal const char QuestionCharacter = '?';
+    internal const char RightParenthesisCharacter = ')';
+    internal const char LeftParenthesisCharacter = '(';
+    internal const char LeftBracketCharacter = '[';
+    internal const char RightBracketCharacter = ']';
+    internal const char DoubleQuoteCharacter = '"';
+    internal const char SingleQuoteCharacter = '\'';
+
+    internal static readonly char[] SurfaceTrimCharacters =
+    [
+        SpaceCharacter,
+        TabCharacter,
+        DotCharacter,
+        CommaCharacter,
+        SemicolonCharacter,
+        ColonCharacter,
+        ExclamationCharacter,
+        QuestionCharacter,
+        RightParenthesisCharacter,
+        LeftParenthesisCharacter,
+        LeftBracketCharacter,
+        RightBracketCharacter,
+        DoubleQuoteCharacter,
+        SingleQuoteCharacter,
+    ];
 }

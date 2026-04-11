@@ -10,10 +10,10 @@ Related Features: `docs/Architecture.md`
 
 - [x] Analyze upstream graph stack and .NET options.
 - [x] Choose the RDF/SPARQL dependency.
-- [ ] Add dotNetRDF to the production project.
-- [ ] Add flow tests that query generated graphs through SPARQL.
-- [ ] Run build, test, format, and coverage commands.
-- [ ] Update `docs/Architecture.md` if dependency boundaries change.
+- [x] Add dotNetRDF to the production project.
+- [x] Add flow tests that query generated graphs through SPARQL.
+- [x] Run build, test, format, and coverage commands.
+- [x] Update `docs/Architecture.md` if dependency boundaries change.
 
 ## Context
 
@@ -46,6 +46,7 @@ Use dotNetRDF as the RDF graph, serialization, and SPARQL engine for the first .
 Key points:
 
 - dotNetRDF replaces Python RDFLib for the C# port.
+- The selected package supports RDF/SPARQL in .NET and the user guide documents in-memory RDF data and in-memory SPARQL querying, which matches the no-server core runtime boundary.
 - Markdig and YamlDotNet will handle Markdown/front matter parsing separately.
 - AI extraction remains behind an extraction port that uses `Microsoft.Extensions.AI.IChatClient`; provider/orchestration packages are not part of this RDF dependency decision.
 
@@ -98,7 +99,7 @@ flowchart LR
 
 Mitigations:
 
-- Hide dependency details behind `KnowledgeGraph`, `KnowledgeQueryService`, and serialization methods where practical.
+- Hide dependency details behind `KnowledgeGraph` query methods, `KnowledgeSearchService`, and serialization methods where practical.
 - Add tests for serialization and SPARQL query paths.
 - Keep remote/federated SPARQL out of the first slice.
 
@@ -165,7 +166,7 @@ Mitigations:
 - build: `dotnet build MarkdownLd.Kb.slnx --no-restore`
 - test: `dotnet test MarkdownLd.Kb.slnx --no-build`
 - format: `dotnet format MarkdownLd.Kb.slnx --verify-no-changes`
-- coverage: `dotnet test MarkdownLd.Kb.slnx --collect:"XPlat Code Coverage"`
+- coverage: `dotnet test --solution MarkdownLd.Kb.slnx --no-build --coverlet --coverlet-output-format cobertura --coverlet-include '[ManagedCode.MarkdownLd.Kb]*' --results-directory TestResults/CoverletMtpFiltered`
 
 ### New or changed tests
 
@@ -187,4 +188,5 @@ No migration exists yet. This is the initial implementation decision.
 - `external/lqdev-markdown-ld-kb/tools/postprocess.py`
 - `external/lqdev-markdown-ld-kb/api/function_app.py`
 - `external/lqdev-markdown-ld-kb/.ai-memex/blog-post-zero-cost-knowledge-graph-from-markdown.md`
-- `https://github.com/dotnetrdf/dotnetrdf`
+- dotNetRDF upstream repository: `https://github.com/dotnetrdf/dotnetrdf`
+- dotNetRDF user guide: `https://dotnetrdf.org/docs/stable/user_guide/index.html`

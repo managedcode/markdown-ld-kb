@@ -1,17 +1,11 @@
 using ManagedCode.MarkdownLd.Kb.Extraction;
 using Shouldly;
-using TUnit.Core;
 
 namespace ManagedCode.MarkdownLd.Kb.Tests.Extraction;
 
 public sealed class MarkdownKnowledgeExtractorTests
 {
-    private readonly MarkdownKnowledgeExtractor _extractor = new();
-
-    [Test]
-    public Task Extracts_metadata_entities_assertions_and_deduplicates_by_highest_confidence()
-    {
-        var markdown = """
+    private const string MarkdownWithFrontMatter = """
 ---
 title: Markdown-LD Knowledge Bank
 summary: Deterministic extraction from Markdown.
@@ -50,74 +44,7 @@ Foo --ignored--> Bar
 ```
 """;
 
-        var result = _extractor.Extract(markdown);
-
-        result.Article.Id.ShouldBe("https://example.com/articles/markdown-ld-knowledge-bank");
-        result.Article.Title.ShouldBe("Markdown-LD Knowledge Bank");
-        result.Article.Summary.ShouldBe("Deterministic extraction from Markdown.");
-        result.Article.DatePublished.ShouldBe("2026-04-04");
-        result.Article.DateModified.ShouldBe("2026-04-05");
-        result.Article.Tags.ShouldBe(new[] { "knowledge-graph", "markdown" });
-
-        result.Article.Authors.Select(author => author.Name).ShouldBe(new[] { "Ada Lovelace", "Managed Code" });
-        result.Article.About.Select(topic => topic.Label).ShouldBe(new[] { "Knowledge Graph", "RDF" });
-
-        var rdf = result.Entities.Single(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/rdf");
-        rdf.Label.ShouldBe("RDF");
-        rdf.Type.ShouldBe("schema:Thing");
-        rdf.SameAs.Any(value => value == "Resource Description Framework").ShouldBe(true);
-        rdf.SameAs.Any(value => value == "https://www.w3.org/RDF/").ShouldBe(true);
-
-        var sparql = result.Entities.Single(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/sparql");
-        sparql.Label.ShouldBe("SPARQL");
-        sparql.SameAs.ShouldBe(new[] { "https://www.wikidata.org/wiki/Q54872" });
-
-        var ada = result.Entities.Single(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/ada-lovelace");
-        ada.Type.ShouldBe("schema:Person");
-
-        var knowledgeGraph = result.Entities.Single(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/knowledge-graph");
-        knowledgeGraph.Label.ShouldBe("Knowledge Graph");
-
-        result.Assertions
-            .Single(assertion => assertion.SubjectId == result.Article.Id
-                                 && assertion.Predicate == "schema:author"
-                                 && assertion.ObjectId == ada.Id)
-            .Confidence.ShouldBe(1.0);
-
-        result.Assertions
-            .Single(assertion => assertion.SubjectId == result.Article.Id
-                                 && assertion.Predicate == "schema:about"
-                                 && assertion.ObjectId == knowledgeGraph.Id)
-            .Confidence.ShouldBe(1.0);
-
-        result.Assertions
-            .Single(assertion => assertion.SubjectId == result.Article.Id
-                                 && assertion.Predicate == "schema:mentions"
-                                 && assertion.ObjectId == rdf.Id)
-            .Confidence.ShouldBe(0.95);
-
-        result.Assertions.Any(assertion =>
-            assertion.SubjectId == result.Article.Id &&
-            assertion.Predicate == "schema:mentions" &&
-            assertion.ObjectId == sparql.Id &&
-            assertion.Confidence == 0.85).ShouldBe(true);
-
-        result.Assertions
-            .Single(assertion => assertion.SubjectId == "urn:managedcode:markdown-ld-kb:entity/alice"
-                                 && assertion.Predicate == "schema:uses"
-                                 && assertion.ObjectId == rdf.Id)
-            .Confidence.ShouldBe(0.95);
-
-        result.Entities.Any(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/ignored-link").ShouldBe(false);
-        result.Entities.Any(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/foo").ShouldBe(false);
-
-        return Task.CompletedTask;
-    }
-
-    [Test]
-    public Task Falls_back_to_source_path_title_when_front_matter_is_missing_or_invalid()
-    {
-        var markdown = """
+    private const string MarkdownWithBrokenFrontMatter = """
 ---
 title: [broken
 date_published: 2026-04-04
@@ -128,14 +55,137 @@ date_published: 2026-04-04
 [[RDF]]
 """;
 
-        var result = _extractor.Extract(markdown, "docs/fallback-title.md");
+    private const string SourcePathFallback = "docs/fallback-title.md";
+    private const string SourcePathInput = "content/one.md";
+    private const string ArticleId = "https://example.com/articles/markdown-ld-knowledge-bank";
+    private const string ArticleTitle = "Markdown-LD Knowledge Bank";
+    private const string ArticleSummary = "Deterministic extraction from Markdown.";
+    private const string ArticlePublished = "2026-04-04";
+    private const string ArticleModified = "2026-04-05";
+    private const string AdaLovelace = "Ada Lovelace";
+    private const string ManagedCode = "Managed Code";
+    private const string KnowledgeGraphLabel = "Knowledge Graph";
+    private const string RdfLabel = "RDF";
+    private const string SparqlLabel = "SPARQL";
+    private const string ResourceDescriptionFrameworkLabel = "Resource Description Framework";
+    private const string SchemaThing = "schema:Thing";
+    private const string SchemaPerson = "schema:Person";
+    private const string SchemaAuthor = "schema:author";
+    private const string SchemaAbout = "schema:about";
+    private const string SchemaMentions = "schema:mentions";
+    private const string SchemaUses = "schema:uses";
+    private const string RdfId = "urn:managedcode:markdown-ld-kb:entity/rdf";
+    private const string SparqlId = "urn:managedcode:markdown-ld-kb:entity/sparql";
+    private const string AdaId = "urn:managedcode:markdown-ld-kb:entity/ada-lovelace";
+    private const string KnowledgeGraphId = "urn:managedcode:markdown-ld-kb:entity/knowledge-graph";
+    private const string IgnoredLinkId = "urn:managedcode:markdown-ld-kb:entity/ignored-link";
+    private const string FooId = "urn:managedcode:markdown-ld-kb:entity/foo";
+    private const string AliceId = "urn:managedcode:markdown-ld-kb:entity/alice";
+    private const string Web3Title = "Web 3.0";
+    private const string Web3Id = "urn:managedcode:markdown-ld-kb:article/web-30";
+    private const string FallbackId = "urn:managedcode:markdown-ld-kb:article/fallback-title";
+    private const string JsonLdId = "urn:managedcode:markdown-ld-kb:article/docs-mycoolfile";
+    private const string MarkdownLdSlug = "markdown ld kb";
+    private const string AdaSameAs = "https://example.com/authors/ada-lovelace";
+    private const string RdfSameAs = "https://www.w3.org/RDF/";
+    private const string SparqlSameAs = "https://www.wikidata.org/wiki/Q54872";
+    private const string CanonicalUrl = "https://example.com/articles/markdown-ld-knowledge-bank";
+    private const string FallbackTitle = "Fallback Title";
+    private const string BodyText = "Body text.";
+    private const string CppProgramming = "C++ Programming";
+    private const string CppProgrammingId = "urn:managedcode:markdown-ld-kb:entity/c-programming";
+    private const string MyCoolFilePath = "docs/MyCoolFile.md";
+    private const string MarkdownKnowledgeBank = "markdown ld kb";
 
-        result.Article.Title.ShouldBe("Fallback Title");
-        result.Article.Id.ShouldBe("urn:managedcode:markdown-ld-kb:article/fallback-title");
-        result.Entities.Any(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/rdf").ShouldBe(true);
+    private static readonly string[] ExpectedTags = ["knowledge-graph", "markdown"];
+    private static readonly string[] ExpectedAuthors = [AdaLovelace, ManagedCode];
+    private static readonly string[] ExpectedAbout = [KnowledgeGraphLabel, RdfLabel];
+    private static readonly string[] ExpectedSameAs = [SparqlSameAs];
+    private static readonly string[] ExpectedCanonicalAuthors = [AdaLovelace, "Grace Hopper"];
+    private static readonly string[] ExpectedCanonicalTags = ["rdf", "markdown"];
+    private static readonly string[] ExpectedCanonicalAbout = ["Graphs", RdfLabel];
+    private static readonly string[] ExpectedFallbackHeadingPath = ["Heading"];
+
+    private readonly MarkdownKnowledgeExtractor _extractor = new();
+
+    [Test]
+    public Task Extracts_metadata_entities_assertions_and_deduplicates_by_highest_confidence()
+    {
+        var result = _extractor.Extract(MarkdownWithFrontMatter);
+
+        result.Article.Id.ShouldBe(ArticleId);
+        result.Article.Title.ShouldBe(ArticleTitle);
+        result.Article.Summary.ShouldBe(ArticleSummary);
+        result.Article.DatePublished.ShouldBe(ArticlePublished);
+        result.Article.DateModified.ShouldBe(ArticleModified);
+        result.Article.Tags.ShouldBe(ExpectedTags);
+
+        result.Article.Authors.Select(author => author.Name).ShouldBe(ExpectedAuthors);
+        result.Article.About.Select(topic => topic.Label).ShouldBe(ExpectedAbout);
+
+        var rdf = result.Entities.Single(entity => entity.Id == RdfId);
+        rdf.Label.ShouldBe(RdfLabel);
+        rdf.Type.ShouldBe(SchemaThing);
+        rdf.SameAs.Any(value => value == ResourceDescriptionFrameworkLabel).ShouldBe(true);
+        rdf.SameAs.Any(value => value == RdfSameAs).ShouldBe(true);
+
+        var sparql = result.Entities.Single(entity => entity.Id == SparqlId);
+        sparql.Label.ShouldBe(SparqlLabel);
+        sparql.SameAs.ShouldBe(ExpectedSameAs);
+
+        var ada = result.Entities.Single(entity => entity.Id == AdaId);
+        ada.Type.ShouldBe(SchemaPerson);
+
+        var knowledgeGraph = result.Entities.Single(entity => entity.Id == KnowledgeGraphId);
+        knowledgeGraph.Label.ShouldBe(KnowledgeGraphLabel);
+
+        result.Assertions
+            .Single(assertion => assertion.SubjectId == result.Article.Id
+                                 && assertion.Predicate == SchemaAuthor
+                                 && assertion.ObjectId == AdaId)
+            .Confidence.ShouldBe(1.0);
+
+        result.Assertions
+            .Single(assertion => assertion.SubjectId == result.Article.Id
+                                 && assertion.Predicate == SchemaAbout
+                                 && assertion.ObjectId == KnowledgeGraphId)
+            .Confidence.ShouldBe(1.0);
+
+        result.Assertions
+            .Single(assertion => assertion.SubjectId == result.Article.Id
+                                 && assertion.Predicate == SchemaMentions
+                                 && assertion.ObjectId == RdfId)
+            .Confidence.ShouldBe(0.95);
+
         result.Assertions.Any(assertion =>
-            assertion.Predicate == "schema:mentions" &&
-            assertion.ObjectId == "urn:managedcode:markdown-ld-kb:entity/rdf").ShouldBe(true);
+            assertion.SubjectId == result.Article.Id &&
+            assertion.Predicate == SchemaMentions &&
+            assertion.ObjectId == SparqlId &&
+            assertion.Confidence == 0.85).ShouldBe(true);
+
+        result.Assertions
+            .Single(assertion => assertion.SubjectId == AliceId
+                                 && assertion.Predicate == SchemaUses
+                                 && assertion.ObjectId == RdfId)
+            .Confidence.ShouldBe(0.95);
+
+        result.Entities.Any(entity => entity.Id == IgnoredLinkId).ShouldBe(false);
+        result.Entities.Any(entity => entity.Id == FooId).ShouldBe(false);
+
+        return Task.CompletedTask;
+    }
+
+    [Test]
+    public Task Falls_back_to_source_path_title_when_front_matter_is_missing_or_invalid()
+    {
+        var result = _extractor.Extract(MarkdownWithBrokenFrontMatter, SourcePathFallback);
+
+        result.Article.Title.ShouldBe(FallbackTitle);
+        result.Article.Id.ShouldBe(FallbackId);
+        result.Entities.Any(entity => entity.Id == RdfId).ShouldBe(true);
+        result.Assertions.Any(assertion =>
+            assertion.Predicate == SchemaMentions &&
+            assertion.ObjectId == RdfId).ShouldBe(true);
 
         return Task.CompletedTask;
     }
@@ -143,11 +193,11 @@ date_published: 2026-04-04
     [Test]
     public Task Builds_deterministic_ids_from_titles_and_labels()
     {
-        MarkdownKnowledgeIds.BuildEntityId("JSON-LD").ShouldBe("urn:managedcode:markdown-ld-kb:entity/json-ld");
-        MarkdownKnowledgeIds.BuildEntityId("C++ Programming").ShouldBe("urn:managedcode:markdown-ld-kb:entity/c-programming");
-        MarkdownKnowledgeIds.BuildArticleId("Web 3.0").ShouldBe("urn:managedcode:markdown-ld-kb:article/web-30");
-        MarkdownKnowledgeIds.BuildArticleId(null, "docs/MyCoolFile.md").ShouldBe("urn:managedcode:markdown-ld-kb:article/docs-mycoolfile");
-        MarkdownKnowledgeIds.HumanizeLabel("markdown-ld-kb").ShouldBe("markdown ld kb");
+        MarkdownKnowledgeIds.BuildEntityId(RdfLabel).ShouldBe(RdfId);
+        MarkdownKnowledgeIds.BuildEntityId(CppProgramming).ShouldBe(CppProgrammingId);
+        MarkdownKnowledgeIds.BuildArticleId(Web3Title).ShouldBe(Web3Id);
+        MarkdownKnowledgeIds.BuildArticleId(null, MyCoolFilePath).ShouldBe(JsonLdId);
+        MarkdownKnowledgeIds.HumanizeLabel(MarkdownLdSlug).ShouldBe(MarkdownKnowledgeBank);
 
         return Task.CompletedTask;
     }

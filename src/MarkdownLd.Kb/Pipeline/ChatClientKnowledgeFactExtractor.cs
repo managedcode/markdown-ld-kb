@@ -1,17 +1,11 @@
 using Microsoft.Extensions.AI;
-using ManagedCode.MarkdownLd.Kb;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed class ChatClientKnowledgeFactExtractor
+public sealed class ChatClientKnowledgeFactExtractor(IChatClient chatClient)
 {
-    private readonly global::ManagedCode.MarkdownLd.Kb.ChatClientKnowledgeFactExtractor _extractor;
-
-    public ChatClientKnowledgeFactExtractor(IChatClient chatClient)
-    {
-        _extractor = new global::ManagedCode.MarkdownLd.Kb.ChatClientKnowledgeFactExtractor(chatClient);
-    }
+    private readonly global::ManagedCode.MarkdownLd.Kb.ChatClientKnowledgeFactExtractor _extractor = new(chatClient);
 
     public async Task<KnowledgeExtractionResult> ExtractAsync(MarkdownDocument document, CancellationToken cancellationToken = default)
     {

@@ -114,7 +114,7 @@ Mitigations:
 - build: `dotnet build MarkdownLd.Kb.slnx --no-restore`
 - test: `dotnet test MarkdownLd.Kb.slnx --no-build`
 - format: `dotnet format MarkdownLd.Kb.slnx --verify-no-changes`
-- coverage: `dotnet test MarkdownLd.Kb.slnx --collect:"XPlat Code Coverage"`
+- coverage: `dotnet test --solution MarkdownLd.Kb.slnx --no-build --coverlet --coverlet-output-format cobertura --coverlet-include '[ManagedCode.MarkdownLd.Kb]*' --results-directory TestResults/CoverletMtpFiltered`
 
 ## References
 

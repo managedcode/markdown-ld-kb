@@ -21,7 +21,7 @@ Purpose: Flow-level verification for Markdown-LD Knowledge Bank.
 ## Commands
 
 - focused tests: `dotnet test ../../MarkdownLd.Kb.slnx --no-build --filter FullyQualifiedName~ManagedCode.MarkdownLd.Kb.Tests`
-- coverage: `dotnet test ../../MarkdownLd.Kb.slnx --collect:"XPlat Code Coverage"`
+- coverage: `dotnet test ../../MarkdownLd.Kb.slnx --no-build --coverlet --coverlet-output-format cobertura --coverlet-include '[ManagedCode.MarkdownLd.Kb]*' --results-directory ../../TestResults/CoverletMtpFiltered`
 
 ## Local Risks
 

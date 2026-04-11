@@ -1,5 +1,4 @@
 using Microsoft.Extensions.AI;
-using ManagedCode.MarkdownLd.Kb;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;

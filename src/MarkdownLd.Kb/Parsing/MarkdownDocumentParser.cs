@@ -91,7 +91,7 @@ public sealed partial class MarkdownDocumentParser
             {
                 sections.Add(BuildSection(
                     looseSectionMarkdown,
-                    string.Empty,
+                    MarkdownTextConstants.Empty,
                     [],
                     0,
                     documentId,
@@ -145,7 +145,7 @@ public sealed partial class MarkdownDocumentParser
         }
 
         return [
-            BuildSection(markdown, string.Empty, [], 0, documentId, baseUri, order, chunkTokenTarget),
+            BuildSection(markdown, MarkdownTextConstants.Empty, [], 0, documentId, baseUri, order, chunkTokenTarget),
         ];
     }
 
@@ -241,7 +241,7 @@ public sealed partial class MarkdownDocumentParser
         ref int linkOrder)
     {
         var markdown = string.Join(MarkdownTextConstants.DoubleLineFeed, blocks).Trim();
-        var links = ExtractLinks(markdown, documentId, baseUri, ref linkOrder)
+        var links = ExtractLinks(markdown, baseUri, ref linkOrder)
             .DistinctBy(GetLinkKey)
             .ToArray();
 
@@ -308,7 +308,6 @@ public sealed partial class MarkdownDocumentParser
 
     private static IReadOnlyList<MarkdownLinkReference> ExtractLinks(
         string markdown,
-        string documentId,
         Uri baseUri,
         ref int linkOrder)
     {

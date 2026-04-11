@@ -13,7 +13,7 @@ internal static class MarkdownFrontMatterParser
     {
         if (string.IsNullOrWhiteSpace(markdown))
         {
-            return new MarkdownFrontMatterParseResult(new MarkdownFrontMatter(), string.Empty, false);
+            return new MarkdownFrontMatterParseResult(new MarkdownFrontMatter(), Empty, false);
         }
 
         var normalized = markdown.TrimStart('\uFEFF').Replace(CarriageReturnLineFeed, LineFeed);
@@ -78,7 +78,7 @@ internal static class MarkdownFrontMatterParser
         var firstLine = reader.ReadLine();
         if (!string.Equals(firstLine?.Trim(), FrontMatterFence, StringComparison.Ordinal))
         {
-            return (string.Empty, markdown, false);
+            return (Empty, markdown, false);
         }
 
         var frontMatter = new StringBuilder();
@@ -94,7 +94,7 @@ internal static class MarkdownFrontMatterParser
             frontMatter.AppendLine(line);
         }
 
-        return (string.Empty, markdown, false);
+        return (Empty, markdown, false);
     }
 
     private static string? ReadString(IReadOnlyDictionary<string, object?> values, string key)
@@ -164,7 +164,7 @@ internal static class MarkdownFrontMatterParser
         {
             return new MarkdownAuthor
             {
-                Name = ReadString(map, NameKey) ?? ReadString(map, LabelKey) ?? string.Empty,
+                Name = ReadString(map, NameKey) ?? ReadString(map, LabelKey) ?? Empty,
                 SameAs = ReadString(map, SameAsKey) ?? ReadString(map, SameAsSnakeKey),
                 Type = ReadString(map, TypeKey),
             };
@@ -172,11 +172,11 @@ internal static class MarkdownFrontMatterParser
 
         if (item is IDictionary<object, object?> dynamicMap)
         {
-            var dictionary = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? string.Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+            var dictionary = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
             return ReadAuthor(dictionary);
         }
 
-        return new MarkdownAuthor { Name = item.ToString()?.Trim() ?? string.Empty };
+        return new MarkdownAuthor { Name = item.ToString()?.Trim() ?? Empty };
     }
 
     private static IReadOnlyList<MarkdownTopic> ReadTopics(IReadOnlyDictionary<string, object?> values, string key)
@@ -210,18 +210,18 @@ internal static class MarkdownFrontMatterParser
         {
             return new MarkdownTopic
             {
-                Label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? ReadString(map, ValueKey) ?? string.Empty,
+                Label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? ReadString(map, ValueKey) ?? Empty,
                 SameAs = ReadString(map, SameAsKey) ?? ReadString(map, SameAsSnakeKey),
             };
         }
 
         if (item is IDictionary<object, object?> dynamicMap)
         {
-            var dictionary = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? string.Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+            var dictionary = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
             return ReadTopic(dictionary);
         }
 
-        return new MarkdownTopic { Label = NormalizeLabel(item.ToString() ?? string.Empty) };
+        return new MarkdownTopic { Label = NormalizeLabel(item.ToString() ?? Empty) };
     }
 
     private static IReadOnlyList<MarkdownEntityHint> ReadEntityHints(IReadOnlyDictionary<string, object?> values)
@@ -255,7 +255,7 @@ internal static class MarkdownFrontMatterParser
         {
             return new MarkdownEntityHint
             {
-                Label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? string.Empty,
+                Label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? Empty,
                 SameAs = ReadString(map, SameAsKey) ?? ReadString(map, SameAsSnakeKey),
                 Type = ReadString(map, TypeKey),
             };
@@ -263,11 +263,11 @@ internal static class MarkdownFrontMatterParser
 
         if (item is IDictionary<object, object?> dynamicMap)
         {
-            var dictionary = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? string.Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+            var dictionary = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
             return ReadEntityHint(dictionary);
         }
 
-        return new MarkdownEntityHint { Label = NormalizeLabel(item.ToString() ?? string.Empty) };
+        return new MarkdownEntityHint { Label = NormalizeLabel(item.ToString() ?? Empty) };
     }
 
     private static string NormalizeLabel(string value)

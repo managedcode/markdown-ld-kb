@@ -3,18 +3,13 @@ using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed class DeterministicKnowledgeFactExtractor
+public sealed class DeterministicKnowledgeFactExtractor(Uri? baseUri = null)
 {
     private static readonly Regex WikiLinkRegex = new(WikiLinkPattern, RegexOptions.Compiled);
     private static readonly Regex MarkdownLinkRegex = new(MarkdownLinkPattern, RegexOptions.Compiled);
     private static readonly Regex ArrowRegex = new(ArrowPattern, RegexOptions.Compiled | RegexOptions.Multiline);
 
-    private readonly Uri _baseUri;
-
-    public DeterministicKnowledgeFactExtractor(Uri? baseUri = null)
-    {
-        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
-    }
+    private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
 
     public KnowledgeExtractionResult Extract(MarkdownDocument document)
     {
@@ -194,9 +189,9 @@ public sealed class DeterministicKnowledgeFactExtractor
     {
         foreach (Match match in ArrowRegex.Matches(document.Body))
         {
-            var subjectText = match.Groups[MatchSubjectGroup].Value.Trim();
+            var subjectText = NormalizeArrowOperand(match.Groups[MatchSubjectGroup].Value);
             var predicateText = match.Groups[MatchPredicateGroup].Value.Trim();
-            var objectText = match.Groups[MatchObjectGroup].Value.Trim();
+            var objectText = NormalizeArrowOperand(match.Groups[MatchObjectGroup].Value);
 
             if (!TryResolveNodeReference(document, subjectText, articleId, entities, out var subjectId) ||
                 !TryResolveNodeReference(document, objectText, articleId, entities, out var objectId))
@@ -226,6 +221,17 @@ public sealed class DeterministicKnowledgeFactExtractor
         }
     }
 
+    private static string NormalizeArrowOperand(string operand)
+    {
+        var normalized = operand.Trim().Trim(ArrowOperandTrimChars);
+        if (normalized.StartsWith(ListItemPrefix, StringComparison.Ordinal))
+        {
+            normalized = normalized[ListItemPrefix.Length..].Trim();
+        }
+
+        return normalized.Trim(ArrowOperandTrimChars);
+    }
+
     private bool TryResolveNodeReference(
         MarkdownDocument document,
         string raw,
@@ -236,7 +242,7 @@ public sealed class DeterministicKnowledgeFactExtractor
         var trimmed = raw.Trim();
         if (trimmed.Length == 0)
         {
-            id = string.Empty;
+            id = BlankString;
             return false;
         }
 
@@ -372,13 +378,26 @@ public sealed class DeterministicKnowledgeFactExtractor
 
         if (node is not IDictionary<string, object?> map)
         {
-            return (string.Empty, [], defaultType);
+            return (BlankString, [], defaultType);
         }
 
-        var label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? string.Empty;
-        var type = ReadString(map, TypeKey) ?? defaultType;
+        var label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? BlankString;
+        var type = NormalizeEntityTypeText(ReadString(map, TypeKey), defaultType);
         var sameAs = ReadStringSequence(map, SameAsKey);
         return (label, sameAs, type);
+    }
+
+    private static string NormalizeEntityTypeText(string? type, string defaultType)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+        {
+            return defaultType;
+        }
+
+        var trimmed = type.Trim();
+        return trimmed.Contains(Colon, StringComparison.Ordinal)
+            ? trimmed
+            : string.Concat(SchemaPrefix, Colon, trimmed);
     }
 
     private static string? ReadScalarLabel(object? node)

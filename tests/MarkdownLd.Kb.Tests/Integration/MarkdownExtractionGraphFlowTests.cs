@@ -8,10 +8,7 @@ namespace ManagedCode.MarkdownLd.Kb.Tests.Integration;
 
 public sealed class MarkdownExtractionGraphFlowTests
 {
-    [Test]
-    public void Markdown_extraction_flow_loads_valid_markdown_into_queryable_rdf_graph()
-    {
-        var graph = BuildMarkdownExtractionGraph("""
+    private const string MarkdownComplex = """
 ---
 title: Markdown Complex
 summary: Markdown summary.
@@ -31,69 +28,16 @@ entity_hints:
 Markdown Complex --mentions--> SPARQL
 [Knowledge](https://example.com/knowledge)
 [[RDF|Resource Description Framework]]
-""");
-
-        var executor = new SparqlQueryExecutor(graph);
-        var metadata = executor.ExecuteReadOnly("""
-PREFIX schema: <https://schema.org/>
-SELECT ?summary ?keyword ?published WHERE {
-  <https://kb.example/markdown-complex> schema:description ?summary ;
-                                          schema:keywords ?keyword ;
-                                          schema:datePublished ?published .
-}
-""");
-
-        metadata.Rows.Single().Bindings["summary"].Value.ShouldBe("Markdown summary.");
-        metadata.Rows.Single().Bindings["keyword"].Value.ShouldBe("graph");
-        metadata.Rows.Single().Bindings["published"].Value.ShouldBe("2026-04-11");
-
-        var author = executor.ExecuteRawReadOnly("""
-PREFIX schema: <https://schema.org/>
-ASK WHERE {
-  <https://kb.example/markdown-complex> schema:author <urn:managedcode:markdown-ld-kb:entity/ada-lovelace> .
-  <urn:managedcode:markdown-ld-kb:entity/sparql> schema:name "SPARQL" .
-  <urn:managedcode:markdown-ld-kb:entity/tool> schema:sameAs <https://example.com/tool> .
-}
-""");
-        author.Result.ShouldBeTrue();
-
-        var search = new KnowledgeSearchService(graph);
-        search.SearchArticles("sparql").Single().Id.AbsoluteUri.ShouldBe("https://kb.example/markdown-complex");
-        search.SearchEntities("tool").Single().SameAs.Single().AbsoluteUri.ShouldBe("https://example.com/tool");
-    }
-
-    [Test]
-    public void Markdown_extraction_flow_keeps_broken_front_matter_queryable_and_rejects_bad_sparql()
-    {
-        var graph = BuildMarkdownExtractionGraph("""
+""";
+    private const string MarkdownBroken = """
 ---
 title: [unterminated
 ---
 # Markdown Broken
 
 Markdown Broken --mentions--> RDF
-""", "content/markdown-broken.md");
-
-        var executor = new SparqlQueryExecutor(graph);
-        var title = executor.ExecuteReadOnly("""
-PREFIX schema: <https://schema.org/>
-SELECT ?article ?title WHERE {
-  ?article a schema:Article ;
-           schema:name ?title .
-}
-""");
-        title.Rows.Single().Bindings["title"].Value.ShouldBe("Markdown Broken");
-
-        Should.Throw<InvalidOperationException>(() =>
-            executor.ExecuteReadOnly("INSERT DATA { <a> <b> <c> }"));
-        Should.Throw<InvalidOperationException>(() =>
-            executor.ExecuteRawReadOnly("INSERT DATA { <a> <b> <c> }"));
-    }
-
-    [Test]
-    public void Markdown_extraction_flow_loads_scalar_and_blank_yaml_items_into_graph()
-    {
-        var graph = BuildMarkdownExtractionGraph("""
+""";
+    private const string MarkdownScalar = """
 ---
 title: 123
 summary: 456
@@ -117,16 +61,100 @@ entity_hints:
 # 123
 
 123 --mentions--> 654
-""");
-
-        var executor = new SparqlQueryExecutor(graph);
-        var ask = executor.ExecuteRawReadOnly("""
+""";
+    private const string MetadataQuery = """
+PREFIX schema: <https://schema.org/>
+SELECT ?summary ?keyword ?published WHERE {
+  <https://kb.example/markdown-complex> schema:description ?summary ;
+                                          schema:keywords ?keyword ;
+                                          schema:datePublished ?published .
+}
+""";
+    private const string AuthorAskQuery = """
+PREFIX schema: <https://schema.org/>
+ASK WHERE {
+  <https://kb.example/markdown-complex> schema:author <urn:managedcode:markdown-ld-kb:entity/ada-lovelace> .
+  <urn:managedcode:markdown-ld-kb:entity/sparql> schema:name "SPARQL" .
+  <urn:managedcode:markdown-ld-kb:entity/tool> schema:sameAs <https://example.com/tool> .
+}
+""";
+    private const string BrokenTitleQuery = """
+PREFIX schema: <https://schema.org/>
+SELECT ?article ?title WHERE {
+  ?article a schema:Article ;
+           schema:name ?title .
+}
+""";
+    private const string ScalarAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
   <https://kb.example/scalar-markdown> schema:name "123" ;
                                       schema:mentions <urn:managedcode:markdown-ld-kb:entity/654> .
 }
-""");
+""";
+    private const string TitleBindingKey = "title";
+    private const string SummaryBindingKey = "summary";
+    private const string KeywordBindingKey = "keyword";
+    private const string PublishedBindingKey = "published";
+    private const string ArticleBindingKey = "article";
+    private const string SchemaPrefix = "schema:";
+    private const string KbPrefix = "kb:";
+    private const string SchemaArticle = "schema:Article";
+    private const string SchemaName = "schema:name";
+    private const string InvalidInsertQuery = "INSERT DATA { <a> <b> <c> }";
+    private const string TestUrnPrefix = "urn:managedcode:markdown-ld-kb:test/";
+    private const string BrokenMarkdownSourcePath = "content/markdown-broken.md";
+    private const string SearchArticlesTerm = "sparql";
+    private const string SearchEntitiesTerm = "tool";
+    private const string SummaryValue = "Markdown summary.";
+    private const string GraphKeyword = "graph";
+    private const string PublishedValue = "2026-04-11";
+    private const string BrokenTitleValue = "Markdown Broken";
+    private const string MarkdownComplexCanonicalUri = "https://kb.example/markdown-complex";
+    private const string SearchEntitySameAsUri = "https://example.com/tool";
+
+    [Test]
+    public void Markdown_extraction_flow_loads_valid_markdown_into_queryable_rdf_graph()
+    {
+        var graph = BuildMarkdownExtractionGraph(MarkdownComplex);
+
+        var executor = new SparqlQueryExecutor(graph);
+        var metadata = executor.ExecuteReadOnly(MetadataQuery);
+
+        metadata.Rows.Single().Bindings[SummaryBindingKey].Value.ShouldBe(SummaryValue);
+        metadata.Rows.Single().Bindings[KeywordBindingKey].Value.ShouldBe(GraphKeyword);
+        metadata.Rows.Single().Bindings[PublishedBindingKey].Value.ShouldBe(PublishedValue);
+
+        var author = executor.ExecuteRawReadOnly(AuthorAskQuery);
+        author.Result.ShouldBeTrue();
+
+        var search = new KnowledgeSearchService(graph);
+        search.SearchArticles(SearchArticlesTerm).Single().Id.AbsoluteUri.ShouldBe(MarkdownComplexCanonicalUri);
+        search.SearchEntities(SearchEntitiesTerm).Single().SameAs.Single().AbsoluteUri.ShouldBe(SearchEntitySameAsUri);
+    }
+
+    [Test]
+    public void Markdown_extraction_flow_keeps_broken_front_matter_queryable_and_rejects_bad_sparql()
+    {
+        var graph = BuildMarkdownExtractionGraph(MarkdownBroken, BrokenMarkdownSourcePath);
+
+        var executor = new SparqlQueryExecutor(graph);
+        var title = executor.ExecuteReadOnly(BrokenTitleQuery);
+        title.Rows.Single().Bindings[TitleBindingKey].Value.ShouldBe(BrokenTitleValue);
+
+        Should.Throw<InvalidOperationException>(() =>
+            executor.ExecuteReadOnly(InvalidInsertQuery));
+        Should.Throw<InvalidOperationException>(() =>
+            executor.ExecuteRawReadOnly(InvalidInsertQuery));
+    }
+
+    [Test]
+    public void Markdown_extraction_flow_loads_scalar_and_blank_yaml_items_into_graph()
+    {
+        var graph = BuildMarkdownExtractionGraph(MarkdownScalar);
+
+        var executor = new SparqlQueryExecutor(graph);
+        var ask = executor.ExecuteRawReadOnly(ScalarAskQuery);
         ask.Result.ShouldBeTrue();
     }
 
@@ -168,18 +196,18 @@ ASK WHERE {
 
     private static Uri ExpandUri(string value)
     {
-        if (value.StartsWith("schema:", StringComparison.Ordinal))
+        if (value.StartsWith(SchemaPrefix, StringComparison.Ordinal))
         {
-            return new Uri(KbNamespaces.Schema + value["schema:".Length..]);
+            return new Uri(KbNamespaces.Schema + value[SchemaPrefix.Length..]);
         }
 
-        if (value.StartsWith("kb:", StringComparison.Ordinal))
+        if (value.StartsWith(KbPrefix, StringComparison.Ordinal))
         {
-            return new Uri(KbNamespaces.Kb + value["kb:".Length..]);
+            return new Uri(KbNamespaces.Kb + value[KbPrefix.Length..]);
         }
 
         return Uri.TryCreate(value, UriKind.Absolute, out var uri)
             ? uri
-            : new Uri("urn:managedcode:markdown-ld-kb:test/" + Uri.EscapeDataString(value));
+            : new Uri(TestUrnPrefix + Uri.EscapeDataString(value));
     }
 }

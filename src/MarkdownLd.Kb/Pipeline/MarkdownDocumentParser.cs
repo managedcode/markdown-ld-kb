@@ -8,7 +8,7 @@ using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed class MarkdownDocumentParser
+public sealed class MarkdownDocumentParser(Uri? baseUri = null)
 {
     private static readonly Regex HeadingRegex = new(HeadingPattern, RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly MarkdownPipeline MarkdigPipeline = new MarkdownPipelineBuilder()
@@ -22,21 +22,15 @@ public sealed class MarkdownDocumentParser
         .UseGenericAttributes()
         .Build();
 
-    private readonly Uri _baseUri;
-    private readonly IDeserializer _yamlDeserializer;
-
-    public MarkdownDocumentParser(Uri? baseUri = null)
-    {
-        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
-        _yamlDeserializer = new DeserializerBuilder()
+    private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
+    private readonly IDeserializer _yamlDeserializer = new DeserializerBuilder()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .IgnoreUnmatchedProperties()
             .Build();
-    }
 
     public MarkdownDocument Parse(MarkdownSourceDocument source)
     {
-        var content = (source.Content ?? string.Empty).TrimStart('\uFEFF');
+        var content = (source.Content ?? BlankString).TrimStart('\uFEFF');
         var (frontMatter, body) = ParseFrontMatter(content);
         var documentUri = source.CanonicalUri ?? DeriveDocumentUri(source.Path);
         var title = ResolveTitle(frontMatter, body, source.Path);
@@ -126,7 +120,7 @@ public sealed class MarkdownDocumentParser
 
         foreach (var entry in dictionary)
         {
-            result[entry.Key.ToString() ?? string.Empty] = NormalizeYamlValue(entry.Value);
+            result[entry.Key.ToString() ?? BlankString] = NormalizeYamlValue(entry.Value);
         }
 
         return result;
@@ -144,7 +138,7 @@ public sealed class MarkdownDocumentParser
             var converted = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in dictionary)
             {
-                converted[entry.Key.ToString() ?? string.Empty] = NormalizeYamlValue(entry.Value);
+                converted[entry.Key.ToString() ?? BlankString] = NormalizeYamlValue(entry.Value);
             }
 
             return converted;
@@ -194,7 +188,7 @@ public sealed class MarkdownDocumentParser
         {
             return string.IsNullOrWhiteSpace(body)
                 ? []
-                : [new MarkdownSection(0, string.Empty, [], body.Trim(), 0, body.Length)];
+                : [new MarkdownSection(0, BlankString, [], body.Trim(), 0, body.Length)];
         }
 
         var currentStart = 0;
@@ -236,7 +230,7 @@ public sealed class MarkdownDocumentParser
 
         sections.Add(new MarkdownSection(
             headingPath.Count,
-            headingPath.Count == 0 ? string.Empty : string.Join(PathSeparator, headingPath),
+            headingPath.Count == 0 ? BlankString : string.Join(PathSeparator, headingPath),
             headingPath.ToArray(),
             trimmed,
             startOffset,

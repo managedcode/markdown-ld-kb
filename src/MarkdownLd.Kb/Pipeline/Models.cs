@@ -38,20 +38,20 @@ public sealed record MarkdownDocument(
 public sealed record KnowledgeEntityFact
 {
     public string? Id { get; init; }
-    public string Label { get; init; } = string.Empty;
+    public string Label { get; init; } = BlankString;
     public string Type { get; init; } = DefaultSchemaThing;
     public List<string> SameAs { get; init; } = [];
     public double Confidence { get; init; } = 0.8;
-    public string Source { get; init; } = string.Empty;
+    public string Source { get; init; } = BlankString;
 }
 
 public sealed record KnowledgeAssertionFact
 {
-    public string SubjectId { get; init; } = string.Empty;
+    public string SubjectId { get; init; } = BlankString;
     public string Predicate { get; init; } = DefaultKbRelatedTo;
-    public string ObjectId { get; init; } = string.Empty;
+    public string ObjectId { get; init; } = BlankString;
     public double Confidence { get; init; } = 0.8;
-    public string Source { get; init; } = string.Empty;
+    public string Source { get; init; } = BlankString;
 }
 
 public sealed record KnowledgeExtractionResult
@@ -69,11 +69,8 @@ public sealed record MarkdownKnowledgeBuildResult(
     KnowledgeExtractionResult Facts,
     KnowledgeGraph Graph);
 
-public sealed class ReadOnlySparqlQueryException : InvalidOperationException
+public sealed class ReadOnlySparqlQueryException(string message) : InvalidOperationException(message)
 {
-    public ReadOnlySparqlQueryException(string message) : base(message)
-    {
-    }
 }
 
 public static class KnowledgeNaming
@@ -101,7 +98,7 @@ public static class KnowledgeNaming
             builder.Append(char.ToLowerInvariant(c));
         }
 
-        var s = NonAlphaNumeric.Replace(builder.ToString(), string.Empty);
+        var s = NonAlphaNumeric.Replace(builder.ToString(), BlankString);
         s = Whitespace.Replace(s, Hyphen);
         s = Dashes.Replace(s, Hyphen);
         return s.Trim('-');
