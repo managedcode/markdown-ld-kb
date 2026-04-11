@@ -2,11 +2,137 @@ using ManagedCode.MarkdownLd.Kb.Pipeline;
 using ManagedCode.MarkdownLd.Kb.Tests.Support;
 using Microsoft.Extensions.AI;
 using Shouldly;
+using RootMarkdownDocumentParser = ManagedCode.MarkdownLd.Kb.Parsing.MarkdownDocumentParser;
+using RootMarkdownDocumentSource = ManagedCode.MarkdownLd.Kb.MarkdownDocumentSource;
+using RootMarkdownParsingOptions = ManagedCode.MarkdownLd.Kb.MarkdownParsingOptions;
 
 namespace ManagedCode.MarkdownLd.Kb.Tests.Integration;
 
 public sealed class KnowledgeFlowEdgeCaseTests
 {
+    [Test]
+    public async Task Root_document_parser_output_feeds_pipeline_graph_queries()
+    {
+        var rootParser = new RootMarkdownDocumentParser();
+        var parsed = rootParser.Parse(
+            new RootMarkdownDocumentSource("""
+---
+title: Root Flow
+canonicalUrl: https://kb.example/root-flow/
+description: Root summary.
+datePublished: 2026-04-11T12:30:00Z
+dateModified: 2026-04-12
+authors:
+  - label: Ada Lovelace
+  - value: Value Author
+  - 9001
+tags:
+  - true
+  - 42
+about:
+  - name: Knowledge Graph
+  - value: RDF
+entityHints:
+  - label: Root Tool
+    type: schema:SoftwareApplication
+    sameAs:
+      - https://example.com/root-tool
+  - value: Value Hint
+  - 777
+---
+# Root Flow
+
+Root Flow --mentions--> Root Tool
+""", "content/root-flow.md", "https://kb.example/"),
+            new RootMarkdownParsingOptions { ChunkTokenTarget = 3 });
+
+        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
+        var graph = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
+        ]);
+
+        var ask = await graph.Graph.ExecuteAskAsync("""
+PREFIX schema: <https://schema.org/>
+ASK WHERE {
+  <https://kb.example/root-flow/> schema:mentions <https://kb.example/id/root-tool> .
+  <https://kb.example/id/root-tool> schema:name "Root Tool" .
+}
+""");
+        ask.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Root_document_parser_invalid_yaml_output_still_feeds_graph_queries()
+    {
+        var rootParser = new RootMarkdownDocumentParser();
+        var parsed = rootParser.Parse(new RootMarkdownDocumentSource("""
+---
+title: [unterminated
+---
+# Invalid Root Flow
+
+Invalid Root Flow --mentions--> RDF
+""", "content/invalid-root-flow.md", "https://kb.example/"));
+
+        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
+        var graph = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
+        ]);
+
+        var ask = await graph.Graph.ExecuteAskAsync("""
+PREFIX schema: <https://schema.org/>
+ASK WHERE {
+  <https://kb.example/invalid-root-flow/> schema:name "Invalid Root Flow" ;
+                                           schema:mentions <https://kb.example/id/rdf> .
+}
+""");
+        ask.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Root_document_parser_scalar_and_blank_yaml_items_feed_graph_queries()
+    {
+        var rootParser = new RootMarkdownDocumentParser();
+        var parsed = rootParser.Parse(new RootMarkdownDocumentSource("""
+---
+title: 123
+description: 456
+authors:
+  -
+  - 789
+tags:
+  -
+  - {}
+  - scalar
+about:
+  -
+  - {}
+  - 321
+entityHints:
+  -
+  - {}
+  - 654
+---
+# 123
+
+123 --mentions--> 654
+""", "content/scalar-root.md", "https://kb.example/"));
+
+        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
+        var graph = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
+        ]);
+
+        var ask = await graph.Graph.ExecuteAskAsync("""
+PREFIX schema: <https://schema.org/>
+ASK WHERE {
+  <https://kb.example/scalar-root/> schema:name "123" ;
+                                      schema:mentions <https://kb.example/id/654> .
+}
+""");
+        ask.ShouldBeTrue();
+    }
+
     [Test]
     public async Task Valid_markdown_file_flow_converts_yaml_to_queryable_graph()
     {
@@ -260,5 +386,126 @@ ASK WHERE {
         rows.Rows.Count.ShouldBeGreaterThan(0);
         chatClient.LastOptions.ShouldNotBeNull();
         chatClient.LastOptions!.ResponseFormat.ShouldBeOfType<ChatResponseFormatJson>();
+    }
+
+    [Test]
+    public async Task Converter_content_flow_builds_graph_with_media_override_and_generated_document_path()
+    {
+        var converter = new KnowledgeSourceDocumentConverter();
+        var document = converter.ConvertContent(
+            """
+# Converted Content
+
+Converted Content --https://example.com/predicate/related--> https://example.com/object
+Converted Content --unknown predicate--> https://example.com/unknown
+Converted Content --about--> https://example.com/about
+Converted Content --author--> https://example.com/author
+Converted Content --description--> https://example.com/description
+Converted Content --keywords--> https://example.com/keywords
+Converted Content --   --> https://example.com/ignored
+""",
+            options: new KnowledgeDocumentConversionOptions
+            {
+                MediaType = "application/custom-markdown",
+            });
+
+        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
+        var result = await pipeline.BuildAsync([document]);
+
+        var related = await result.Graph.ExecuteAskAsync("""
+ASK WHERE {
+  <https://kb.example/document/> <https://example.com/predicate/related> <https://example.com/object> .
+}
+""");
+        related.ShouldBeTrue();
+
+        var fallback = await result.Graph.ExecuteAskAsync("""
+PREFIX kb: <https://example.com/vocab/kb#>
+ASK WHERE {
+  <https://kb.example/document/> kb:relatedTo <https://example.com/unknown> .
+}
+""");
+        fallback.ShouldBeTrue();
+
+        var normalizedPredicates = await result.Graph.ExecuteAskAsync("""
+PREFIX schema: <https://schema.org/>
+ASK WHERE {
+  <https://kb.example/document/> schema:about <https://example.com/about> ;
+                                 schema:author <https://example.com/author> ;
+                                 schema:description <https://example.com/description> ;
+                                 schema:keywords <https://example.com/keywords> .
+}
+""");
+        normalizedPredicates.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task Directory_flow_handles_parser_edge_cases_and_unsupported_file_policy()
+    {
+        var root = Path.Combine(Path.GetTempPath(), string.Concat("markdown-ld-kb-flow-", Guid.NewGuid().ToString("N")));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "plain.md"), """
+plain --mentions--> RDF
+""");
+            await File.WriteAllTextAsync(Path.Combine(root, "marker-only.md"), """
+---
+""");
+            await File.WriteAllTextAsync(Path.Combine(root, "unclosed.md"), """
+---
+title: Not Closed
+
+# Unclosed Heading
+
+Unclosed Heading --mentions--> SPARQL
+""");
+            await File.WriteAllTextAsync(Path.Combine(root, "list-yaml.md"), """
+---
+- list
+- frontmatter
+---
+# List YAML
+
+List YAML --mentions--> Graph
+""");
+            await File.WriteAllBytesAsync(Path.Combine(root, "broken.bin"), [9, 8, 7]);
+
+            var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
+            var result = await pipeline.BuildFromDirectoryAsync(root);
+
+            var positive = await result.Graph.ExecuteAskAsync("""
+PREFIX schema: <https://schema.org/>
+ASK WHERE {
+  <https://kb.example/plain/> schema:mentions <https://kb.example/id/rdf> .
+  <https://kb.example/unclosed/> schema:mentions <https://kb.example/id/sparql> .
+  <https://kb.example/list-yaml/> schema:mentions <https://kb.example/id/graph> .
+}
+""");
+            positive.ShouldBeTrue();
+
+            var titleRows = await result.Graph.ExecuteSelectAsync("""
+PREFIX schema: <https://schema.org/>
+SELECT ?title WHERE {
+  <https://kb.example/marker-only/> schema:name ?title .
+}
+""");
+            titleRows.Rows.Single().Values["title"].ShouldBe("marker only");
+
+            var converter = new KnowledgeSourceDocumentConverter();
+            await Should.ThrowAsync<NotSupportedException>(async () =>
+            {
+                await foreach (var _ in converter.ConvertDirectoryAsync(
+                                   root,
+                                   new KnowledgeDocumentConversionOptions { SkipUnsupportedFiles = false }))
+                {
+                }
+            });
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
     }
 }
