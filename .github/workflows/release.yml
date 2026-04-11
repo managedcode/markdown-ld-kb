@@ -23,12 +23,12 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         submodules: true
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -76,7 +76,7 @@ jobs:
       run: dotnet pack ${{ env.SOLUTION }} --configuration Release -p:IncludeSymbols=false -p:SymbolPackageFormat=snupkg --output ${{ env.ARTIFACTS_DIR }}
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: nuget-packages
         path: ${{ env.ARTIFACTS_DIR }}/*.nupkg
@@ -96,13 +96,13 @@ jobs:
 
     steps:
     - name: Download artifacts
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v8
       with:
         name: nuget-packages
         path: ${{ env.ARTIFACTS_DIR }}
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -148,13 +148,13 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Download artifacts
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v8
       with:
         name: nuget-packages
         path: ${{ env.ARTIFACTS_DIR }}
@@ -182,7 +182,7 @@ jobs:
         set -euo pipefail
         VERSION="${{ needs.publish-nuget.outputs.version }}"
         TAG="v${VERSION}"
-        PREVIOUS_TAG="$(git tag --sort=-version:refname | grep -v "^${TAG}$" | head -n1 || true)"
+        PREVIOUS_TAG="$(git tag --sort=-version:refname | grep -v -x -- "${TAG}" | head -n1 || true)"
 
         {
           echo "# Release ${VERSION}"
@@ -207,19 +207,22 @@ jobs:
           for package in ${{ env.ARTIFACTS_DIR }}/*.nupkg; do
             file="$(basename "${package}")"
             base="${file%.nupkg}"
-            package_id="${base%.${VERSION}}"
+            version_suffix=".${VERSION}"
+            package_id="${base%"${version_suffix}"}"
             echo "- [${package_id} ${VERSION}](https://www.nuget.org/packages/${package_id}/${VERSION})"
           done
         } > release_notes.md
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: v${{ needs.publish-nuget.outputs.version }}
-        name: v${{ needs.publish-nuget.outputs.version }}
-        body_path: release_notes.md
-        files: ${{ env.ARTIFACTS_DIR }}/*.nupkg
-        draft: false
-        prerelease: false
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION="${{ needs.publish-nuget.outputs.version }}"
+        TAG="v${VERSION}"
+
+        gh release create "${TAG}" \
+          --title "${TAG}" \
+          --notes-file release_notes.md \
+          ${{ env.ARTIFACTS_DIR }}/*.nupkg
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

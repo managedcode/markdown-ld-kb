@@ -20,12 +20,12 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         submodules: true
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -45,14 +45,14 @@ jobs:
       run: dotnet pack MarkdownLd.Kb.slnx --configuration Release -p:IncludeSymbols=false -p:SymbolPackageFormat=snupkg --output ./artifacts
 
     - name: Upload coverage artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: coverage
         path: TestResults/TUnitCoverage/coverage.cobertura.xml
         retention-days: 5
 
     - name: Upload package artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: nuget-validation-packages
         path: ./artifacts/*.nupkg
