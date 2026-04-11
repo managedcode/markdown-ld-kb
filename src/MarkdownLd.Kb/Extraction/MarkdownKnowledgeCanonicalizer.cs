@@ -1,15 +1,17 @@
+using static ManagedCode.MarkdownLd.Kb.Extraction.MarkdownKnowledgeConstants;
+
 namespace ManagedCode.MarkdownLd.Kb.Extraction;
 
 internal static class MarkdownKnowledgeCanonicalizer
 {
     private static readonly Dictionary<string, int> TypePriority = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["schema:Person"] = 5,
-        ["schema:Organization"] = 5,
-        ["schema:SoftwareApplication"] = 5,
-        ["schema:CreativeWork"] = 4,
-        ["schema:Article"] = 4,
-        ["schema:Thing"] = 1,
+        [SchemaPerson] = 5,
+        [SchemaOrganization] = 5,
+        [SchemaSoftwareApplication] = 5,
+        [SchemaCreativeWork] = 4,
+        [SchemaArticle] = 4,
+        [SchemaThing] = 1,
     };
 
     public static IReadOnlyList<MarkdownKnowledgeEntity> CanonicalizeEntities(
@@ -161,7 +163,7 @@ internal static class MarkdownKnowledgeCanonicalizer
             return entityId;
         }
 
-        if (Uri.TryCreate(value, UriKind.Absolute, out var uri) || value.StartsWith("urn:", StringComparison.OrdinalIgnoreCase))
+        if (Uri.TryCreate(value, UriKind.Absolute, out var uri) || value.StartsWith(UrnSchemePrefix, StringComparison.OrdinalIgnoreCase))
         {
             return value;
         }
@@ -183,7 +185,7 @@ internal static class MarkdownKnowledgeCanonicalizer
     private sealed class EntityGroup
     {
         private string? _label;
-        private string _type = "schema:Thing";
+        private string _type = SchemaThing;
         private readonly HashSet<string> _sameAs = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _keys = new(StringComparer.OrdinalIgnoreCase);
 
@@ -228,7 +230,7 @@ internal static class MarkdownKnowledgeCanonicalizer
 
         public MarkdownKnowledgeEntity ToEntity()
         {
-            var label = string.IsNullOrWhiteSpace(_label) ? "item" : _label!;
+            var label = string.IsNullOrWhiteSpace(_label) ? ItemLabel : _label!;
             return new MarkdownKnowledgeEntity
             {
                 Id = MarkdownKnowledgeIds.BuildEntityId(label),

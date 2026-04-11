@@ -1,12 +1,13 @@
-using System.Text.Json;
 using Microsoft.Extensions.AI;
+using Shouldly;
+using TUnit.Core;
 using ManagedCode.MarkdownLd.Kb.Tests.Support;
 
 namespace ManagedCode.MarkdownLd.Kb.Tests.Ai;
 
 public sealed class ChatClientKnowledgeFactExtractorTests
 {
-    [Fact]
+    [Test]
     public async Task ExtractAsync_UsesStructuredOutputAndNormalizesFacts()
     {
         var documentId = "https://example.com/articles/markdown-ld/";
@@ -73,52 +74,59 @@ public sealed class ChatClientKnowledgeFactExtractorTests
         }
         """;
 
-        var chatClient = new TestChatClient(
-            new ChatResponse(new ChatMessage(ChatRole.Assistant, payload)));
+        var chatClient = new TestChatClient((_, _) => payload);
         var extractor = new ChatClientKnowledgeFactExtractor(chatClient);
 
         var result = await extractor.ExtractAsync(request);
 
-        Assert.Equal(documentId, result.DocumentId);
-        Assert.Equal(chunkId, result.ChunkId);
-        Assert.Equal(2, result.Entities.Count);
-        Assert.Equal(2, result.Assertions.Count);
-        var articleEntity = Assert.Single(result.Entities, entity =>
-            entity.Id == "https://example.com/id/markdown-ld-knowledge-bank");
-        Assert.Equal("schema:Article", articleEntity.Type);
-        Assert.NotNull(articleEntity.SameAs);
-        Assert.Contains("https://kb.example.com/article", articleEntity.SameAs);
+        result.DocumentId.ShouldBe(documentId);
+        result.ChunkId.ShouldBe(chunkId);
+        result.Entities.Count.ShouldBe(2);
+        result.Assertions.Count.ShouldBe(2);
 
-        var sparqlEntity = Assert.Single(result.Entities, entity =>
+        var articleEntity = result.Entities.Single(entity =>
+            entity.Id == "https://example.com/id/markdown-ld-knowledge-bank");
+        articleEntity.Type.ShouldBe("schema:Article");
+        articleEntity.SameAs.ShouldNotBeNull();
+        articleEntity.SameAs.ShouldContain("https://kb.example.com/article");
+
+        var sparqlEntity = result.Entities.Single(entity =>
             entity.Id == "https://example.com/id/sparql");
-        Assert.Equal("SPARQL", sparqlEntity.Label);
-        Assert.Contains(result.Assertions, assertion =>
-            assertion.SubjectId == documentId &&
-            assertion.Predicate == "schema:mentions" &&
-            assertion.ObjectId == "https://example.com/id/markdown-ld-knowledge-bank" &&
-            assertion.Confidence == 0.91 &&
-            assertion.Source == request.ChunkSourceUri);
-        Assert.Contains(result.Assertions, assertion =>
-            assertion.SubjectId == documentId &&
-            assertion.Predicate == "schema:mentions" &&
-            assertion.ObjectId == "https://example.com/id/sparql" &&
-            assertion.Confidence == 1);
-        Assert.Equal(1, chatClient.CallCount);
-        Assert.NotNull(chatClient.LastOptions);
-        Assert.IsType<ChatResponseFormatJson>(chatClient.LastOptions!.ResponseFormat);
-        Assert.Equal(ChatRole.System, chatClient.LastMessages[0].Role);
-        Assert.Equal(ChatRole.User, chatClient.LastMessages[1].Role);
-        Assert.Contains("schema:mentions", chatClient.LastMessages[0].Text);
-        Assert.Contains(documentId, chatClient.LastMessages[1].Text);
-        Assert.Contains(request.ChunkSourceUri, chatClient.LastMessages[1].Text);
-        Assert.Contains("Markdown-LD Knowledge Bank connects Markdown and RDF.", chatClient.LastMessages[1].Text);
+        sparqlEntity.Label.ShouldBe("SPARQL");
+
+        var mentionedArticle = result.Assertions.Single(assertion =>
+            assertion.ObjectId == "https://example.com/id/markdown-ld-knowledge-bank");
+        mentionedArticle.SubjectId.ShouldBe(documentId);
+        mentionedArticle.Predicate.ShouldBe("schema:mentions");
+        mentionedArticle.Confidence.ShouldBe(0.91);
+        mentionedArticle.Source.ShouldBe(request.ChunkSourceUri);
+
+        var mentionedSparql = result.Assertions.Single(assertion =>
+            assertion.ObjectId == "https://example.com/id/sparql");
+        mentionedSparql.SubjectId.ShouldBe(documentId);
+        mentionedSparql.Predicate.ShouldBe("schema:mentions");
+        mentionedSparql.Confidence.ShouldBe(1);
+        mentionedSparql.Source.ShouldBe(request.ChunkSourceUri);
+
+        chatClient.CallCount.ShouldBe(1);
+        chatClient.LastOptions.ShouldNotBeNull();
+        chatClient.LastOptions!.Temperature.ShouldBe(0);
+        chatClient.LastOptions.ResponseFormat.ShouldBeOfType<ChatResponseFormatJson>();
+        chatClient.LastMessages.Count.ShouldBe(2);
+        chatClient.LastMessages[0].Role.ShouldBe(ChatRole.System);
+        chatClient.LastMessages[1].Role.ShouldBe(ChatRole.User);
+        chatClient.LastMessages[0].Text.ShouldContain("schema:mentions");
+        chatClient.LastMessages[1].Text.ShouldContain(documentId);
+        chatClient.LastMessages[1].Text.ShouldContain(request.ChunkSourceUri);
+        chatClient.LastMessages[1].Text.ShouldContain("Markdown-LD Knowledge Bank connects Markdown and RDF.");
+        chatClient.LastMessages[1].Text.ShouldContain("FRONT_MATTER:");
+        chatClient.LastMessages[1].Text.ShouldContain("- tags: knowledge-graph, rdf");
     }
 
-    [Fact]
+    [Test]
     public async Task ExtractAsync_ReturnsEmptyResultForInvalidStructuredOutput()
     {
-        var chatClient = new TestChatClient(
-            new ChatResponse(new ChatMessage(ChatRole.Assistant, "not json")));
+        var chatClient = new TestChatClient((_, _) => "not json");
         var extractor = new ChatClientKnowledgeFactExtractor(chatClient);
 
         var result = await extractor.ExtractAsync(
@@ -127,17 +135,16 @@ public sealed class ChatClientKnowledgeFactExtractorTests
                 "chunk-02",
                 "Markdown only."));
 
-        Assert.Empty(result.Entities);
-        Assert.Empty(result.Assertions);
-        Assert.Equal("not json", result.RawResponse);
-        Assert.Equal(1, chatClient.CallCount);
+        result.Entities.ShouldBeEmpty();
+        result.Assertions.ShouldBeEmpty();
+        result.RawResponse.ShouldBe("not json");
+        chatClient.CallCount.ShouldBe(1);
     }
 
-    [Fact]
+    [Test]
     public async Task ExtractAsync_SkipsBlankMarkdownWithoutCallingTheClient()
     {
-        var chatClient = new TestChatClient(
-            new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}")));
+        var chatClient = new TestChatClient((_, _) => "{}");
         var extractor = new ChatClientKnowledgeFactExtractor(chatClient);
 
         var result = await extractor.ExtractAsync(
@@ -146,9 +153,22 @@ public sealed class ChatClientKnowledgeFactExtractorTests
                 "chunk-03",
                 "   "));
 
-        Assert.Empty(result.Entities);
-        Assert.Empty(result.Assertions);
-        Assert.Equal(string.Empty, result.RawResponse);
-        Assert.Equal(0, chatClient.CallCount);
+        result.Entities.ShouldBeEmpty();
+        result.Assertions.ShouldBeEmpty();
+        result.RawResponse.ShouldBeEmpty();
+        chatClient.CallCount.ShouldBe(0);
+    }
+
+    [Test]
+    public async Task ExtractAsync_RejectsMissingDocumentIdentity()
+    {
+        var extractor = new ChatClientKnowledgeFactExtractor(
+            new TestChatClient((_, _) => "{}"));
+
+        await Should.ThrowAsync<ArgumentException>(() => extractor.ExtractAsync(
+            new KnowledgeFactExtractionRequest(
+                "",
+                "chunk-04",
+                "Markdown")));
     }
 }

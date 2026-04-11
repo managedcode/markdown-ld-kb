@@ -5,6 +5,9 @@ namespace ManagedCode.MarkdownLd.Kb.Rdf;
 
 public sealed class KnowledgeGraphBuilder
 {
+    private const string DateFormat = "yyyy-MM-dd";
+    private const string TagSeparator = ", ";
+
     public Graph Build(KnowledgeGraphDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -37,7 +40,7 @@ public sealed class KnowledgeGraphBuilder
             graph.Assert(new Triple(
                 articleNode,
                 graph.CreateUriNode(KbNamespaces.SchemaDatePublished),
-                graph.CreateLiteralNode(article.DatePublished.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), KbNamespaces.XsdDate)));
+                graph.CreateLiteralNode(article.DatePublished.Value.ToString(DateFormat, CultureInfo.InvariantCulture), KbNamespaces.XsdDate)));
         }
 
         if (article.DateModified is not null)
@@ -45,12 +48,12 @@ public sealed class KnowledgeGraphBuilder
             graph.Assert(new Triple(
                 articleNode,
                 graph.CreateUriNode(KbNamespaces.SchemaDateModified),
-                graph.CreateLiteralNode(article.DateModified.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), KbNamespaces.XsdDate)));
+                graph.CreateLiteralNode(article.DateModified.Value.ToString(DateFormat, CultureInfo.InvariantCulture), KbNamespaces.XsdDate)));
         }
 
         if (article.Tags is { Count: > 0 })
         {
-            graph.Assert(new Triple(articleNode, graph.CreateUriNode(KbNamespaces.SchemaKeywords), graph.CreateLiteralNode(string.Join(", ", article.Tags))));
+            graph.Assert(new Triple(articleNode, graph.CreateUriNode(KbNamespaces.SchemaKeywords), graph.CreateLiteralNode(string.Join(TagSeparator, article.Tags))));
         }
 
         if (!string.IsNullOrWhiteSpace(article.Summary))
@@ -93,7 +96,7 @@ public sealed class KnowledgeGraphBuilder
 
         if (assertion.Source is not null)
         {
-            graph.Assert(new Triple(assertionNode, graph.CreateUriNode(new Uri($"{KbNamespaces.Prov}wasDerivedFrom")), graph.CreateUriNode(assertion.Source)));
+            graph.Assert(new Triple(assertionNode, graph.CreateUriNode(KbNamespaces.ProvWasDerivedFrom), graph.CreateUriNode(assertion.Source)));
         }
 
         if (assertion.Chunk is not null)

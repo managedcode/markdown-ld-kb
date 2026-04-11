@@ -9,7 +9,7 @@ Related Features: `docs/Architecture.md`
 ## Implementation plan
 
 - [x] Update project rules and architecture to require `IChatClient`.
-- [ ] Add `Microsoft.Extensions.AI.Abstractions` to the production project.
+- [x] Add `Microsoft.Extensions.AI` and `Microsoft.Extensions.AI.Abstractions` to the production project.
 - [ ] Implement `ChatClientKnowledgeFactExtractor` behind the `IKnowledgeFactExtractor` port.
 - [ ] Use structured output records for entities and assertions.
 - [ ] Add non-network integration tests for the adapter contract.
@@ -33,7 +33,7 @@ Use `Microsoft.Extensions.AI.IChatClient` as the LLM dependency boundary from th
 
 Key points:
 
-- The production library references `Microsoft.Extensions.AI.Abstractions`.
+- The production library references `Microsoft.Extensions.AI` and `Microsoft.Extensions.AI.Abstractions`.
 - `ChatClientKnowledgeFactExtractor` accepts an `IChatClient` through constructor injection.
 - Structured extraction output is modeled as repository records and requested via `GetResponseAsync<T>()`.
 - Concrete providers and Microsoft Agent Framework workflow packages are not core dependencies.

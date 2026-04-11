@@ -28,4 +28,5 @@ Purpose: Production library for Markdown-LD Knowledge Bank.
 
 - RDF/SPARQL behaviour must be tested through real dotNetRDF execution.
 - LLM extraction must use `IChatClient`; provider SDKs belong in host apps.
+- Do not use inline string literals in production code. Put regex patterns, RDF/SPARQL tokens, namespace URIs, YAML keys, prompt fragments, and error messages in named constants/static readonly fields.
 - Keep public contracts compact and stable.

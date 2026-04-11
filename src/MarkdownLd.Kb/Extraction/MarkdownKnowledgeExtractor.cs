@@ -1,3 +1,5 @@
+using static ManagedCode.MarkdownLd.Kb.Extraction.MarkdownKnowledgeConstants;
+
 namespace ManagedCode.MarkdownLd.Kb.Extraction;
 
 public sealed class MarkdownKnowledgeExtractor
@@ -52,7 +54,7 @@ public sealed class MarkdownKnowledgeExtractor
             return MarkdownKnowledgeIds.HumanizeLabel(System.IO.Path.GetFileNameWithoutExtension(sourcePath));
         }
 
-        return "Untitled";
+        return UntitledTitle;
     }
 
     private static IReadOnlyList<MarkdownKnowledgeEntityCandidate> BuildEntityCandidates(
@@ -78,9 +80,9 @@ public sealed class MarkdownKnowledgeExtractor
             candidates.Add(new MarkdownKnowledgeEntityCandidate
             {
                 Label = author.Name.Trim(),
-                Type = string.IsNullOrWhiteSpace(author.Type) ? "schema:Person" : author.Type!,
+                Type = string.IsNullOrWhiteSpace(author.Type) ? SchemaPerson : author.Type!,
                 SameAs = string.IsNullOrWhiteSpace(author.SameAs) ? [] : [author.SameAs!],
-                SourceKind = "front-matter",
+                SourceKind = FrontMatterSource,
             });
         }
     }
@@ -92,9 +94,9 @@ public sealed class MarkdownKnowledgeExtractor
             candidates.Add(new MarkdownKnowledgeEntityCandidate
             {
                 Label = topic.Label.Trim(),
-                Type = "schema:Thing",
+                Type = SchemaThing,
                 SameAs = string.IsNullOrWhiteSpace(topic.SameAs) ? [] : [topic.SameAs!],
-                SourceKind = "front-matter",
+                SourceKind = FrontMatterSource,
             });
         }
     }
@@ -106,9 +108,9 @@ public sealed class MarkdownKnowledgeExtractor
             candidates.Add(new MarkdownKnowledgeEntityCandidate
             {
                 Label = hint.Label.Trim(),
-                Type = string.IsNullOrWhiteSpace(hint.Type) ? "schema:Thing" : hint.Type!,
+                Type = string.IsNullOrWhiteSpace(hint.Type) ? SchemaThing : hint.Type!,
                 SameAs = string.IsNullOrWhiteSpace(hint.SameAs) ? [] : [hint.SameAs!],
-                SourceKind = "front-matter",
+                SourceKind = FrontMatterSource,
             });
         }
     }
@@ -149,9 +151,9 @@ public sealed class MarkdownKnowledgeExtractor
                 candidates.Add(new MarkdownKnowledgeEntityCandidate
                 {
                     Label = label,
-                    Type = "schema:Thing",
+                    Type = SchemaThing,
                     SameAs = [],
-                    SourceKind = "arrow",
+                    SourceKind = ArrowSource,
                 });
             }
         }
@@ -168,10 +170,10 @@ public sealed class MarkdownKnowledgeExtractor
             .Select(author => new MarkdownKnowledgeAssertionCandidate
             {
                 Subject = article.Title,
-                Predicate = "schema:author",
+                Predicate = SchemaAuthor,
                 Object = author.Name,
                 Confidence = 1.0,
-                Source = "front-matter",
+                Source = FrontMatterSource,
             }));
 
         assertions.AddRange(article.About
@@ -179,10 +181,10 @@ public sealed class MarkdownKnowledgeExtractor
             .Select(topic => new MarkdownKnowledgeAssertionCandidate
             {
                 Subject = article.Title,
-                Predicate = "schema:about",
+                Predicate = SchemaAbout,
                 Object = topic.Label,
                 Confidence = 1.0,
-                Source = "front-matter",
+                Source = FrontMatterSource,
             }));
 
         assertions.AddRange(scan.Entities
@@ -190,10 +192,10 @@ public sealed class MarkdownKnowledgeExtractor
             .Select(entity => new MarkdownKnowledgeAssertionCandidate
             {
                 Subject = article.Title,
-                Predicate = "schema:mentions",
+                Predicate = SchemaMentions,
                 Object = entity.Label,
-                Confidence = entity.SourceKind == "wikilink" ? 0.95 : entity.SourceKind == "markdown-link" ? 0.85 : 0.9,
-                Source = "markdown",
+                Confidence = entity.SourceKind == WikiLinkSource ? 0.95 : entity.SourceKind == MarkdownLinkSource ? 0.85 : 0.9,
+                Source = MarkdownSource,
             }));
 
         assertions.AddRange(scan.Assertions);

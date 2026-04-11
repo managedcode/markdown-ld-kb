@@ -1,4 +1,6 @@
-namespace ManagedCode.MarkdownLd.Kb;
+using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
+
+namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class KnowledgeFactMerger
 {
@@ -6,7 +8,7 @@ public sealed class KnowledgeFactMerger
 
     public KnowledgeFactMerger(Uri? baseUri = null)
     {
-        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri("https://example.com/", UriKind.Absolute));
+        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
     }
 
     public KnowledgeExtractionResult Merge(params KnowledgeExtractionResult[] results)
@@ -51,7 +53,7 @@ public sealed class KnowledgeFactMerger
         {
             Id = canonicalId,
             Label = label,
-            Type = string.IsNullOrWhiteSpace(entity.Type) ? "schema:Thing" : entity.Type.Trim(),
+            Type = string.IsNullOrWhiteSpace(entity.Type) ? DefaultSchemaThing : entity.Type.Trim(),
             SameAs = entity.SameAs.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             Source = entity.Source,
         };
@@ -79,7 +81,7 @@ public sealed class KnowledgeFactMerger
             return absolute.AbsoluteUri;
         }
 
-        if (nodeId.StartsWith("urn:", StringComparison.OrdinalIgnoreCase))
+        if (nodeId.StartsWith(UriSchemePrefix, StringComparison.OrdinalIgnoreCase))
         {
             return nodeId;
         }
@@ -108,7 +110,7 @@ public sealed class KnowledgeFactMerger
 
     private static void UpsertAssertion(IDictionary<string, KnowledgeAssertionFact> assertions, KnowledgeAssertionFact assertion)
     {
-        var key = $"{assertion.SubjectId}||{assertion.Predicate}||{assertion.ObjectId}";
+        var key = assertion.SubjectId + AssertionKeySeparator + assertion.Predicate + AssertionKeySeparator + assertion.ObjectId;
         if (!assertions.TryGetValue(key, out var existing))
         {
             assertions[key] = assertion;
@@ -131,12 +133,12 @@ public sealed class KnowledgeFactMerger
     {
         return type switch
         {
-            "schema:Person" => 5,
-            "schema:Organization" => 5,
-            "schema:SoftwareApplication" => 5,
-            "schema:CreativeWork" => 4,
-            "schema:Article" => 4,
-            "schema:Thing" => 1,
+            SchemaPersonTypeText => 5,
+            SchemaOrganizationTypeText => 5,
+            SchemaSoftwareApplicationTypeText => 5,
+            SchemaCreativeWorkTypeText => 4,
+            SchemaArticleTypeText => 4,
+            SchemaThingTypeText => 1,
             _ => 0,
         };
     }

@@ -14,6 +14,7 @@ Purpose: Flow-level verification for Markdown-LD Knowledge Bank.
 
 - Do not use mocks, stubs, or fakes.
 - The only exception is a local test implementation of `Microsoft.Extensions.AI.IChatClient`.
+- Use TUnit for tests and Shouldly for assertions.
 - Tests must assert real caller-visible behaviour, not property assignment.
 - Keep test namespaces under `ManagedCode.MarkdownLd.Kb.Tests`.
 

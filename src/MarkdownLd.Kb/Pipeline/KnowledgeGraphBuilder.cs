@@ -1,6 +1,8 @@
+using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
+using System.Globalization;
 using VDS.RDF;
 
-namespace ManagedCode.MarkdownLd.Kb;
+namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class KnowledgeGraphBuilder
 {
@@ -8,7 +10,7 @@ public sealed class KnowledgeGraphBuilder
 
     public KnowledgeGraphBuilder(Uri? baseUri = null)
     {
-        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri("https://example.com/", UriKind.Absolute));
+        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
     }
 
     public KnowledgeGraph Build(IReadOnlyList<MarkdownDocument> documents, KnowledgeExtractionResult facts)
@@ -18,7 +20,7 @@ public sealed class KnowledgeGraphBuilder
 
         foreach (var document in documents)
         {
-            AddDocument(graph, document, facts);
+            AddDocument(graph, document);
         }
 
         foreach (var entity in facts.Entities)
@@ -36,14 +38,14 @@ public sealed class KnowledgeGraphBuilder
 
     private static void RegisterNamespaces(IGraph graph)
     {
-        graph.NamespaceMap.AddNamespace("schema", new Uri("https://schema.org/"));
-        graph.NamespaceMap.AddNamespace("kb", new Uri("https://example.com/vocab/kb#"));
-        graph.NamespaceMap.AddNamespace("prov", new Uri("http://www.w3.org/ns/prov#"));
-        graph.NamespaceMap.AddNamespace("rdf", new Uri("http://www.w3.org/1999/02/22-rdf-syntax-ns#"));
-        graph.NamespaceMap.AddNamespace("xsd", new Uri("http://www.w3.org/2001/XMLSchema#"));
+        graph.NamespaceMap.AddNamespace(SchemaPrefix, SchemaNamespaceUri);
+        graph.NamespaceMap.AddNamespace(KbPrefix, KbNamespaceUri);
+        graph.NamespaceMap.AddNamespace(ProvPrefix, ProvNamespaceUri);
+        graph.NamespaceMap.AddNamespace(RdfPrefix, RdfNamespaceUri);
+        graph.NamespaceMap.AddNamespace(XsdPrefix, XsdNamespaceUri);
     }
 
-    private void AddDocument(Graph graph, MarkdownDocument document, KnowledgeExtractionResult facts)
+    private void AddDocument(Graph graph, MarkdownDocument document)
     {
         if (document.Sections.Count == 0 && document.FrontMatter.Count == 0 && string.IsNullOrWhiteSpace(document.Body))
         {
@@ -51,44 +53,44 @@ public sealed class KnowledgeGraphBuilder
         }
 
         var article = graph.CreateUriNode(document.DocumentUri);
-        var schemaArticle = graph.CreateUriNode(new Uri("https://schema.org/Article"));
-        var schemaName = graph.CreateUriNode(new Uri("https://schema.org/name"));
-        var schemaDescription = graph.CreateUriNode(new Uri("https://schema.org/description"));
-        var schemaDatePublished = graph.CreateUriNode(new Uri("https://schema.org/datePublished"));
-        var schemaDateModified = graph.CreateUriNode(new Uri("https://schema.org/dateModified"));
-        var schemaKeywords = graph.CreateUriNode(new Uri("https://schema.org/keywords"));
-        var schemaAbout = graph.CreateUriNode(new Uri("https://schema.org/about"));
-        var schemaAuthor = graph.CreateUriNode(new Uri("https://schema.org/author"));
-        var provWasDerivedFrom = graph.CreateUriNode(new Uri("http://www.w3.org/ns/prov#wasDerivedFrom"));
+        var schemaArticle = graph.CreateUriNode(SchemaArticleUri);
+        var schemaName = graph.CreateUriNode(SchemaNameUri);
+        var schemaDescription = graph.CreateUriNode(SchemaDescriptionUri);
+        var schemaDatePublished = graph.CreateUriNode(SchemaDatePublishedUri);
+        var schemaDateModified = graph.CreateUriNode(SchemaDateModifiedUri);
+        var schemaKeywords = graph.CreateUriNode(SchemaKeywordsUri);
+        var schemaAbout = graph.CreateUriNode(SchemaAboutUri);
+        var schemaAuthor = graph.CreateUriNode(SchemaAuthorUri);
+        var provWasDerivedFrom = graph.CreateUriNode(ProvWasDerivedFromUri);
 
-        graph.Assert(new Triple(article, graph.CreateUriNode(new Uri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")), schemaArticle));
+        graph.Assert(new Triple(article, graph.CreateUriNode(RdfTypeUri), schemaArticle));
         graph.Assert(new Triple(article, schemaName, graph.CreateLiteralNode(document.Title)));
         graph.Assert(new Triple(article, provWasDerivedFrom, graph.CreateUriNode(document.DocumentUri)));
 
-        if (TryGetString(document.FrontMatter, "summary", out var summary) ||
-            TryGetString(document.FrontMatter, "description", out summary))
+        if (TryGetString(document.FrontMatter, SummaryKey, out var summary) ||
+            TryGetString(document.FrontMatter, DescriptionKey, out summary))
         {
             graph.Assert(new Triple(article, schemaDescription, graph.CreateLiteralNode(summary ?? string.Empty)));
         }
 
-        if (TryGetString(document.FrontMatter, "date_published", out var datePublished) ||
-            TryGetString(document.FrontMatter, "datePublished", out datePublished))
+        if (TryGetString(document.FrontMatter, DatePublishedKey, out var datePublished) ||
+            TryGetString(document.FrontMatter, DatePublishedCamelKey, out datePublished))
         {
             graph.Assert(new Triple(article, schemaDatePublished, CreateDateLiteral(graph, datePublished)));
         }
 
-        if (TryGetString(document.FrontMatter, "date_modified", out var dateModified) ||
-            TryGetString(document.FrontMatter, "dateModified", out dateModified))
+        if (TryGetString(document.FrontMatter, DateModifiedKey, out var dateModified) ||
+            TryGetString(document.FrontMatter, DateModifiedCamelKey, out dateModified))
         {
             graph.Assert(new Triple(article, schemaDateModified, CreateDateLiteral(graph, dateModified)));
         }
 
-        foreach (var tag in ReadStrings(document.FrontMatter, "tags").Concat(ReadStrings(document.FrontMatter, "keywords")).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var tag in ReadStrings(document.FrontMatter, TagsKey).Concat(ReadStrings(document.FrontMatter, KeywordsKey)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             graph.Assert(new Triple(article, schemaKeywords, graph.CreateLiteralNode(tag)));
         }
 
-        foreach (var about in ReadStrings(document.FrontMatter, "about"))
+        foreach (var about in ReadStrings(document.FrontMatter, AboutKey))
         {
             var id = KnowledgeNaming.CreateEntityId(_baseUri, about);
             graph.Assert(new Triple(article, schemaAbout, graph.CreateUriNode(new Uri(id))));
@@ -105,11 +107,11 @@ public sealed class KnowledgeGraphBuilder
     {
         var entityId = entity.Id ?? KnowledgeNaming.CreateEntityId(_baseUri, entity.Label);
         var subject = graph.CreateUriNode(new Uri(entityId));
-        var rdfType = graph.CreateUriNode(new Uri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"));
-        var schemaName = graph.CreateUriNode(new Uri("https://schema.org/name"));
-        var schemaSameAs = graph.CreateUriNode(new Uri("https://schema.org/sameAs"));
+        var rdfType = graph.CreateUriNode(RdfTypeUri);
+        var schemaName = graph.CreateUriNode(SchemaNameUri);
+        var schemaSameAs = graph.CreateUriNode(SchemaSameAsUri);
 
-        graph.Assert(new Triple(subject, rdfType, graph.CreateUriNode(new Uri(NormalizeTypeUri(entity.Type)))));
+        graph.Assert(new Triple(subject, rdfType, graph.CreateUriNode(NormalizeTypeUri(entity.Type))));
         graph.Assert(new Triple(subject, schemaName, graph.CreateLiteralNode(entity.Label)));
         foreach (var sameAs in entity.SameAs.Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -120,7 +122,7 @@ public sealed class KnowledgeGraphBuilder
         }
     }
 
-    private void AddAssertion(Graph graph, KnowledgeAssertionFact assertion)
+    private static void AddAssertion(Graph graph, KnowledgeAssertionFact assertion)
     {
         if (!Uri.TryCreate(assertion.SubjectId, UriKind.Absolute, out var subjectUri) ||
             !Uri.TryCreate(assertion.ObjectId, UriKind.Absolute, out var objectUri))
@@ -135,44 +137,45 @@ public sealed class KnowledgeGraphBuilder
                 graph.CreateUriNode(predicateUri),
                 graph.CreateUriNode(objectUri)));
 
-        var confidenceNode = graph.CreateUriNode(new Uri("https://example.com/vocab/kb#confidence"));
-        var provWasDerivedFrom = graph.CreateUriNode(new Uri("http://www.w3.org/ns/prov#wasDerivedFrom"));
         if (!string.IsNullOrWhiteSpace(assertion.Source))
         {
-            graph.Assert(new Triple(graph.CreateUriNode(subjectUri), provWasDerivedFrom, graph.CreateUriNode(new Uri(assertion.Source))));
+            graph.Assert(new Triple(graph.CreateUriNode(subjectUri), graph.CreateUriNode(ProvWasDerivedFromUri), graph.CreateUriNode(new Uri(assertion.Source))));
         }
     }
 
     private static Uri ResolvePredicate(string predicate)
     {
+        if (predicate.Contains(':', StringComparison.Ordinal))
+        {
+            var separatorIndex = predicate.IndexOf(':');
+            var prefix = predicate[..separatorIndex];
+            var local = predicate[(separatorIndex + 1)..];
+            return prefix.ToLowerInvariant() switch
+            {
+                SchemaPrefix => new Uri(SchemaNamespaceText + local),
+                KbPrefix => new Uri(KbNamespaceText + local),
+                ProvPrefix => new Uri(ProvNamespaceText + local),
+                RdfPrefix => new Uri(RdfNamespaceText + local),
+                XsdPrefix => new Uri(XsdNamespaceText + local),
+                _ => Uri.TryCreate(predicate, UriKind.Absolute, out var prefixedAbsolute)
+                    ? prefixedAbsolute
+                    : new Uri(KbNamespaceText + KnowledgeNaming.Slugify(predicate)),
+            };
+        }
+
         if (Uri.TryCreate(predicate, UriKind.Absolute, out var absolute))
         {
             return absolute;
         }
 
-        if (predicate.Contains(':', StringComparison.Ordinal))
-        {
-            var prefix = predicate[..predicate.IndexOf(':')];
-            var local = predicate[(predicate.IndexOf(':') + 1)..];
-            return prefix.ToLowerInvariant() switch
-            {
-                "schema" => new Uri($"https://schema.org/{local}"),
-                "kb" => new Uri($"https://example.com/vocab/kb#{local}"),
-                "prov" => new Uri($"http://www.w3.org/ns/prov#{local}"),
-                "rdf" => new Uri($"http://www.w3.org/1999/02/22-rdf-syntax-ns#{local}"),
-                "xsd" => new Uri($"http://www.w3.org/2001/XMLSchema#{local}"),
-                _ => new Uri($"https://example.com/vocab/kb#{KnowledgeNaming.Slugify(predicate)}"),
-            };
-        }
-
         return predicate.ToLowerInvariant() switch
         {
-            "mentions" => new Uri("https://schema.org/mentions"),
-            "about" => new Uri("https://schema.org/about"),
-            "author" => new Uri("https://schema.org/author"),
-            "creator" => new Uri("https://schema.org/creator"),
-            "sameas" => new Uri("https://schema.org/sameAs"),
-            _ => new Uri($"https://example.com/vocab/kb#{KnowledgeNaming.Slugify(predicate)}"),
+            MentionPredicateKey => SchemaMentionsUri,
+            AboutPredicateKey => SchemaAboutUri,
+            AuthorPredicateKey => SchemaAuthorUri,
+            CreatorPredicateKey => SchemaCreatorUri,
+            SameAsPredicateKey => SchemaSameAsUri,
+            _ => new Uri(KbNamespaceText + KnowledgeNaming.Slugify(predicate)),
         };
     }
 
@@ -183,14 +186,14 @@ public sealed class KnowledgeGraphBuilder
             return ResolvePredicate(type);
         }
 
-        return new Uri($"https://schema.org/{KnowledgeNaming.Slugify(type)}");
+        return new Uri(SchemaNamespaceText + KnowledgeNaming.Slugify(type));
     }
 
     private static ILiteralNode CreateDateLiteral(Graph graph, string? value)
     {
         if (DateOnly.TryParse(value, out var dateOnly))
         {
-            return graph.CreateLiteralNode(dateOnly.ToString("yyyy-MM-dd"), new Uri("http://www.w3.org/2001/XMLSchema#date"));
+            return graph.CreateLiteralNode(dateOnly.ToString(DotNetDateFormat, CultureInfo.InvariantCulture), XsdDateUri);
         }
 
         return graph.CreateLiteralNode(value ?? string.Empty);
@@ -246,7 +249,7 @@ public sealed class KnowledgeGraphBuilder
     {
         foreach (var entry in frontMatter)
         {
-            if (!entry.Key.Equals("author", StringComparison.OrdinalIgnoreCase))
+            if (!entry.Key.Equals(AuthorKey, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -257,16 +260,16 @@ public sealed class KnowledgeGraphBuilder
                 {
                     if (item is IReadOnlyDictionary<string, object?> map)
                     {
-                        yield return ((map.TryGetValue("label", out var label) ? label?.ToString() : null)
-                            ?? (map.TryGetValue("name", out var name) ? name?.ToString() : null)
-                            ?? string.Empty, map.TryGetValue("type", out var type) ? type?.ToString() : null);
+                        yield return ((map.TryGetValue(LabelKey, out var label) ? label?.ToString() : null)
+                            ?? (map.TryGetValue(NameKey, out var name) ? name?.ToString() : null)
+                            ?? string.Empty, map.TryGetValue(TypeKey, out var type) ? type?.ToString() : null);
                     }
                     else
                     {
                         var text = item?.ToString()?.Trim();
                         if (!string.IsNullOrWhiteSpace(text))
                         {
-                            yield return (text, "schema:Person");
+                            yield return (text, SchemaPersonTypeText);
                         }
                     }
                 }
@@ -276,7 +279,7 @@ public sealed class KnowledgeGraphBuilder
                 var text = entry.Value?.ToString()?.Trim();
                 if (!string.IsNullOrWhiteSpace(text))
                 {
-                    yield return (text, "schema:Person");
+                    yield return (text, SchemaPersonTypeText);
                 }
             }
         }

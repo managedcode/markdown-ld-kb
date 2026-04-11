@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using static ManagedCode.MarkdownLd.Kb.Extraction.MarkdownKnowledgeConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Extraction;
 
@@ -17,29 +18,29 @@ public static class MarkdownKnowledgeIds
             ? title
             : NormalizeSourcePath(sourcePath);
 
-        return BuildId("article", sourceLabel);
+        return BuildId(ArticleKind, sourceLabel);
     }
 
-    public static string BuildEntityId(string label) => BuildId("entity", label);
+    public static string BuildEntityId(string label) => BuildId(EntityKind, label);
 
     public static string BuildId(string kind, string label)
     {
         var slug = Slugify(label);
-        return $"{Namespace}{kind}/{slug}";
+        return string.Concat(Namespace, kind, IdSeparator, slug);
     }
 
     public static string Slugify(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return "item";
+            return ItemLabel;
         }
 
         var slug = value.Trim().ToLowerInvariant();
-        slug = Regex.Replace(slug, @"[^a-z0-9\s-]", string.Empty, RegexOptions.CultureInvariant);
-        slug = Regex.Replace(slug, @"[\s_]+", "-", RegexOptions.CultureInvariant);
-        slug = Regex.Replace(slug, @"-+", "-", RegexOptions.CultureInvariant);
-        return slug.Trim('-') is { Length: > 0 } normalized ? normalized : "item";
+        slug = Regex.Replace(slug, SlugInvalidCharactersPattern, string.Empty, RegexOptions.CultureInvariant);
+        slug = Regex.Replace(slug, SlugWhitespacePattern, Hyphen, RegexOptions.CultureInvariant);
+        slug = Regex.Replace(slug, SlugHyphenPattern, Hyphen, RegexOptions.CultureInvariant);
+        return slug.Trim('-') is { Length: > 0 } normalized ? normalized : ItemLabel;
     }
 
     public static string HumanizeLabel(string value)
@@ -50,9 +51,9 @@ public static class MarkdownKnowledgeIds
         }
 
         var text = value.Trim();
-        text = Regex.Replace(text, @"([a-z0-9])([A-Z])", "$1 $2", RegexOptions.CultureInvariant);
-        text = Regex.Replace(text, @"[-_/]+", " ", RegexOptions.CultureInvariant);
-        text = Regex.Replace(text, @"\s+", " ", RegexOptions.CultureInvariant);
+        text = Regex.Replace(text, CamelBoundaryPattern, CamelBoundaryReplacement, RegexOptions.CultureInvariant);
+        text = Regex.Replace(text, LabelSeparatorPattern, Space, RegexOptions.CultureInvariant);
+        text = Regex.Replace(text, WhitespacePattern, Space, RegexOptions.CultureInvariant);
         return text.Trim();
     }
 
@@ -60,13 +61,12 @@ public static class MarkdownKnowledgeIds
     {
         if (string.IsNullOrWhiteSpace(sourcePath))
         {
-            return "untitled";
+            return UntitledLabel;
         }
 
         var normalized = sourcePath.Replace('\\', '/');
-        normalized = Regex.Replace(normalized, @"\.[^.\/]+$", string.Empty, RegexOptions.CultureInvariant);
+        normalized = Regex.Replace(normalized, ExtensionPattern, string.Empty, RegexOptions.CultureInvariant);
         normalized = normalized.Replace('/', '-');
         return normalized;
     }
 }
-

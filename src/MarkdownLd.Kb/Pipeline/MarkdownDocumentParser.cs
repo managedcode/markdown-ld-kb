@@ -1,19 +1,33 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Markdig;
+using Markdig.Syntax;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
+using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
-namespace ManagedCode.MarkdownLd.Kb;
+namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class MarkdownDocumentParser
 {
-    private static readonly Regex HeadingRegex = new(@"^(#{1,6})\s+(.+?)\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex HeadingRegex = new(HeadingPattern, RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly MarkdownPipeline MarkdigPipeline = new MarkdownPipelineBuilder()
+        .UsePreciseSourceLocation()
+        .UseYamlFrontMatter()
+        .UseDefinitionLists()
+        .UsePipeTables()
+        .UseGridTables()
+        .UseTaskLists()
+        .UseEmphasisExtras()
+        .UseGenericAttributes()
+        .Build();
+
     private readonly Uri _baseUri;
     private readonly IDeserializer _yamlDeserializer;
 
     public MarkdownDocumentParser(Uri? baseUri = null)
     {
-        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri("https://example.com/", UriKind.Absolute));
+        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
         _yamlDeserializer = new DeserializerBuilder()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .IgnoreUnmatchedProperties()
@@ -44,7 +58,7 @@ public sealed class MarkdownDocumentParser
 
     private static string ResolveTitle(IReadOnlyDictionary<string, object?> frontMatter, string body, string sourcePath)
     {
-        if (TryGetString(frontMatter, "title", out var title) && !string.IsNullOrWhiteSpace(title))
+        if (TryGetString(frontMatter, TitleKey, out var title) && !string.IsNullOrWhiteSpace(title))
         {
             return title.Trim();
         }
@@ -60,7 +74,7 @@ public sealed class MarkdownDocumentParser
 
     private (IReadOnlyDictionary<string, object?> FrontMatter, string Body) ParseFrontMatter(string content)
     {
-        if (!content.StartsWith("---", StringComparison.Ordinal))
+        if (!content.StartsWith(FrontMatterMarker, StringComparison.Ordinal))
         {
             return (new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase), content);
         }
@@ -74,7 +88,7 @@ public sealed class MarkdownDocumentParser
         var endIndex = -1;
         for (var i = 1; i < lines.Length; i++)
         {
-            if (lines[i].Trim() == "---")
+            if (lines[i].Trim() == FrontMatterMarker)
             {
                 endIndex = i;
                 break;
@@ -86,7 +100,7 @@ public sealed class MarkdownDocumentParser
             return (new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase), content);
         }
 
-        var yaml = string.Join('\n', lines.Skip(1).Take(endIndex - 1));
+        var yaml = string.Join(NewLineDelimiter, lines.Skip(1).Take(endIndex - 1));
         IReadOnlyDictionary<string, object?> frontMatter;
         try
         {
@@ -98,7 +112,7 @@ public sealed class MarkdownDocumentParser
             frontMatter = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         }
 
-        var body = string.Join('\n', lines.Skip(endIndex + 1));
+        var body = string.Join(NewLineDelimiter, lines.Skip(endIndex + 1));
         return (frontMatter, body.TrimStart('\r', '\n'));
     }
 
@@ -143,8 +157,8 @@ public sealed class MarkdownDocumentParser
 
         return value switch
         {
-            DateTime dateTime => dateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            DateTime dateTime => dateTime.ToString(DotNetDateFormat, CultureInfo.InvariantCulture),
+            DateOnly dateOnly => dateOnly.ToString(DotNetDateFormat, CultureInfo.InvariantCulture),
             _ => value,
         };
     }
@@ -170,9 +184,13 @@ public sealed class MarkdownDocumentParser
 
         var sections = new List<MarkdownSection>();
         var headingPath = new List<string>();
-        var matches = HeadingRegex.Matches(body);
+        var headings = Markdig.Markdown.Parse(body, MarkdigPipeline)
+            .Descendants<HeadingBlock>()
+            .Where(static heading => heading.Span.Start >= 0)
+            .OrderBy(static heading => heading.Span.Start)
+            .ToArray();
 
-        if (matches.Count == 0)
+        if (headings.Length == 0)
         {
             return string.IsNullOrWhiteSpace(body)
                 ? []
@@ -180,22 +198,23 @@ public sealed class MarkdownDocumentParser
         }
 
         var currentStart = 0;
-        for (var i = 0; i < matches.Count; i++)
+        for (var i = 0; i < headings.Length; i++)
         {
-            var headingMatch = matches[i];
-            var text = body.Substring(currentStart, headingMatch.Index - currentStart);
-            AddSectionIfNeeded(sections, headingPath, text, currentStart, headingMatch.Index);
+            var heading = headings[i];
+            var headingStart = Math.Clamp(heading.Span.Start, 0, body.Length);
+            var text = body.Substring(currentStart, headingStart - currentStart);
+            AddSectionIfNeeded(sections, headingPath, text, currentStart, headingStart);
 
-            var level = headingMatch.Groups[1].Value.Length;
-            var heading = headingMatch.Groups[2].Value.Trim();
+            var level = heading.Level;
+            var headingText = ExtractHeadingText(body, heading);
 
             while (headingPath.Count >= level)
             {
                 headingPath.RemoveAt(headingPath.Count - 1);
             }
 
-            headingPath.Add(heading);
-            currentStart = headingMatch.Index + headingMatch.Length;
+            headingPath.Add(headingText);
+            currentStart = Math.Clamp(heading.Span.End + 1, 0, body.Length);
         }
 
         AddSectionIfNeeded(sections, headingPath, body.Substring(currentStart), currentStart, body.Length);
@@ -217,10 +236,22 @@ public sealed class MarkdownDocumentParser
 
         sections.Add(new MarkdownSection(
             headingPath.Count,
-            headingPath.Count == 0 ? string.Empty : string.Join(" / ", headingPath),
+            headingPath.Count == 0 ? string.Empty : string.Join(PathSeparator, headingPath),
             headingPath.ToArray(),
             trimmed,
             startOffset,
             endOffset));
+    }
+
+    private static string ExtractHeadingText(string body, HeadingBlock heading)
+    {
+        var start = Math.Clamp(heading.Span.Start, 0, body.Length);
+        var end = Math.Clamp(heading.Span.End + 1, start, body.Length);
+        var markdown = body[start..end].Trim();
+        var firstLine = markdown.Split('\n', 2)[0].Trim();
+        var atxMatch = HeadingRegex.Match(firstLine);
+        return atxMatch.Success
+            ? atxMatch.Groups[2].Value.Trim()
+            : firstLine;
     }
 }

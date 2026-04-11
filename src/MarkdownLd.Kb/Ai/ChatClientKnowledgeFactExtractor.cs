@@ -3,21 +3,20 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.Extensions.AI;
+using static ManagedCode.MarkdownLd.Kb.KnowledgeFactConstants;
 
 namespace ManagedCode.MarkdownLd.Kb;
 
 public sealed class ChatClientKnowledgeFactExtractor
 {
-    private const string DefaultGraphBaseUrl = "https://example.com";
-
     private static readonly IReadOnlyDictionary<string, int> TypePriority = new Dictionary<string, int>(StringComparer.Ordinal)
     {
-        ["schema:Person"] = 5,
-        ["schema:Organization"] = 5,
-        ["schema:SoftwareApplication"] = 5,
-        ["schema:CreativeWork"] = 4,
-        ["schema:Article"] = 4,
-        ["schema:Thing"] = 1,
+        [SchemaPerson] = 5,
+        [SchemaOrganization] = 5,
+        [SchemaSoftwareApplication] = 5,
+        [SchemaCreativeWork] = 4,
+        [SchemaArticle] = 4,
+        [SchemaThing] = 1,
     };
 
     private readonly IChatClient _chatClient;
@@ -41,7 +40,7 @@ public sealed class ChatClientKnowledgeFactExtractor
         _serializerOptions = serializerOptions is null
             ? CreateSerializerOptions()
             : PrepareSerializerOptions(serializerOptions);
-        _systemPrompt = systemPrompt ?? DefaultSystemPrompt;
+        _systemPrompt = systemPrompt ?? KnowledgeFactConstants.DefaultSystemPrompt;
     }
 
     public async Task<KnowledgeFactExtractionResult> ExtractAsync(
@@ -103,38 +102,42 @@ public sealed class ChatClientKnowledgeFactExtractor
         return options;
     }
 
-    private string BuildUserPrompt(KnowledgeFactExtractionRequest request)
+    private static string BuildUserPrompt(KnowledgeFactExtractionRequest request)
     {
         var builder = new StringBuilder();
-        builder.AppendLine($"ARTICLE_ID: {request.DocumentId}");
-        builder.AppendLine($"CHUNK_ID: {request.ChunkId}");
-        builder.AppendLine($"CHUNK_SOURCE: {request.ChunkSourceUri}");
+        builder.Append(ArticleIdLabel).AppendLine(request.DocumentId);
+        builder.Append(ChunkIdLabel).AppendLine(request.ChunkId);
+        builder.Append(ChunkSourceLabel).AppendLine(request.ChunkSourceUri);
 
         if (!string.IsNullOrWhiteSpace(request.Title))
         {
-            builder.AppendLine($"TITLE: {request.Title}");
+            builder.Append(TitleLabel).AppendLine(request.Title);
         }
 
         if (!string.IsNullOrWhiteSpace(request.SectionPath))
         {
-            builder.AppendLine($"SECTION_PATH: {request.SectionPath}");
+            builder.Append(SectionPathLabel).AppendLine(request.SectionPath);
         }
 
         if (request.FrontMatter is { Count: > 0 })
         {
-            builder.AppendLine("FRONT_MATTER:");
+            builder.AppendLine(FrontMatterLabel);
             foreach (var pair in request.FrontMatter.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             {
-                builder.AppendLine($"- {pair.Key}: {pair.Value ?? string.Empty}");
+                builder
+                    .Append(FrontMatterItemPrefix)
+                    .Append(pair.Key)
+                    .Append(KeyValueSeparator)
+                    .AppendLine(pair.Value ?? string.Empty);
             }
         }
 
         builder.AppendLine();
-        builder.AppendLine("Extract entities and assertions from the markdown below.");
-        builder.AppendLine("Return only facts that are explicit or strongly implied.");
-        builder.AppendLine("Use <ARTICLE_ID> for assertions whose subject is the article itself.");
+        builder.AppendLine(ExtractInstruction);
+        builder.AppendLine(ExplicitFactsInstruction);
+        builder.AppendLine(ArticleIdInstruction);
         builder.AppendLine();
-        builder.AppendLine("MARKDOWN:");
+        builder.AppendLine(MarkdownLabel);
         builder.AppendLine(request.Markdown);
 
         return builder.ToString();
@@ -189,7 +192,7 @@ public sealed class ChatClientKnowledgeFactExtractor
         return merged.Values.OrderBy(entity => entity.Label, StringComparer.Ordinal).ToArray();
     }
 
-    private IReadOnlyList<KnowledgeFactAssertion> NormalizeAssertions(
+    private static IReadOnlyList<KnowledgeFactAssertion> NormalizeAssertions(
         IReadOnlyList<KnowledgeFactAssertion>? assertions,
         KnowledgeFactExtractionRequest request)
     {
@@ -247,12 +250,12 @@ public sealed class ChatClientKnowledgeFactExtractor
             return trimmed;
         }
 
-        return $"{_graphBaseUrl}/id/{Slugify(label)}";
+        return string.Concat(_graphBaseUrl, EntityPathSegment, Slugify(label));
     }
 
     private static string NormalizeEntityType(string? type)
     {
-        return string.IsNullOrWhiteSpace(type) ? "schema:Thing" : type.Trim();
+        return string.IsNullOrWhiteSpace(type) ? SchemaThing : type.Trim();
     }
 
     private static IReadOnlyList<string> NormalizeSameAs(IReadOnlyList<string>? sameAs)
@@ -314,7 +317,7 @@ public sealed class ChatClientKnowledgeFactExtractor
 
     private static bool IsPlaceholder(string value)
     {
-        return value is "<ARTICLE_ID>" or "<ARTICLE>" or "ARTICLE_ID" or "{ARTICLE_ID}";
+        return value is ArticleIdPlaceholder or ArticlePlaceholder or ArticleIdToken or ArticleToken or BracedArticleIdToken;
     }
 
     private static string NormalizeGraphBaseUrl(string graphBaseUrl)
@@ -371,38 +374,7 @@ public sealed class ChatClientKnowledgeFactExtractor
         return builder.ToString().Trim('-');
     }
 
-    private static string DefaultSystemPrompt { get; } = """
-SYSTEM:
-You are a deterministic RDF extraction engine. Output must be valid JSON and match the structured output schema.
-
-ONTOLOGY:
-- Types: schema:Article, schema:Person, schema:Organization, schema:SoftwareApplication, schema:CreativeWork, schema:Thing
-- Preferred properties: schema:about, schema:mentions, schema:sameAs, schema:author, schema:creator, schema:datePublished, schema:dateModified
-- Fallback: kb:relatedTo
-- Provenance: prov:wasDerivedFrom (use chunk URI)
-- Confidence: kb:confidence (0..1)
-
-RULES:
-- Only add relations explicitly stated or strongly implied by the text.
-- Prefer schema.org properties.
-- Every entity must have id, type, and label.
-- Use stable ids for entities.
-- If a wikilink or entity hint provides sameAs, include it.
-- Emit no duplicate entities or assertions.
-- Use <ARTICLE_ID> when the article itself is the assertion subject.
-
-OUTPUT JSON SCHEMA:
-{
-  "entities": [
-    { "id": "...", "type": "schema:Thing", "label": "...", "sameAs": ["..."] }
-  ],
-  "assertions": [
-    { "s": "...", "p": "schema:mentions", "o": "...", "confidence": 0.85, "source": "urn:kb:chunk:..." }
-  ]
-}
-""";
-
     private sealed record KnowledgeFactExtractionEnvelope(
-        [property: JsonPropertyName("entities")] IReadOnlyList<KnowledgeFactEntity>? Entities,
-        [property: JsonPropertyName("assertions")] IReadOnlyList<KnowledgeFactAssertion>? Assertions);
+        [property: JsonPropertyName(EntitiesJsonName)] IReadOnlyList<KnowledgeFactEntity>? Entities,
+        [property: JsonPropertyName(AssertionsJsonName)] IReadOnlyList<KnowledgeFactAssertion>? Assertions);
 }

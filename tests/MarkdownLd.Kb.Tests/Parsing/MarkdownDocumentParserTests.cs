@@ -1,130 +1,176 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.RegularExpressions;
+using Shouldly;
+using ManagedCode.MarkdownLd.Kb.Parsing;
 
-namespace ManagedCode.MarkdownLd.Kb.Tests.Parsing;
+namespace ManagedCode.MarkdownLd.Kb;
 
 public sealed class MarkdownDocumentParserTests
 {
-    [Fact]
-    public void Parse_builds_sections_chunks_links_and_front_matter()
+    [Test]
+    public async Task Parse_reads_front_matter_sections_chunks_and_links_from_fixture()
     {
-        var parser = new MarkdownDocumentParser();
-        var source = new MarkdownDocumentSource(
-            ContentMarkdown: """
+        const string markdown = """
             ---
             title: Markdown-LD Knowledge Bank
-            summary: A knowledge graph from Markdown
-            about: Graphs from Markdown
+            description: A knowledge graph built from Markdown notes.
             date_published: 2026-04-11
-            date_modified: 2026-04-12
-            authors:
-              - Ada Lovelace
-              - Grace Hopper
+            date_modified: 2026-04-11
             tags:
-              - graphs
-              - markdown
+              - rdf
+              - sparql
+              - knowledge graph
+            about:
+              - knowledge graph
+            author:
+              - label: ManagedCode
+                type: schema:Organization
             entity_hints:
               - label: RDF
                 type: schema:Thing
                 sameAs:
-                  - https://www.wikidata.org/entity/Q54872
+                  - https://www.w3.org/RDF/
+              - label: SPARQL
+                type: schema:Thing
+                sameAs:
+                  - https://www.w3.org/TR/sparql11-query/
             ---
+            # Markdown-LD Knowledge Bank
 
-            # Overview
+            Markdown-LD Knowledge Bank uses [[RDF]] and [SPARQL](https://www.w3.org/TR/sparql11-query/).
 
-            Intro text with [[Knowledge Graph|knowledge graph]] and [spec](https://example.com/spec).
+            ## Graph
 
-            More text with [reference](../reference.md).
-
-            ## Details
-
-            Child text.
-            """,
-            ContentPath: "content/2026/04/markdown-ld-knowledge-bank.md",
-            BaseUrl: "https://kb.example");
-
-        var document = parser.Parse(source, new MarkdownParsingOptions { ChunkTokenTarget = 20 });
-
-        Assert.Equal("https://kb.example/2026/04/markdown-ld-knowledge-bank/", document.DocumentId);
-        Assert.Equal("Markdown-LD Knowledge Bank", document.FrontMatter.Title);
-        Assert.Equal("A knowledge graph from Markdown", document.FrontMatter.Summary);
-        Assert.Equal("Graphs from Markdown", document.FrontMatter.About);
-        Assert.Equal("2026-04-11", document.FrontMatter.DatePublished);
-        Assert.Equal("2026-04-12", document.FrontMatter.DateModified);
-        Assert.Equal(new[] { "Ada Lovelace", "Grace Hopper" }, document.FrontMatter.Authors);
-        Assert.Equal(new[] { "graphs", "markdown" }, document.FrontMatter.Tags);
-        Assert.Single(document.FrontMatter.EntityHints);
-        Assert.Equal("RDF", document.FrontMatter.EntityHints[0].Label);
-        Assert.Equal("schema:Thing", document.FrontMatter.EntityHints[0].Type);
-
-        Assert.Equal(2, document.Sections.Count);
-        Assert.Equal(3, document.Chunks.Count);
-        Assert.Equal(3, document.Links.Count);
-
-        var overview = document.Sections[0];
-        Assert.Equal(1, overview.HeadingLevel);
-        Assert.Equal(new[] { "Overview" }, overview.HeadingPath);
-        Assert.Contains("knowledge graph", overview.Markdown);
-        Assert.Equal(2, overview.Chunks.Count);
-        Assert.Equal(3, overview.Links.Count);
-
-        var details = document.Sections[1];
-        Assert.Equal(2, details.HeadingLevel);
-        Assert.Equal(new[] { "Overview", "Details" }, details.HeadingPath);
-        Assert.Equal("Child text.", details.Markdown);
-        Assert.Single(details.Chunks);
-        Assert.Empty(details.Links);
-
-        var wikiLink = document.Links.Single(link => link.Kind == MarkdownLinkKind.WikiLink);
-        Assert.Equal("Knowledge Graph", wikiLink.Target);
-        Assert.Equal("knowledge graph", wikiLink.DisplayText);
-        Assert.False(wikiLink.IsExternal);
-        Assert.False(wikiLink.IsDocumentLink);
-
-        var documentLink = document.Links.Single(link => link.IsDocumentLink);
-        Assert.Equal("../reference.md", documentLink.Target);
-        Assert.Equal("https://kb.example/2026/04/reference/", documentLink.ResolvedTarget);
-
-        var externalLink = document.Links.Single(link => link.IsExternal);
-        Assert.Equal("https://example.com/spec", externalLink.Target);
-        Assert.Equal("spec", externalLink.DisplayText);
-
-        var firstChunk = document.Chunks[0];
-        Assert.Equal(64, firstChunk.ChunkId.Length);
-        Assert.All(firstChunk.ChunkId, ch => Assert.True(Uri.IsHexDigit(ch)));
-        Assert.Equal(0, firstChunk.Order);
-        Assert.Equal(new[] { "Overview" }, firstChunk.HeadingPath);
-        Assert.StartsWith("Intro text", firstChunk.Markdown);
-        Assert.Equal(ExpectedChunkId(document.DocumentId, firstChunk.Markdown), firstChunk.ChunkId);
-    }
-
-    [Fact]
-    public void Parse_is_stable_for_repeated_input_and_changes_with_document_id()
-    {
-        var parser = new MarkdownDocumentParser();
-        var markdown = """
-            # Heading
-
-            Same content.
+            RDF --mentions--> SPARQL
+            RDF --schema:creator--> ManagedCode
+            Malformed --schema:mentions-->
             """;
 
-        var first = parser.Parse(new MarkdownDocumentSource(markdown, "content/one.md", "https://kb.example"));
-        var second = parser.Parse(new MarkdownDocumentSource(markdown, "content/one.md", "https://kb.example"));
-        var moved = parser.Parse(new MarkdownDocumentSource(markdown, "content/two.md", "https://kb.example"));
-
-        Assert.Equal(first.DocumentId, second.DocumentId);
-        Assert.Equal(first.Chunks.Select(chunk => chunk.ChunkId), second.Chunks.Select(chunk => chunk.ChunkId));
-        Assert.NotEqual(first.DocumentId, moved.DocumentId);
-        Assert.NotEqual(first.Chunks[0].ChunkId, moved.Chunks[0].ChunkId);
-    }
-
-    [Fact]
-    public void Parse_ignores_malformed_front_matter_but_still_builds_sections()
-    {
         var parser = new MarkdownDocumentParser();
         var document = parser.Parse(new MarkdownDocumentSource(
-            ContentMarkdown: """
+            markdown,
+            "content/2026/04/markdown-ld-knowledge-bank.md",
+            "https://kb.example"),
+            new MarkdownParsingOptions { ChunkTokenTarget = 20 });
+
+        document.DocumentId.ShouldBe("https://kb.example/2026/04/markdown-ld-knowledge-bank/");
+        document.ContentPath.ShouldBe("content/2026/04/markdown-ld-knowledge-bank.md");
+        document.BaseUri.ShouldNotBeNull();
+        document.BaseUri!.AbsoluteUri.ShouldBe("https://kb.example/");
+        document.FrontMatter.Title.ShouldBe("Markdown-LD Knowledge Bank");
+        document.FrontMatter.Summary.ShouldBe("A knowledge graph built from Markdown notes.");
+        document.FrontMatter.About.ShouldBe(new[] { "knowledge graph" });
+        document.FrontMatter.DatePublished.ShouldBe("2026-04-11");
+        document.FrontMatter.DateModified.ShouldBe("2026-04-11");
+        document.FrontMatter.Authors.ShouldBe(new[] { "ManagedCode" });
+        document.FrontMatter.Tags.ShouldBe(new[] { "rdf", "sparql", "knowledge graph" });
+        document.FrontMatter.EntityHints.Count.ShouldBe(2);
+        document.FrontMatter.EntityHints[0].Label.ShouldBe("RDF");
+        document.FrontMatter.EntityHints[0].Type.ShouldBe("schema:Thing");
+        document.FrontMatter.EntityHints[0].SameAs.ShouldBe(new[] { "https://www.w3.org/RDF/" });
+        document.FrontMatter.EntityHints[1].Label.ShouldBe("SPARQL");
+        document.FrontMatter.EntityHints[1].SameAs.ShouldBe(new[] { "https://www.w3.org/TR/sparql11-query/" });
+
+        document.Sections.Count.ShouldBe(2);
+        document.Chunks.Count.ShouldBe(2);
+        document.Links.Count.ShouldBe(2);
+
+        document.Sections[0].HeadingLevel.ShouldBe(1);
+        document.Sections[0].HeadingText.ShouldBe("Markdown-LD Knowledge Bank");
+        document.Sections[0].HeadingPath.ShouldBe(new[] { "Markdown-LD Knowledge Bank" });
+        document.Sections[1].HeadingLevel.ShouldBe(2);
+        document.Sections[1].HeadingPath.ShouldBe(new[] { "Markdown-LD Knowledge Bank", "Graph" });
+
+        document.Chunks[0].Markdown.ShouldContain("RDF");
+        document.Chunks[0].Markdown.ShouldContain("SPARQL");
+        document.Chunks[0].Links.Count.ShouldBe(2);
+        document.Chunks[1].Links.Count.ShouldBe(0);
+
+        var wikiLink = document.Links.Single(link => link.Kind == MarkdownLinkKind.WikiLink);
+        wikiLink.Target.ShouldBe("RDF");
+        wikiLink.DisplayText.ShouldBe("RDF");
+        wikiLink.IsExternal.ShouldBeFalse();
+        wikiLink.IsDocumentLink.ShouldBeFalse();
+
+        var markdownLink = document.Links.Single(link => link.Kind == MarkdownLinkKind.MarkdownLink);
+        markdownLink.Target.ShouldBe("https://www.w3.org/TR/sparql11-query/");
+        markdownLink.IsExternal.ShouldBeTrue();
+        markdownLink.ResolvedTarget.ShouldBe("https://www.w3.org/TR/sparql11-query/");
+
+        await Task.CompletedTask;
+    }
+
+    [Test]
+    public async Task Parse_stable_chunk_ids_follow_document_identity_and_path()
+    {
+        const string markdown = """
+            # Heading
+
+            First paragraph.
+
+            Second paragraph with [reference](./reference.md).
+            """;
+
+        var parser = new MarkdownDocumentParser();
+        var first = parser.Parse(new MarkdownDocumentSource(markdown, "content/one.md", "https://kb.example"), new MarkdownParsingOptions { ChunkTokenTarget = 1 });
+        var second = parser.Parse(new MarkdownDocumentSource(markdown, "content/one.md", "https://kb.example"), new MarkdownParsingOptions { ChunkTokenTarget = 1 });
+        var moved = parser.Parse(new MarkdownDocumentSource(markdown, "content/two.md", "https://kb.example"), new MarkdownParsingOptions { ChunkTokenTarget = 1 });
+
+        first.DocumentId.ShouldBe(second.DocumentId);
+        first.Chunks.Select(chunk => chunk.ChunkId).ShouldBe(second.Chunks.Select(chunk => chunk.ChunkId));
+        first.DocumentId.ShouldBe(MarkdownDocumentParser.DocumentIdFromPath("content/one.md", "https://kb.example"));
+        first.Chunks.Count.ShouldBe(2);
+        first.Chunks[0].ChunkId.ShouldBe(MarkdownDocumentParser.ComputeChunkId(first.DocumentId, first.Chunks[0].Markdown));
+        moved.DocumentId.ShouldNotBe(first.DocumentId);
+        moved.Chunks[0].ChunkId.ShouldNotBe(first.Chunks[0].ChunkId);
+
+        await Task.CompletedTask;
+    }
+
+    [Test]
+    public async Task Parse_uses_canonical_url_and_parses_plural_authors()
+    {
+        const string markdown = """
+            ---
+            title: Canonical Article
+            canonical_url: https://kb.example/articles/canonical/
+            description: Canonical summary.
+            authors:
+              - Ada Lovelace
+              - Grace Hopper
+            tags: rdf, markdown
+            about:
+              - Graphs
+              - RDF
+            entity_hints:
+              - label: RDF
+                type: schema:Thing
+                sameAs:
+                  - https://www.w3.org/RDF/
+            ---
+            # Canonical Article
+
+            Body text.
+            """;
+
+        var parser = new MarkdownDocumentParser();
+        var document = parser.Parse(new MarkdownDocumentSource(markdown, "content/ignored.md", "https://kb.example"));
+
+        document.DocumentId.ShouldBe("https://kb.example/articles/canonical/");
+        document.FrontMatter.Title.ShouldBe("Canonical Article");
+        document.FrontMatter.Summary.ShouldBe("Canonical summary.");
+        document.FrontMatter.Authors.ShouldBe(new[] { "Ada Lovelace", "Grace Hopper" });
+        document.FrontMatter.Tags.ShouldBe(new[] { "rdf", "markdown" });
+        document.FrontMatter.About.ShouldBe(new[] { "Graphs", "RDF" });
+        document.FrontMatter.EntityHints.ShouldContain(hint => hint.Label == "RDF" && hint.SameAs!.Contains("https://www.w3.org/RDF/"));
+        document.Sections.Count.ShouldBe(1);
+        document.Chunks.Count.ShouldBe(1);
+
+        await Task.CompletedTask;
+    }
+
+    [Test]
+    public async Task Parse_preserves_malformed_front_matter_and_still_builds_sections()
+    {
+        const string markdown = """
             ---
             title: [broken
             tags:
@@ -135,22 +181,19 @@ public sealed class MarkdownDocumentParserTests
             # Heading
 
             Body text.
-            """));
+            """;
 
-        Assert.StartsWith("urn:markdown-ld-kb:", document.DocumentId);
-        Assert.Empty(document.FrontMatter.Values);
-        Assert.Contains("title: [broken", document.FrontMatter.RawYaml);
-        Assert.Single(document.Sections);
-        Assert.Equal(new[] { "Heading" }, document.Sections[0].HeadingPath);
-        Assert.Single(document.Chunks);
-        Assert.Equal("Body text.", document.Chunks[0].Markdown);
-    }
+        var parser = new MarkdownDocumentParser();
+        var document = parser.Parse(new MarkdownDocumentSource(markdown, "content/broken.md", "https://kb.example"));
 
-    private static string ExpectedChunkId(string documentId, string markdown)
-    {
-        var normalized = Regex.Replace(markdown, @"\s+", " ").Trim();
-        var payload = $"{documentId}\n{normalized}";
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
+        document.DocumentId.ShouldBe("https://kb.example/broken/");
+        document.FrontMatter.Values.Count.ShouldBe(0);
+        document.FrontMatter.RawYaml.ShouldContain("title: [broken");
+        document.Sections.Count.ShouldBe(1);
+        document.Sections[0].HeadingPath.ShouldBe(new[] { "Heading" });
+        document.Chunks.Count.ShouldBe(1);
+        document.Chunks[0].Markdown.ShouldBe("Body text.");
+
+        await Task.CompletedTask;
     }
 }

@@ -1,11 +1,18 @@
+using ManagedCode.MarkdownLd.Kb.Rdf;
 using VDS.RDF;
-using VDS.RDF.Query;
 using VDS.RDF.Parsing;
+using VDS.RDF.Query;
+using VDS.RDF.Query.Datasets;
 
 namespace ManagedCode.MarkdownLd.Kb.Query;
 
 public sealed class SparqlQueryExecutor
 {
+    private const string QueryRejectedMessage = "Query rejected";
+    private const string OnlySelectAndAskQueriesAllowedMessage = "Only SELECT and ASK queries are allowed";
+    private const string ReadOnlyExecutorExpectedResultsSetMessage = "Read-only executor expected a SPARQL results set";
+    private const string UnexpectedSparqlResultTypeMessage = "Unexpected SPARQL result type";
+
     private readonly IInMemoryQueryableStore _store;
     private readonly SparqlQueryParser _parser;
     private readonly LeviathanQueryProcessor _processor;
@@ -14,7 +21,7 @@ public sealed class SparqlQueryExecutor
     {
         ArgumentNullException.ThrowIfNull(graph);
 
-        _store = graph.AsTripleStore();
+        _store = CreateStore(graph);
         _parser = new SparqlQueryParser();
         _processor = new LeviathanQueryProcessor(_store, options =>
         {
@@ -27,21 +34,21 @@ public sealed class SparqlQueryExecutor
         var safety = SparqlSafety.EnforceReadOnly(query);
         if (!safety.IsAllowed)
         {
-            throw new InvalidOperationException(safety.ErrorMessage ?? "Query rejected");
+            throw new InvalidOperationException(safety.ErrorMessage ?? QueryRejectedMessage);
         }
 
         var parsed = _parser.ParseFromString(safety.Query);
         if (!SparqlSafety.IsReadOnlyQuery(parsed.QueryType))
         {
-            throw new InvalidOperationException("Only SELECT and ASK queries are allowed");
+            throw new InvalidOperationException(OnlySelectAndAskQueriesAllowedMessage);
         }
 
         var result = _processor.ProcessQuery(parsed);
         return result switch
         {
             SparqlResultSet resultSet => SparqlResultMapper.Map(resultSet),
-            IGraph => throw new InvalidOperationException("Read-only executor expected a SPARQL results set"),
-            _ => throw new InvalidOperationException("Unexpected SPARQL result type")
+            IGraph => throw new InvalidOperationException(ReadOnlyExecutorExpectedResultsSetMessage),
+            _ => throw new InvalidOperationException(UnexpectedSparqlResultTypeMessage)
         };
     }
 
@@ -50,20 +57,27 @@ public sealed class SparqlQueryExecutor
         var safety = SparqlSafety.EnforceReadOnly(query);
         if (!safety.IsAllowed)
         {
-            throw new InvalidOperationException(safety.ErrorMessage ?? "Query rejected");
+            throw new InvalidOperationException(safety.ErrorMessage ?? QueryRejectedMessage);
         }
 
         var parsed = _parser.ParseFromString(safety.Query);
         if (!SparqlSafety.IsReadOnlyQuery(parsed.QueryType))
         {
-            throw new InvalidOperationException("Only SELECT and ASK queries are allowed");
+            throw new InvalidOperationException(OnlySelectAndAskQueriesAllowedMessage);
         }
 
         if (_processor.ProcessQuery(parsed) is not SparqlResultSet resultSet)
         {
-            throw new InvalidOperationException("Read-only executor expected a SPARQL results set");
+            throw new InvalidOperationException(ReadOnlyExecutorExpectedResultsSetMessage);
         }
 
         return resultSet;
+    }
+
+    private static IInMemoryQueryableStore CreateStore(IGraph graph)
+    {
+        var store = new TripleStore();
+        store.Add(graph);
+        return store;
     }
 }

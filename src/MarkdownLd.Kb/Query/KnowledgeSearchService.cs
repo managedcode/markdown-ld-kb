@@ -1,6 +1,5 @@
-using System.Globalization;
+using ManagedCode.MarkdownLd.Kb.Rdf;
 using VDS.RDF;
-using VDS.RDF.Query;
 
 namespace ManagedCode.MarkdownLd.Kb.Query;
 
@@ -18,6 +17,76 @@ public sealed record KnowledgeArticleSearchResult(
 
 public sealed class KnowledgeSearchService
 {
+    private const string SchemaPlaceholder = "{SCHEMA}";
+    private const string RdfPlaceholder = "{RDF}";
+    private const string TermPlaceholder = "{TERM}";
+    private const string LimitPlaceholder = "{LIMIT}";
+
+    private const string EntityVariable = "entity";
+    private const string LabelVariable = "label";
+    private const string TypeVariable = "type";
+    private const string SameAsVariable = "sameAs";
+    private const string ArticleVariable = "article";
+    private const string TitleVariable = "title";
+    private const string SummaryVariable = "summary";
+    private const string KeywordsVariable = "keywords";
+    private const string SearchEntitiesQueryTemplate = """
+PREFIX schema: <{SCHEMA}>
+PREFIX rdf: <{RDF}>
+SELECT DISTINCT ?entity ?label ?type ?sameAs WHERE {
+  ?entity a ?type ;
+          schema:name ?label .
+  OPTIONAL { ?entity schema:sameAs ?sameAs }
+  FILTER(?type != schema:Article)
+  FILTER(CONTAINS(LCASE(STR(?label)), LCASE("{TERM}")))
+}
+LIMIT {LIMIT}
+""";
+
+    private const string SearchArticlesQueryTemplate = """
+PREFIX schema: <{SCHEMA}>
+SELECT DISTINCT ?article ?title ?summary ?keywords WHERE {
+  ?article a schema:Article ;
+           schema:name ?title .
+  OPTIONAL { ?article schema:description ?summary }
+  OPTIONAL { ?article schema:keywords ?keywords }
+  OPTIONAL {
+    ?article schema:mentions ?entity .
+    ?entity schema:name ?entityLabel .
+  }
+  FILTER(
+    CONTAINS(LCASE(STR(?title)), LCASE("{TERM}")) ||
+    CONTAINS(LCASE(STR(COALESCE(?summary, ""))), LCASE("{TERM}")) ||
+    CONTAINS(LCASE(STR(COALESCE(?keywords, ""))), LCASE("{TERM}")) ||
+    CONTAINS(LCASE(STR(COALESCE(?entityLabel, ""))), LCASE("{TERM}"))
+  )
+}
+LIMIT {LIMIT}
+""";
+
+    private const string SearchArticlesByEntityLabelQueryTemplate = """
+PREFIX schema: <{SCHEMA}>
+SELECT DISTINCT ?article ?title ?summary ?keywords WHERE {
+  ?article a schema:Article ;
+           schema:name ?title ;
+           schema:mentions ?entity .
+  ?entity schema:name ?entityLabel .
+  OPTIONAL { ?article schema:description ?summary }
+  OPTIONAL { ?article schema:keywords ?keywords }
+  FILTER(CONTAINS(LCASE(STR(?entityLabel)), LCASE("{TERM}")))
+}
+LIMIT {LIMIT}
+""";
+
+    private const string Backslash = "\\";
+    private const string EscapedBackslash = "\\\\";
+    private const string Quote = "\"";
+    private const string EscapedQuote = "\\\"";
+    private const string CarriageReturn = "\r";
+    private const string EscapedCarriageReturn = "\\r";
+    private const string LineFeed = "\n";
+    private const string EscapedLineFeed = "\\n";
+
     private readonly SparqlQueryExecutor _queryExecutor;
 
     public KnowledgeSearchService(IGraph graph)
@@ -28,18 +97,12 @@ public sealed class KnowledgeSearchService
 
     public IReadOnlyList<KnowledgeEntitySearchResult> SearchEntities(string term, int limit = 25)
     {
-        var query = $"""
-PREFIX schema: <{KbNamespaces.Schema}>
-PREFIX rdf: <{KbNamespaces.Rdf}>
-SELECT DISTINCT ?entity ?label ?type ?sameAs WHERE {{
-  ?entity a ?type ;
-          schema:name ?label .
-  OPTIONAL {{ ?entity schema:sameAs ?sameAs }}
-  FILTER(?type != schema:Article)
-  FILTER(CONTAINS(LCASE(STR(?label)), LCASE("{EscapeSparqlString(term)}")))
-}}
-LIMIT {limit}
-""";
+        var query = BuildQuery(
+            SearchEntitiesQueryTemplate,
+            (SchemaPlaceholder, KbNamespaces.Schema),
+            (RdfPlaceholder, KbNamespaces.Rdf),
+            (TermPlaceholder, EscapeSparqlString(term)),
+            (LimitPlaceholder, limit.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 
         var result = _queryExecutor.ExecuteReadOnly(query);
         return MapEntityResults(result);
@@ -47,27 +110,11 @@ LIMIT {limit}
 
     public IReadOnlyList<KnowledgeArticleSearchResult> SearchArticles(string term, int limit = 25)
     {
-        var escaped = EscapeSparqlString(term);
-        var query = $"""
-PREFIX schema: <{KbNamespaces.Schema}>
-SELECT DISTINCT ?article ?title ?summary ?keywords WHERE {{
-  ?article a schema:Article ;
-           schema:name ?title .
-  OPTIONAL {{ ?article schema:description ?summary }}
-  OPTIONAL {{ ?article schema:keywords ?keywords }}
-  OPTIONAL {{
-    ?article schema:mentions ?entity .
-    ?entity schema:name ?entityLabel .
-  }}
-  FILTER(
-    CONTAINS(LCASE(STR(?title)), LCASE("{escaped}")) ||
-    CONTAINS(LCASE(STR(COALESCE(?summary, ""))), LCASE("{escaped}")) ||
-    CONTAINS(LCASE(STR(COALESCE(?keywords, ""))), LCASE("{escaped}")) ||
-    CONTAINS(LCASE(STR(COALESCE(?entityLabel, ""))), LCASE("{escaped}"))
-  )
-}}
-LIMIT {limit}
-""";
+        var query = BuildQuery(
+            SearchArticlesQueryTemplate,
+            (SchemaPlaceholder, KbNamespaces.Schema),
+            (TermPlaceholder, EscapeSparqlString(term)),
+            (LimitPlaceholder, limit.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 
         var result = _queryExecutor.ExecuteReadOnly(query);
         return MapArticleResults(result);
@@ -75,19 +122,11 @@ LIMIT {limit}
 
     public IReadOnlyList<KnowledgeArticleSearchResult> SearchArticlesByEntityLabel(string entityLabel, int limit = 25)
     {
-        var query = $"""
-PREFIX schema: <{KbNamespaces.Schema}>
-SELECT DISTINCT ?article ?title ?summary ?keywords WHERE {{
-  ?article a schema:Article ;
-           schema:name ?title ;
-           schema:mentions ?entity .
-  ?entity schema:name ?entityLabel .
-  OPTIONAL {{ ?article schema:description ?summary }}
-  OPTIONAL {{ ?article schema:keywords ?keywords }}
-  FILTER(CONTAINS(LCASE(STR(?entityLabel)), LCASE("{EscapeSparqlString(entityLabel)}")))
-}}
-LIMIT {limit}
-""";
+        var query = BuildQuery(
+            SearchArticlesByEntityLabelQueryTemplate,
+            (SchemaPlaceholder, KbNamespaces.Schema),
+            (TermPlaceholder, EscapeSparqlString(entityLabel)),
+            (LimitPlaceholder, limit.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 
         var result = _queryExecutor.ExecuteReadOnly(query);
         return MapArticleResults(result);
@@ -99,15 +138,15 @@ LIMIT {limit}
 
         foreach (var row in result.Rows)
         {
-            if (!TryGetUri(row.Bindings, "entity", out var entityId))
+            if (!TryGetUri(row.Bindings, EntityVariable, out var entityId))
             {
                 continue;
             }
 
-            var label = TryGetString(row.Bindings, "label") ?? string.Empty;
-            var type = TryGetString(row.Bindings, "type") ?? KbNamespaces.SchemaThing.AbsoluteUri;
+            var label = TryGetString(row.Bindings, LabelVariable) ?? string.Empty;
+            var type = TryGetString(row.Bindings, TypeVariable) ?? KbNamespaces.SchemaThing.AbsoluteUri;
 
-            if (TryGetUri(row.Bindings, "sameAs", out var sameAsUri))
+            if (TryGetUri(row.Bindings, SameAsVariable, out var sameAsUri))
             {
                 if (items.TryGetValue(entityId, out var existing))
                 {
@@ -120,7 +159,7 @@ LIMIT {limit}
             if (items.TryGetValue(entityId, out var current))
             {
                 var mergedSameAs = current.SameAs;
-                if (TryGetUri(row.Bindings, "sameAs", out var currentSameAs))
+                if (TryGetUri(row.Bindings, SameAsVariable, out var currentSameAs))
                 {
                     mergedSameAs = mergedSameAs.Concat([currentSameAs]).Distinct().ToArray();
                 }
@@ -133,7 +172,7 @@ LIMIT {limit}
                 entityId,
                 label,
                 type,
-                TryGetUri(row.Bindings, "sameAs", out var oneSameAs) ? [oneSameAs] : []);
+                TryGetUri(row.Bindings, SameAsVariable, out var oneSameAs) ? [oneSameAs] : []);
         }
 
         return items.Values.OrderBy(item => item.Label, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -145,14 +184,14 @@ LIMIT {limit}
 
         foreach (var row in result.Rows)
         {
-            if (!TryGetUri(row.Bindings, "article", out var articleId))
+            if (!TryGetUri(row.Bindings, ArticleVariable, out var articleId))
             {
                 continue;
             }
 
-            var title = TryGetString(row.Bindings, "title") ?? string.Empty;
-            var summary = TryGetString(row.Bindings, "summary");
-            var keywords = TryGetString(row.Bindings, "keywords");
+            var title = TryGetString(row.Bindings, TitleVariable) ?? string.Empty;
+            var summary = TryGetString(row.Bindings, SummaryVariable);
+            var keywords = TryGetString(row.Bindings, KeywordsVariable);
 
             if (items.TryGetValue(articleId, out var current))
             {
@@ -173,8 +212,9 @@ LIMIT {limit}
 
     private static bool TryGetUri(IReadOnlyDictionary<string, SparqlBindingValue> bindings, string variable, out Uri value)
     {
-        if (bindings.TryGetValue(variable, out var binding) && Uri.TryCreate(binding.Value, UriKind.Absolute, out value))
+        if (bindings.TryGetValue(variable, out var binding) && Uri.TryCreate(binding.Value, UriKind.Absolute, out var parsedValue))
         {
+            value = parsedValue;
             return true;
         }
 
@@ -187,12 +227,23 @@ LIMIT {limit}
         return bindings.TryGetValue(variable, out var binding) ? binding.Value : null;
     }
 
+    private static string BuildQuery(string template, params (string Token, string Value)[] replacements)
+    {
+        var query = template;
+        foreach (var replacement in replacements)
+        {
+            query = query.Replace(replacement.Token, replacement.Value, StringComparison.Ordinal);
+        }
+
+        return query;
+    }
+
     private static string EscapeSparqlString(string value)
     {
         return value
-            .Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("\"", "\\\"", StringComparison.Ordinal)
-            .Replace("\r", "\\r", StringComparison.Ordinal)
-            .Replace("\n", "\\n", StringComparison.Ordinal);
+            .Replace(Backslash, EscapedBackslash, StringComparison.Ordinal)
+            .Replace(Quote, EscapedQuote, StringComparison.Ordinal)
+            .Replace(CarriageReturn, EscapedCarriageReturn, StringComparison.Ordinal)
+            .Replace(LineFeed, EscapedLineFeed, StringComparison.Ordinal);
     }
 }

@@ -1,0 +1,58 @@
+namespace ManagedCode.MarkdownLd.Kb.Parsing;
+
+internal static class MarkdownTextConstants
+{
+    internal const string Empty = "";
+    internal const string Space = " ";
+    internal const string Colon = ":";
+    internal const string Comma = ",";
+    internal const string Pipe = "|";
+    internal const string PathSeparator = "/";
+    internal const string LineFeed = "\n";
+    internal const string DoubleLineFeed = "\n\n";
+    internal const string CarriageReturnLineFeed = "\r\n";
+    internal const string CarriageReturn = "\r";
+    internal const string FrontMatterFence = "---";
+    internal const string DefaultBaseUrl = "https://example.com/";
+    internal const string DocumentIdUntitled = "urn:markdown-ld-kb:document/untitled";
+    internal const string DocumentIdPrefix = "urn:markdown-ld-kb:document/";
+    internal const string ContentPrefix = "content/";
+    internal const string HttpScheme = "http";
+    internal const string HttpsScheme = "https";
+    internal const string MailtoScheme = "mailto";
+    internal const string MarkdownExtension = ".md";
+    internal const string MarkdownExtensionLong = ".markdown";
+    internal const string MarkdownExtensionAlternate = ".mdx";
+    internal const string RoundTripDateFormat = "O";
+    internal const string WhitespacePattern = @"\s+";
+    internal const string SplitBlocksPattern = @"\n{2,}";
+    internal const string HeadingPattern = @"^(?<level>#{1,6})\s+(?<heading>.+)$";
+    internal const string WikiLinkPattern = @"\[\[(?<target>[^\]]+)\]\]";
+    internal const string MarkdownImageLinkPattern = @"!\[(?<label>[^\]]*)\]\((?<target>[^)\s]+)(?:\s+""(?<title>[^""]+)"")?\)";
+    internal const string MarkdownLinkPattern = @"(?<!\!)\[(?<label>[^\]]+)\]\((?<target>[^)\s]+)(?:\s+""(?<title>[^""]+)"")?\)";
+    internal const string GroupLevel = "level";
+    internal const string GroupHeading = "heading";
+    internal const string GroupTarget = "target";
+    internal const string GroupLabel = "label";
+    internal const string GroupTitle = "title";
+    internal const string TitleKey = "title";
+    internal const string SummaryKey = "summary";
+    internal const string DescriptionKey = "description";
+    internal const string CanonicalUrlKey = "canonical_url";
+    internal const string CanonicalUrlCamelKey = "canonicalUrl";
+    internal const string AboutKey = "about";
+    internal const string DatePublishedKey = "date_published";
+    internal const string DatePublishedCamelKey = "datePublished";
+    internal const string DateModifiedKey = "date_modified";
+    internal const string DateModifiedCamelKey = "dateModified";
+    internal const string AuthorsKey = "authors";
+    internal const string AuthorKey = "author";
+    internal const string TagsKey = "tags";
+    internal const string EntityHintsKey = "entity_hints";
+    internal const string EntityHintsCamelKey = "entityHints";
+    internal const string SameAsKey = "sameAs";
+    internal const string LabelKey = "label";
+    internal const string NameKey = "name";
+    internal const string ValueKey = "value";
+    internal const string TypeKey = "type";
+}

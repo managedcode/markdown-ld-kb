@@ -1,13 +1,14 @@
 using System.Text.RegularExpressions;
+using static ManagedCode.MarkdownLd.Kb.Extraction.MarkdownKnowledgeConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Extraction;
 
 internal static class MarkdownKnowledgeScanner
 {
-    private static readonly Regex HeadingRegex = new(@"^\s*#\s+(?<title>.+?)\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex WikilinkRegex = new(@"\[\[(?<label>[^\[\]\|]+)(?:\|(?<alias>[^\[\]]+))?\]\]", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex MarkdownLinkRegex = new(@"\[(?<label>[^\]]+)\]\((?<target>[^)\s]+)(?:\s+""[^""]*"")?\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex ArrowRegex = new(@"(?<subject>[^-\r\n]+?)\s*--(?<predicate>[^>\r\n]+?)-->\s*(?<object>.+?)(?=$|\s{2,}|[.!?;,])", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex HeadingRegex = new(HeadingPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex WikilinkRegex = new(WikiLinkPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex MarkdownLinkRegex = new(MarkdownLinkPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex ArrowRegex = new(ArrowPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public static MarkdownKnowledgeScanResult Scan(string markdown)
     {
@@ -28,7 +29,7 @@ internal static class MarkdownKnowledgeScanner
 
     private static IEnumerable<string> EnumerateContentLines(string markdown)
     {
-        using var reader = new StringReader(markdown.Replace("\r\n", "\n"));
+        using var reader = new StringReader(markdown.Replace(CarriageReturnLineFeed, LineFeed));
         var inFence = false;
         string? line;
         while ((line = reader.ReadLine()) is not null)
@@ -49,31 +50,35 @@ internal static class MarkdownKnowledgeScanner
 
     private static bool IsFenceMarker(string line)
     {
-        return line.StartsWith("```", StringComparison.Ordinal) || line.StartsWith("~~~", StringComparison.Ordinal);
+        return line.StartsWith(CodeFenceBacktick, StringComparison.Ordinal) || line.StartsWith(CodeFenceTilde, StringComparison.Ordinal);
     }
 
     private static string? TryReadHeading(string line)
     {
         var match = HeadingRegex.Match(line);
-        return match.Success ? NormalizeSurfaceText(match.Groups["title"].Value) : null;
+        return match.Success ? NormalizeSurfaceText(match.Groups[HeadingGroup].Value) : null;
     }
 
     private static void AddWikilinkEntities(string line, ICollection<MarkdownKnowledgeEntityCandidate> entities)
     {
         foreach (Match match in WikilinkRegex.Matches(line))
         {
-            var label = NormalizeSurfaceText(match.Groups["label"].Value);
-            if (string.IsNullOrWhiteSpace(label))
+            var target = NormalizeSurfaceText(match.Groups[TargetGroup].Value);
+            var alias = NormalizeSurfaceText(match.Groups[AliasGroup].Value);
+
+            if (string.IsNullOrWhiteSpace(target))
             {
                 continue;
             }
 
             entities.Add(new MarkdownKnowledgeEntityCandidate
             {
-                Label = label,
-                Type = "schema:Thing",
-                SameAs = [],
-                SourceKind = "wikilink",
+                Label = target,
+                Type = SchemaThing,
+                SameAs = string.IsNullOrWhiteSpace(alias) || string.Equals(alias, target, StringComparison.OrdinalIgnoreCase)
+                    ? []
+                    : [alias],
+                SourceKind = WikiLinkSource,
             });
         }
     }
@@ -82,8 +87,8 @@ internal static class MarkdownKnowledgeScanner
     {
         foreach (Match match in MarkdownLinkRegex.Matches(line))
         {
-            var label = NormalizeSurfaceText(match.Groups["label"].Value);
-            var target = NormalizeSurfaceText(match.Groups["target"].Value);
+            var label = NormalizeSurfaceText(match.Groups[LabelGroup].Value);
+            var target = NormalizeSurfaceText(match.Groups[TargetGroup].Value);
             if (string.IsNullOrWhiteSpace(label))
             {
                 continue;
@@ -92,9 +97,9 @@ internal static class MarkdownKnowledgeScanner
             entities.Add(new MarkdownKnowledgeEntityCandidate
             {
                 Label = label,
-                Type = "schema:Thing",
+                Type = SchemaThing,
                 SameAs = string.IsNullOrWhiteSpace(target) ? [] : [target],
-                SourceKind = "markdown-link",
+                SourceKind = MarkdownLinkSource,
             });
         }
     }
@@ -103,9 +108,9 @@ internal static class MarkdownKnowledgeScanner
     {
         foreach (Match match in ArrowRegex.Matches(line))
         {
-            var subject = NormalizeSurfaceText(match.Groups["subject"].Value);
-            var predicate = NormalizePredicate(match.Groups["predicate"].Value);
-            var obj = NormalizeSurfaceText(match.Groups["object"].Value);
+            var subject = NormalizeSurfaceText(match.Groups[SubjectGroup].Value);
+            var predicate = NormalizePredicate(match.Groups[PredicateGroup].Value);
+            var obj = NormalizeSurfaceText(match.Groups[ObjectGroup].Value);
 
             if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(predicate) || string.IsNullOrWhiteSpace(obj))
             {
@@ -118,7 +123,7 @@ internal static class MarkdownKnowledgeScanner
                 Predicate = predicate,
                 Object = obj,
                 Confidence = 0.95,
-                Source = "markdown-arrow",
+                Source = MarkdownArrowSource,
             });
         }
     }
@@ -126,23 +131,23 @@ internal static class MarkdownKnowledgeScanner
     private static string NormalizeSurfaceText(string value)
     {
         var text = value.Trim();
-        text = text.Replace("[[", string.Empty, StringComparison.Ordinal).Replace("]]", string.Empty, StringComparison.Ordinal);
-        text = text.Replace("`", string.Empty, StringComparison.Ordinal);
-        text = text.Replace("*", string.Empty, StringComparison.Ordinal);
-        text = text.Replace("_", " ", StringComparison.Ordinal);
-        text = Regex.Replace(text, @"\s+", " ", RegexOptions.CultureInvariant);
+        text = text.Replace(WikiLinkStart, string.Empty, StringComparison.Ordinal).Replace(WikiLinkEnd, string.Empty, StringComparison.Ordinal);
+        text = text.Replace(InlineCodeMarker, string.Empty, StringComparison.Ordinal);
+        text = text.Replace(EmphasisMarker, string.Empty, StringComparison.Ordinal);
+        text = text.Replace(Underscore, Space, StringComparison.Ordinal);
+        text = Regex.Replace(text, WhitespacePattern, Space, RegexOptions.CultureInvariant);
         return text.Trim(' ', '\t', '.', ',', ';', ':', '!', '?', ')', '(', '[', ']', '"', '\'');
     }
 
     private static string NormalizePredicate(string value)
     {
         var predicate = NormalizeSurfaceText(value);
-        if (predicate.Contains("://", StringComparison.Ordinal) || predicate.Contains(':', StringComparison.Ordinal))
+        if (predicate.Contains(UriSchemeSeparator, StringComparison.Ordinal) || predicate.Contains(':', StringComparison.Ordinal))
         {
             return predicate;
         }
 
-        return $"schema:{MarkdownKnowledgeIds.Slugify(predicate)}";
+        return string.Concat(SchemaPrefix, MarkdownKnowledgeIds.Slugify(predicate));
     }
 }
 
@@ -159,7 +164,7 @@ internal sealed record MarkdownKnowledgeEntityCandidate
 
     public IReadOnlyList<string> SameAs { get; init; } = [];
 
-    public string SourceKind { get; init; } = "front-matter";
+    public string SourceKind { get; init; } = FrontMatterSource;
 }
 
 internal sealed record MarkdownKnowledgeAssertionCandidate

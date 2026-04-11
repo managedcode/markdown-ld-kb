@@ -1,18 +1,19 @@
 using System.Text.RegularExpressions;
+using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
-namespace ManagedCode.MarkdownLd.Kb;
+namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class DeterministicKnowledgeFactExtractor
 {
-    private static readonly Regex WikiLinkRegex = new(@"\[\[([^\]]+)\]\]", RegexOptions.Compiled);
-    private static readonly Regex MarkdownLinkRegex = new(@"\[(?<label>[^\]]+)\]\((?<url>[^)]+)\)", RegexOptions.Compiled);
-    private static readonly Regex ArrowRegex = new(@"^(?<subject>.+?)\s*--(?<predicate>[^-]+?)-->\s*(?<object>.+?)\s*$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex WikiLinkRegex = new(WikiLinkPattern, RegexOptions.Compiled);
+    private static readonly Regex MarkdownLinkRegex = new(MarkdownLinkPattern, RegexOptions.Compiled);
+    private static readonly Regex ArrowRegex = new(ArrowPattern, RegexOptions.Compiled | RegexOptions.Multiline);
 
     private readonly Uri _baseUri;
 
     public DeterministicKnowledgeFactExtractor(Uri? baseUri = null)
     {
-        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri("https://example.com/", UriKind.Absolute));
+        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
     }
 
     public KnowledgeExtractionResult Extract(MarkdownDocument document)
@@ -38,23 +39,23 @@ public sealed class DeterministicKnowledgeFactExtractor
         IDictionary<string, KnowledgeAssertionFact> assertions,
         string articleId)
     {
-        foreach (var hint in ReadFrontMatterSequence(document.FrontMatter, "entity_hints"))
+        foreach (var hint in ReadFrontMatterSequence(document.FrontMatter, EntityHintsKey))
         {
             if (hint is not IDictionary<string, object?> hintMap)
             {
                 continue;
             }
 
-            var label = ReadString(hintMap, "label");
+            var label = ReadString(hintMap, LabelKey);
             if (string.IsNullOrWhiteSpace(label))
             {
                 continue;
             }
 
-            var entity = CreateEntityFact(label, ReadString(hintMap, "type") ?? "schema:Thing");
+            var entity = CreateEntityFact(label, ReadString(hintMap, TypeKey) ?? DefaultSchemaThing);
             entity = entity with
             {
-                SameAs = ReadStringSequence(hintMap, "sameAs").ToList(),
+                SameAs = ReadStringSequence(hintMap, SameAsKey).ToList(),
                 Confidence = 0.95,
                 Source = document.DocumentUri.AbsoluteUri,
             };
@@ -62,9 +63,9 @@ public sealed class DeterministicKnowledgeFactExtractor
             UpsertEntity(entities, entity);
         }
 
-        foreach (var author in ReadFrontMatterSequence(document.FrontMatter, "author"))
+        foreach (var author in ReadFrontMatterSequence(document.FrontMatter, AuthorKey))
         {
-            var (label, sameAs, type) = ReadNamedEntity(author, "schema:Person");
+            var (label, sameAs, type) = ReadNamedEntity(author, SchemaPersonTypeText);
             if (string.IsNullOrWhiteSpace(label))
             {
                 continue;
@@ -82,14 +83,14 @@ public sealed class DeterministicKnowledgeFactExtractor
             UpsertAssertion(assertions, new KnowledgeAssertionFact
             {
                 SubjectId = articleId,
-                Predicate = "schema:author",
+                Predicate = SchemaAuthorText,
                 ObjectId = entity.Id ?? KnowledgeNaming.CreateEntityId(_baseUri, entity.Label),
                 Confidence = 0.9,
                 Source = document.DocumentUri.AbsoluteUri,
             });
         }
 
-        foreach (var about in ReadFrontMatterSequence(document.FrontMatter, "about"))
+        foreach (var about in ReadFrontMatterSequence(document.FrontMatter, AboutKey))
         {
             var label = ReadScalarLabel(about);
             if (string.IsNullOrWhiteSpace(label))
@@ -97,7 +98,7 @@ public sealed class DeterministicKnowledgeFactExtractor
                 continue;
             }
 
-            var entity = CreateEntityFact(label, "schema:Thing");
+            var entity = CreateEntityFact(label, DefaultSchemaThing);
             entity = entity with
             {
                 Confidence = 0.85,
@@ -108,7 +109,7 @@ public sealed class DeterministicKnowledgeFactExtractor
             UpsertAssertion(assertions, new KnowledgeAssertionFact
             {
                 SubjectId = articleId,
-                Predicate = "schema:about",
+                Predicate = SchemaAboutText,
                 ObjectId = entity.Id ?? KnowledgeNaming.CreateEntityId(_baseUri, entity.Label),
                 Confidence = 0.85,
                 Source = document.DocumentUri.AbsoluteUri,
@@ -130,7 +131,7 @@ public sealed class DeterministicKnowledgeFactExtractor
                 continue;
             }
 
-            var entity = CreateEntityFact(label, "schema:Thing") with
+            var entity = CreateEntityFact(label, DefaultSchemaThing) with
             {
                 Confidence = 0.8,
                 Source = document.DocumentUri.AbsoluteUri,
@@ -139,7 +140,7 @@ public sealed class DeterministicKnowledgeFactExtractor
             UpsertAssertion(assertions, new KnowledgeAssertionFact
             {
                 SubjectId = articleId,
-                Predicate = "schema:mentions",
+                Predicate = SchemaMentionsText,
                 ObjectId = entity.Id ?? KnowledgeNaming.CreateEntityId(_baseUri, entity.Label),
                 Confidence = 0.8,
                 Source = document.DocumentUri.AbsoluteUri,
@@ -155,8 +156,8 @@ public sealed class DeterministicKnowledgeFactExtractor
     {
         foreach (Match match in MarkdownLinkRegex.Matches(document.Body))
         {
-            var label = match.Groups["label"].Value.Trim();
-            var url = match.Groups["url"].Value.Trim();
+            var label = match.Groups[MatchLabelGroup].Value.Trim();
+            var url = match.Groups[MatchUrlGroup].Value.Trim();
             if (string.IsNullOrWhiteSpace(label))
             {
                 continue;
@@ -167,7 +168,7 @@ public sealed class DeterministicKnowledgeFactExtractor
                 continue;
             }
 
-            var entity = CreateEntityFact(label, "schema:Thing") with
+            var entity = CreateEntityFact(label, DefaultSchemaThing) with
             {
                 SameAs = [absoluteUrl.AbsoluteUri],
                 Confidence = 0.8,
@@ -177,7 +178,7 @@ public sealed class DeterministicKnowledgeFactExtractor
             UpsertAssertion(assertions, new KnowledgeAssertionFact
             {
                 SubjectId = articleId,
-                Predicate = "schema:mentions",
+                Predicate = SchemaMentionsText,
                 ObjectId = entity.Id ?? KnowledgeNaming.CreateEntityId(_baseUri, entity.Label),
                 Confidence = 0.8,
                 Source = document.DocumentUri.AbsoluteUri,
@@ -193,9 +194,9 @@ public sealed class DeterministicKnowledgeFactExtractor
     {
         foreach (Match match in ArrowRegex.Matches(document.Body))
         {
-            var subjectText = match.Groups["subject"].Value.Trim();
-            var predicateText = match.Groups["predicate"].Value.Trim();
-            var objectText = match.Groups["object"].Value.Trim();
+            var subjectText = match.Groups[MatchSubjectGroup].Value.Trim();
+            var predicateText = match.Groups[MatchPredicateGroup].Value.Trim();
+            var objectText = match.Groups[MatchObjectGroup].Value.Trim();
 
             if (!TryResolveNodeReference(document, subjectText, articleId, entities, out var subjectId) ||
                 !TryResolveNodeReference(document, objectText, articleId, entities, out var objectId))
@@ -251,7 +252,7 @@ public sealed class DeterministicKnowledgeFactExtractor
             return true;
         }
 
-        var (label, sameAs, type) = ReadNamedEntity(trimmed, "schema:Thing");
+        var (label, sameAs, type) = ReadNamedEntity(trimmed, DefaultSchemaThing);
         var entity = CreateEntityFact(label, type) with
         {
             SameAs = sameAs.ToList(),
@@ -265,13 +266,13 @@ public sealed class DeterministicKnowledgeFactExtractor
 
     private static bool IsValidArrowOperand(string operand)
     {
-        return !string.IsNullOrWhiteSpace(operand) && operand != "--" && operand != "-->";
+        return !string.IsNullOrWhiteSpace(operand) && operand != ArrowSeparator && operand != ArrowTail;
     }
 
     private static bool IsArticleReference(MarkdownDocument document, string text)
     {
-        if (text.Equals("article", StringComparison.OrdinalIgnoreCase) ||
-            text.Equals("this article", StringComparison.OrdinalIgnoreCase) ||
+        if (text.Equals(ArticleMarker, StringComparison.OrdinalIgnoreCase) ||
+            text.Equals(ThisArticleMarker, StringComparison.OrdinalIgnoreCase) ||
             text.Equals(document.Title, StringComparison.OrdinalIgnoreCase))
         {
             return true;
@@ -287,7 +288,7 @@ public sealed class DeterministicKnowledgeFactExtractor
         {
             Id = KnowledgeNaming.CreateEntityId(_baseUri, trimmedLabel),
             Label = trimmedLabel,
-            Type = string.IsNullOrWhiteSpace(type) ? "schema:Thing" : type.Trim(),
+            Type = string.IsNullOrWhiteSpace(type) ? DefaultSchemaThing : type.Trim(),
         };
     }
 
@@ -319,7 +320,7 @@ public sealed class DeterministicKnowledgeFactExtractor
 
     private static void UpsertAssertion(IDictionary<string, KnowledgeAssertionFact> assertions, KnowledgeAssertionFact assertion)
     {
-        var key = $"{assertion.SubjectId}||{assertion.Predicate}||{assertion.ObjectId}";
+        var key = assertion.SubjectId + AssertionKeySeparator + assertion.Predicate + AssertionKeySeparator + assertion.ObjectId;
         if (!assertions.TryGetValue(key, out var existing))
         {
             assertions[key] = assertion;
@@ -337,12 +338,12 @@ public sealed class DeterministicKnowledgeFactExtractor
     {
         return type switch
         {
-            "schema:Person" => 5,
-            "schema:Organization" => 5,
-            "schema:SoftwareApplication" => 5,
-            "schema:CreativeWork" => 4,
-            "schema:Article" => 4,
-            "schema:Thing" => 1,
+            SchemaPersonTypeText => 5,
+            SchemaOrganizationTypeText => 5,
+            SchemaSoftwareApplicationTypeText => 5,
+            SchemaCreativeWorkTypeText => 4,
+            SchemaArticleTypeText => 4,
+            SchemaThingTypeText => 1,
             _ => 0,
         };
     }
@@ -374,9 +375,9 @@ public sealed class DeterministicKnowledgeFactExtractor
             return (string.Empty, [], defaultType);
         }
 
-        var label = ReadString(map, "label") ?? ReadString(map, "name") ?? string.Empty;
-        var type = ReadString(map, "type") ?? defaultType;
-        var sameAs = ReadStringSequence(map, "sameAs");
+        var label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? string.Empty;
+        var type = ReadString(map, TypeKey) ?? defaultType;
+        var sameAs = ReadStringSequence(map, SameAsKey);
         return (label, sameAs, type);
     }
 
@@ -389,7 +390,7 @@ public sealed class DeterministicKnowledgeFactExtractor
 
         if (node is IDictionary<string, object?> map)
         {
-            return ReadString(map, "label") ?? ReadString(map, "name");
+            return ReadString(map, LabelKey) ?? ReadString(map, NameKey);
         }
 
         return null;

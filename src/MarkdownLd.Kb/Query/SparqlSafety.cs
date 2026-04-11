@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
-using VDS.RDF.Query;
 using VDS.RDF.Parsing;
+using VDS.RDF.Query;
 
 namespace ManagedCode.MarkdownLd.Kb.Query;
 
@@ -8,24 +8,30 @@ public sealed record SparqlSafetyResult(bool IsAllowed, string Query, string? Er
 
 public static class SparqlSafety
 {
-    private static readonly Regex MutatingKeywordPattern = new(
-        @"\b(INSERT|DELETE|LOAD|CLEAR|DROP|CREATE)\b",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private const string SparqlQueryRequiredMessage = "SPARQL query is required";
+    private const string OnlySelectAndAskQueriesAllowedMessage = "Only SELECT and ASK queries are allowed";
+    private const string LimitClausePrefix = "LIMIT ";
+    private const string MutatingKeywordPattern = @"\b(INSERT|DELETE|LOAD|CLEAR|DROP|CREATE)\b";
+    private const char SemicolonCharacter = ';';
+    private const char DoubleQuoteCharacter = '"';
+    private const char SingleQuoteCharacter = '\'';
+    private const char EscapeCharacter = '\\';
+    private const char MaskCharacter = ' ';
 
     private static readonly SparqlQueryParser Parser = new();
+    private static readonly Regex MutatingKeywordRegex = new(MutatingKeywordPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     public static SparqlSafetyResult EnforceReadOnly(string query, int defaultLimit = 100)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
-            return new(false, string.Empty, "SPARQL query is required");
+            return new(false, string.Empty, SparqlQueryRequiredMessage);
         }
 
         var trimmed = query.Trim();
-
-        if (MutatingKeywordPattern.IsMatch(trimmed))
+        if (ContainsMutatingKeywordOutsideString(trimmed))
         {
-            return new(false, query, "Only SELECT and ASK queries are allowed");
+            return new(false, query, OnlySelectAndAskQueriesAllowedMessage);
         }
 
         SparqlQuery parsed;
@@ -40,12 +46,12 @@ public static class SparqlSafety
 
         if (!IsReadOnlyQuery(parsed.QueryType))
         {
-            return new(false, query, "Only SELECT and ASK queries are allowed");
+            return new(false, query, OnlySelectAndAskQueriesAllowedMessage);
         }
 
-        if (IsSelectQuery(parsed.QueryType) && !HasTopLevelLimit(trimmed))
+        if (IsSelectQuery(parsed.QueryType) && parsed.Limit < 0)
         {
-            trimmed = trimmed.TrimEnd(';') + Environment.NewLine + $"LIMIT {defaultLimit}";
+            trimmed = trimmed.TrimEnd(SemicolonCharacter) + Environment.NewLine + LimitClausePrefix + defaultLimit.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         return new(true, trimmed, null);
@@ -63,8 +69,40 @@ public static class SparqlSafety
             or SparqlQueryType.SelectAllReduced;
     }
 
-    public static bool HasTopLevelLimit(string query)
+    private static bool ContainsMutatingKeywordOutsideString(string query)
     {
-        return Regex.IsMatch(query, @"\bLIMIT\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var masked = query.ToCharArray();
+        var inString = false;
+        var quote = MaskCharacter;
+
+        for (var index = 0; index < masked.Length; index++)
+        {
+            var current = masked[index];
+            if (inString)
+            {
+                masked[index] = MaskCharacter;
+                if (current == EscapeCharacter && index + 1 < masked.Length)
+                {
+                    masked[++index] = MaskCharacter;
+                    continue;
+                }
+
+                if (current == quote)
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            if (current is DoubleQuoteCharacter or SingleQuoteCharacter)
+            {
+                inString = true;
+                quote = current;
+                masked[index] = MaskCharacter;
+            }
+        }
+
+        return MutatingKeywordRegex.IsMatch(new string(masked));
     }
 }

@@ -59,6 +59,7 @@ Target capabilities:
 - Repository line coverage must be 95% or higher after production code exists.
 - Tests must verify the real Markdown -> graph -> query/search flow, including success, malformed input, and empty/no-match paths where relevant.
 - Tests must not use mocks, stubs, or fakes, except one local test implementation of `Microsoft.Extensions.AI.IChatClient` used to prove the LLM extraction boundary without network access.
+- Use TUnit for tests and Shouldly for assertions.
 
 ## Global Skills
 
@@ -71,7 +72,7 @@ List only the skills this solution actually uses.
 
 - `.NET` skills are sourced from `https://skills.managed-code.com/`.
 - `mcaf-dotnet` is the entry skill and routes to specialized `.NET` skills when installed.
-- Keep exactly one framework skill when installed: `mcaf-dotnet-xunit`, `mcaf-dotnet-tunit`, or `mcaf-dotnet-mstest`.
+- Keep exactly one framework skill when installed: `mcaf-dotnet-tunit`.
 - Add tool-specific `.NET` skills only when the repository actually uses those tools in CI or local verification.
 - Keep only `mcaf-*` skills in agent skill directories.
 - When upgrading skills, recheck `build`, `test`, `format`, `analyze`, and `coverage` commands against the repo toolchain.
@@ -90,8 +91,9 @@ List only the skills this solution actually uses.
 
 - Target framework: `net10.0`.
 - Use the SDK default C# language version unless an ADR documents a different value.
-- Test framework: xUnit unless a later ADR changes it.
-- Test runner model: VSTest-compatible `dotnet test` unless a later ADR moves the repository to Microsoft.Testing.Platform.
+- Test framework: TUnit.
+- Assertion library: Shouldly.
+- Test runner model: TUnit through `dotnet test` / Microsoft.Testing.Platform-compatible execution.
 - Coverage: Coverlet XPlat collector unless a later ADR moves coverage to `coverlet.MTP` or another .NET 10-compatible collector.
 
 ### Project AGENTS Policy
@@ -217,6 +219,9 @@ Local `AGENTS.md` files may tighten these values, but they must not loosen them 
 - Prefer composition over inheritance unless inheritance is explicitly justified.
 - Large files, types, functions, and deep nesting are design smells. Split them or document a justified exception under `exception_policy`.
 - Avoid magic values. Extract shared values into constants, enums, configuration, or dedicated types.
+- Production code MUST NOT use inline string literals, including regex patterns, RDF/SPARQL tokens, namespace URIs, YAML keys, prompt fragments, or error messages.
+- Production code may use named `const string` or `static readonly` string fields and must reference those symbols everywhere else.
+- Test code may use string literals only as test data, expected values, or fixture content.
 - Keep public contracts small, named, and stable.
 - Design boundaries so real behaviour can be tested through public interfaces.
 - The repo-root `.editorconfig` is the source of truth for formatting, naming, style, and analyzer severity.

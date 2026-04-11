@@ -4,15 +4,22 @@ namespace ManagedCode.MarkdownLd.Kb.Tests.Support;
 
 public sealed class TestChatClient : IChatClient
 {
-    private readonly Func<IReadOnlyList<ChatMessage>, string> _responseFactory;
+    private const string StreamingNotSupportedMessage = "Streaming is not used in these tests.";
+    private readonly Func<IReadOnlyList<ChatMessage>, ChatOptions?, string> _responseFactory;
     private readonly List<IReadOnlyList<ChatMessage>> _requests = [];
 
-    public TestChatClient(Func<IReadOnlyList<ChatMessage>, string> responseFactory)
+    public TestChatClient(Func<IReadOnlyList<ChatMessage>, ChatOptions?, string> responseFactory)
     {
         _responseFactory = responseFactory;
     }
 
     public IReadOnlyList<IReadOnlyList<ChatMessage>> Requests => _requests;
+
+    public ChatOptions? LastOptions { get; private set; }
+
+    public IReadOnlyList<ChatMessage> LastMessages => _requests.Count == 0 ? Array.Empty<ChatMessage>() : _requests[^1];
+
+    public int CallCount => _requests.Count;
 
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
@@ -21,7 +28,8 @@ public sealed class TestChatClient : IChatClient
     {
         var materialized = messages.ToArray();
         _requests.Add(materialized);
-        var content = _responseFactory(materialized);
+        LastOptions = options?.Clone();
+        var content = _responseFactory(materialized, options);
         return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, content)));
     }
 
@@ -30,7 +38,7 @@ public sealed class TestChatClient : IChatClient
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        throw new NotSupportedException("Streaming is not used in these tests.");
+        throw new NotSupportedException(StreamingNotSupportedMessage);
     }
 
     public object? GetService(Type serviceType, object? serviceKey = null) => null;

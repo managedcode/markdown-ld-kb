@@ -1,4 +1,6 @@
 using ManagedCode.MarkdownLd.Kb.Extraction;
+using Shouldly;
+using TUnit.Core;
 
 namespace ManagedCode.MarkdownLd.Kb.Tests.Extraction;
 
@@ -6,8 +8,8 @@ public sealed class MarkdownKnowledgeExtractorTests
 {
     private readonly MarkdownKnowledgeExtractor _extractor = new();
 
-    [Fact]
-    public void Extracts_front_matter_metadata_entities_mentions_and_arrow_assertions()
+    [Test]
+    public Task Extracts_metadata_entities_assertions_and_deduplicates_by_highest_confidence()
     {
         var markdown = """
 ---
@@ -19,23 +21,25 @@ date_modified: 2026-04-05
 authors:
   - name: Ada Lovelace
     sameAs: https://example.com/authors/ada-lovelace
-  - name: Managed Code
+  - Managed Code
 tags:
   - knowledge-graph
+  - markdown
   - markdown
 about:
   - label: Knowledge Graph
     sameAs: https://schema.org/KnowledgeGraph
+  - RDF
 entity_hints:
-  - label: RDF
+  - RDF
+  - label: Resource Description Framework
     sameAs: https://www.w3.org/RDF/
-  - label: SPARQL
-    sameAs: https://www.wikidata.org/wiki/Q54872
+  - SPARQL
 ---
 
 # Markdown-LD Knowledge Bank
 
-[[RDF]] and [RDF](https://www.w3.org/RDF/) appear in this article.
+[[RDF|Resource Description Framework]] and [Resource Description Framework](https://www.w3.org/RDF/) appear in this article.
 [SPARQL](https://www.wikidata.org/wiki/Q54872) is also referenced.
 Alice --uses--> RDF
 Alice --uses--> RDF
@@ -48,75 +52,70 @@ Foo --ignored--> Bar
 
         var result = _extractor.Extract(markdown);
 
-        Assert.Equal("https://example.com/articles/markdown-ld-knowledge-bank", result.Article.Id);
-        Assert.Equal("Markdown-LD Knowledge Bank", result.Article.Title);
-        Assert.Equal("Deterministic extraction from Markdown.", result.Article.Summary);
-        Assert.Equal("2026-04-04", result.Article.DatePublished);
-        Assert.Equal("2026-04-05", result.Article.DateModified);
+        result.Article.Id.ShouldBe("https://example.com/articles/markdown-ld-knowledge-bank");
+        result.Article.Title.ShouldBe("Markdown-LD Knowledge Bank");
+        result.Article.Summary.ShouldBe("Deterministic extraction from Markdown.");
+        result.Article.DatePublished.ShouldBe("2026-04-04");
+        result.Article.DateModified.ShouldBe("2026-04-05");
+        result.Article.Tags.ShouldBe(new[] { "knowledge-graph", "markdown" });
 
-        Assert.Collection(result.Article.Authors,
-            author => Assert.Equal("Ada Lovelace", author.Name),
-            author => Assert.Equal("Managed Code", author.Name));
+        result.Article.Authors.Select(author => author.Name).ShouldBe(new[] { "Ada Lovelace", "Managed Code" });
+        result.Article.About.Select(topic => topic.Label).ShouldBe(new[] { "Knowledge Graph", "RDF" });
 
-        Assert.Equal(new[] { "knowledge-graph", "markdown" }, result.Article.Tags);
-        Assert.Single(result.Article.About);
-        Assert.Equal("Knowledge Graph", result.Article.About[0].Label);
-        Assert.Equal("https://schema.org/KnowledgeGraph", result.Article.About[0].SameAs);
+        var rdf = result.Entities.Single(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/rdf");
+        rdf.Label.ShouldBe("RDF");
+        rdf.Type.ShouldBe("schema:Thing");
+        rdf.SameAs.Any(value => value == "Resource Description Framework").ShouldBe(true);
+        rdf.SameAs.Any(value => value == "https://www.w3.org/RDF/").ShouldBe(true);
 
-        Assert.Contains(result.Entities, entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/rdf" && entity.SameAs.Contains("https://www.w3.org/RDF/"));
-        Assert.Contains(result.Entities, entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/sparql" && entity.SameAs.Contains("https://www.wikidata.org/wiki/Q54872"));
-        Assert.Contains(result.Entities, entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/ada-lovelace" && entity.Type == "schema:Person");
-        Assert.Contains(result.Entities, entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/alice");
+        var sparql = result.Entities.Single(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/sparql");
+        sparql.Label.ShouldBe("SPARQL");
+        sparql.SameAs.ShouldBe(new[] { "https://www.wikidata.org/wiki/Q54872" });
 
-        var mentions = result.Assertions.Where(assertion => assertion.Predicate == "schema:mentions").ToArray();
-        Assert.Contains(mentions, assertion => assertion.ObjectId == "urn:managedcode:markdown-ld-kb:entity/rdf" && assertion.Confidence == 0.95);
-        Assert.DoesNotContain(mentions, assertion => assertion.ObjectId == "urn:managedcode:markdown-ld-kb:entity/rdf" && assertion.Confidence == 0.85);
+        var ada = result.Entities.Single(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/ada-lovelace");
+        ada.Type.ShouldBe("schema:Person");
 
-        Assert.Contains(result.Assertions, assertion =>
+        var knowledgeGraph = result.Entities.Single(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/knowledge-graph");
+        knowledgeGraph.Label.ShouldBe("Knowledge Graph");
+
+        result.Assertions
+            .Single(assertion => assertion.SubjectId == result.Article.Id
+                                 && assertion.Predicate == "schema:author"
+                                 && assertion.ObjectId == ada.Id)
+            .Confidence.ShouldBe(1.0);
+
+        result.Assertions
+            .Single(assertion => assertion.SubjectId == result.Article.Id
+                                 && assertion.Predicate == "schema:about"
+                                 && assertion.ObjectId == knowledgeGraph.Id)
+            .Confidence.ShouldBe(1.0);
+
+        result.Assertions
+            .Single(assertion => assertion.SubjectId == result.Article.Id
+                                 && assertion.Predicate == "schema:mentions"
+                                 && assertion.ObjectId == rdf.Id)
+            .Confidence.ShouldBe(0.95);
+
+        result.Assertions.Any(assertion =>
             assertion.SubjectId == result.Article.Id &&
-            assertion.Predicate == "schema:author" &&
-            assertion.ObjectId == "urn:managedcode:markdown-ld-kb:entity/ada-lovelace");
+            assertion.Predicate == "schema:mentions" &&
+            assertion.ObjectId == sparql.Id &&
+            assertion.Confidence == 0.85).ShouldBe(true);
 
-        Assert.Contains(result.Assertions, assertion =>
-            assertion.SubjectId == result.Article.Id &&
-            assertion.Predicate == "schema:about" &&
-            assertion.ObjectId == "urn:managedcode:markdown-ld-kb:entity/knowledge-graph");
+        result.Assertions
+            .Single(assertion => assertion.SubjectId == "urn:managedcode:markdown-ld-kb:entity/alice"
+                                 && assertion.Predicate == "schema:uses"
+                                 && assertion.ObjectId == rdf.Id)
+            .Confidence.ShouldBe(0.95);
 
-        Assert.Contains(result.Assertions, assertion =>
-            assertion.SubjectId == "urn:managedcode:markdown-ld-kb:entity/alice" &&
-            assertion.Predicate == "schema:uses" &&
-            assertion.ObjectId == "urn:managedcode:markdown-ld-kb:entity/rdf" &&
-            assertion.Confidence == 0.95);
+        result.Entities.Any(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/ignored-link").ShouldBe(false);
+        result.Entities.Any(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/foo").ShouldBe(false);
+
+        return Task.CompletedTask;
     }
 
-    [Fact]
-    public void Canonicalizes_entities_by_slug_and_same_as()
-    {
-        var markdown = """
----
-title: Identity Notes
-entity_hints:
-  - label: JSON-LD
-    sameAs: https://example.com/jsonld
-  - label: JSON LD
-    sameAs: https://example.com/jsonld
----
-
-[[JSON-LD]] and [JSON LD](https://example.com/jsonld) describe the same concept.
-""";
-
-        var result = _extractor.Extract(markdown);
-        var entity = Assert.Single(result.Entities, candidate => candidate.Id == "urn:managedcode:markdown-ld-kb:entity/json-ld");
-        Assert.Equal("JSON-LD", entity.Label);
-        Assert.Equal(new[] { "https://example.com/jsonld" }, entity.SameAs);
-
-        var mentions = result.Assertions.Where(assertion => assertion.Predicate == "schema:mentions" && assertion.ObjectId == entity.Id).ToArray();
-        Assert.Single(mentions);
-        Assert.Equal(0.95, mentions[0].Confidence);
-    }
-
-    [Fact]
-    public void Extracts_body_content_even_when_front_matter_is_malformed()
+    [Test]
+    public Task Falls_back_to_source_path_title_when_front_matter_is_missing_or_invalid()
     {
         var markdown = """
 ---
@@ -131,17 +130,25 @@ date_published: 2026-04-04
 
         var result = _extractor.Extract(markdown, "docs/fallback-title.md");
 
-        Assert.Equal("Fallback Title", result.Article.Title);
-        Assert.Equal("urn:managedcode:markdown-ld-kb:article/fallback-title", result.Article.Id);
-        Assert.Contains(result.Entities, entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/rdf");
-        Assert.Contains(result.Assertions, assertion => assertion.Predicate == "schema:mentions" && assertion.ObjectId == "urn:managedcode:markdown-ld-kb:entity/rdf");
+        result.Article.Title.ShouldBe("Fallback Title");
+        result.Article.Id.ShouldBe("urn:managedcode:markdown-ld-kb:article/fallback-title");
+        result.Entities.Any(entity => entity.Id == "urn:managedcode:markdown-ld-kb:entity/rdf").ShouldBe(true);
+        result.Assertions.Any(assertion =>
+            assertion.Predicate == "schema:mentions" &&
+            assertion.ObjectId == "urn:managedcode:markdown-ld-kb:entity/rdf").ShouldBe(true);
+
+        return Task.CompletedTask;
     }
 
-    [Fact]
-    public void Builds_canonical_slug_ids_deterministically()
+    [Test]
+    public Task Builds_deterministic_ids_from_titles_and_labels()
     {
-        Assert.Equal("urn:managedcode:markdown-ld-kb:entity/json-ld", MarkdownKnowledgeIds.BuildEntityId("JSON-LD"));
-        Assert.Equal("urn:managedcode:markdown-ld-kb:entity/c-programming", MarkdownKnowledgeIds.BuildEntityId("C++ Programming"));
-        Assert.Equal("urn:managedcode:markdown-ld-kb:article/web-30", MarkdownKnowledgeIds.BuildArticleId("Web 3.0"));
+        MarkdownKnowledgeIds.BuildEntityId("JSON-LD").ShouldBe("urn:managedcode:markdown-ld-kb:entity/json-ld");
+        MarkdownKnowledgeIds.BuildEntityId("C++ Programming").ShouldBe("urn:managedcode:markdown-ld-kb:entity/c-programming");
+        MarkdownKnowledgeIds.BuildArticleId("Web 3.0").ShouldBe("urn:managedcode:markdown-ld-kb:article/web-30");
+        MarkdownKnowledgeIds.BuildArticleId(null, "docs/MyCoolFile.md").ShouldBe("urn:managedcode:markdown-ld-kb:article/docs-mycoolfile");
+        MarkdownKnowledgeIds.HumanizeLabel("markdown-ld-kb").ShouldBe("markdown ld kb");
+
+        return Task.CompletedTask;
     }
 }

@@ -10,7 +10,9 @@ public sealed record MarkdownFrontMatter
 
     public string? Summary { get; init; }
 
-    public string? About { get; init; }
+    public string? CanonicalUrl { get; init; }
+
+    public IReadOnlyList<string> About { get; init; } = Array.Empty<string>();
 
     public string? DatePublished { get; init; }
 

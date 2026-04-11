@@ -1,11 +1,11 @@
-using System.Text;
+using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 using VDS.RDF;
 using VDS.RDF.Parsing;
 using VDS.RDF.Query;
 using VDS.RDF.Query.Datasets;
 using VDS.RDF.Writing;
 
-namespace ManagedCode.MarkdownLd.Kb;
+namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class KnowledgeGraph
 {
@@ -20,10 +20,10 @@ public sealed class KnowledgeGraph
 
     public async Task<SparqlQueryResult> ExecuteSelectAsync(string sparql, CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteQueryAsync(sparql, cancellationToken);
+        var result = await ExecuteQueryAsync(sparql, cancellationToken).ConfigureAwait(false);
         if (result is not SparqlResultSet resultSet)
         {
-            throw new InvalidOperationException("Expected a SPARQL result set.");
+            throw new InvalidOperationException(ExpectedResultSetMessage);
         }
 
         return ToResult(resultSet);
@@ -31,10 +31,10 @@ public sealed class KnowledgeGraph
 
     public async Task<bool> ExecuteAskAsync(string sparql, CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteQueryAsync(sparql, cancellationToken);
+        var result = await ExecuteQueryAsync(sparql, cancellationToken).ConfigureAwait(false);
         if (result is not SparqlResultSet resultSet)
         {
-            throw new InvalidOperationException("Expected a SPARQL result set.");
+            throw new InvalidOperationException(ExpectedResultSetMessage);
         }
 
         return resultSet.Result;
@@ -42,29 +42,13 @@ public sealed class KnowledgeGraph
 
     public Task<SparqlQueryResult> SearchAsync(string term, CancellationToken cancellationToken = default)
     {
-        var searchQuery = $"""
-            PREFIX schema: <https://schema.org/>
-            PREFIX kb: <https://example.com/vocab/kb#>
-            SELECT DISTINCT ?subject ?name ?type WHERE {{
-              ?subject a ?type .
-              OPTIONAL {{ ?subject schema:name ?name . }}
-              OPTIONAL {{ ?subject schema:description ?description . }}
-              OPTIONAL {{ ?subject schema:keywords ?keyword . }}
-              FILTER(
-                (BOUND(?name) && CONTAINS(LCASE(STR(?name)), LCASE("{EscapeSparqlLiteral(term)}"))) ||
-                (BOUND(?description) && CONTAINS(LCASE(STR(?description)), LCASE("{EscapeSparqlLiteral(term)}"))) ||
-                (BOUND(?keyword) && CONTAINS(LCASE(STR(?keyword)), LCASE("{EscapeSparqlLiteral(term)}")))
-              )
-            }}
-            LIMIT 100
-            """;
-
+        var searchQuery = SearchQueryTemplate.Replace(SearchTermToken, EscapeSparqlLiteral(term), StringComparison.Ordinal);
         return ExecuteSelectAsync(searchQuery, cancellationToken);
     }
 
     public string SerializeTurtle()
     {
-        using var writer = new StringWriter();
+        using var writer = new global::System.IO.StringWriter();
         var turtleWriter = new CompressingTurtleWriter();
         turtleWriter.Save(_graph, writer);
         return writer.ToString();
@@ -72,7 +56,7 @@ public sealed class KnowledgeGraph
 
     public string SerializeJsonLd()
     {
-        using var writer = new StringWriter();
+        using var writer = new global::System.IO.StringWriter();
         var store = new TripleStore();
         store.Add(_graph);
         var jsonLdWriter = new JsonLdWriter();
@@ -97,7 +81,7 @@ public sealed class KnowledgeGraph
             or SparqlQueryType.SelectDistinct
             or SparqlQueryType.SelectReduced))
         {
-            throw new ReadOnlySparqlQueryException($"Only ASK and SELECT queries are allowed, not {query.QueryType}.");
+            throw new ReadOnlySparqlQueryException(SelectAskOnlyMessagePrefix + query.QueryType);
         }
 
         var dataset = new InMemoryDataset(_graph);
@@ -134,17 +118,17 @@ public sealed class KnowledgeGraph
         {
             IUriNode uriNode => uriNode.Uri.AbsoluteUri,
             ILiteralNode literalNode => literalNode.Value,
-            IBlankNode blankNode => $"_:{blankNode.InternalID}",
+            IBlankNode blankNode => BlankNodePrefix + blankNode.InternalID,
             _ => node.ToString(),
         };
     }
 
     private static string EscapeSparqlLiteral(string value)
     {
-        return value.Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("\"", "\\\"", StringComparison.Ordinal)
-            .Replace("\r", string.Empty, StringComparison.Ordinal)
-            .Replace("\n", " ", StringComparison.Ordinal);
+        return value.Replace(BackslashText, EscapedBackslashText, StringComparison.Ordinal)
+            .Replace(QuoteText, EscapedQuoteText, StringComparison.Ordinal)
+            .Replace('\r', ' ')
+            .Replace('\n', ' ');
     }
 }
 
@@ -154,7 +138,7 @@ internal static class KnowledgeQueryValidator
     {
         if (!KnowledgeNaming.IsReadOnlySparql(sparql, out var failureReason))
         {
-            throw new ReadOnlySparqlQueryException(failureReason ?? "SPARQL query is not read-only.");
+            throw new ReadOnlySparqlQueryException(failureReason ?? ReadOnlySparqlQueryMessage);
         }
     }
 }

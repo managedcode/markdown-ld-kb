@@ -1,10 +1,23 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
-namespace ManagedCode.MarkdownLd.Kb;
+namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed record MarkdownSourceDocument(string Path, string Content, Uri? CanonicalUri = null);
+
+public sealed record KnowledgeSourceDocument(
+    string Path,
+    string Content,
+    Uri? CanonicalUri,
+    string MediaType)
+{
+    public MarkdownSourceDocument ToMarkdownSourceDocument()
+    {
+        return new MarkdownSourceDocument(Path, Content, CanonicalUri);
+    }
+}
 
 public sealed record MarkdownSection(
     int Level,
@@ -26,7 +39,7 @@ public sealed record KnowledgeEntityFact
 {
     public string? Id { get; init; }
     public string Label { get; init; } = string.Empty;
-    public string Type { get; init; } = "schema:Thing";
+    public string Type { get; init; } = DefaultSchemaThing;
     public List<string> SameAs { get; init; } = [];
     public double Confidence { get; init; } = 0.8;
     public string Source { get; init; } = string.Empty;
@@ -35,7 +48,7 @@ public sealed record KnowledgeEntityFact
 public sealed record KnowledgeAssertionFact
 {
     public string SubjectId { get; init; } = string.Empty;
-    public string Predicate { get; init; } = "kb:relatedTo";
+    public string Predicate { get; init; } = DefaultKbRelatedTo;
     public string ObjectId { get; init; } = string.Empty;
     public double Confidence { get; init; } = 0.8;
     public string Source { get; init; } = string.Empty;
@@ -65,15 +78,15 @@ public sealed class ReadOnlySparqlQueryException : InvalidOperationException
 
 public static class KnowledgeNaming
 {
-    private static readonly Regex NonAlphaNumeric = new("[^a-z0-9\\s-]", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex Whitespace = new("[\\s_]+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex Dashes = new("-+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex NonAlphaNumeric = new(NonAlphaNumericPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex Whitespace = new(WhitespacePattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex Dashes = new(DashesPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public static string Slugify(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return "item";
+            return DefaultItem;
         }
 
         var normalized = value.Normalize(NormalizationForm.FormD);
@@ -89,17 +102,17 @@ public static class KnowledgeNaming
         }
 
         var s = NonAlphaNumeric.Replace(builder.ToString(), string.Empty);
-        s = Whitespace.Replace(s, "-");
-        s = Dashes.Replace(s, "-");
+        s = Whitespace.Replace(s, Hyphen);
+        s = Dashes.Replace(s, Hyphen);
         return s.Trim('-');
     }
 
     public static Uri NormalizeBaseUri(Uri baseUri)
     {
         var text = baseUri.AbsoluteUri;
-        if (!text.EndsWith('/', StringComparison.Ordinal))
+        if (!text.EndsWith(Slash, StringComparison.Ordinal))
         {
-            text += "/";
+            text += Slash;
         }
 
         return new Uri(text, UriKind.Absolute);
@@ -112,12 +125,12 @@ public static class KnowledgeNaming
         withoutExtension = withoutExtension.Replace('\\', '/').Trim('/');
         if (string.IsNullOrWhiteSpace(withoutExtension))
         {
-            withoutExtension = "document";
+            withoutExtension = DefaultDocument;
         }
 
-        if (!withoutExtension.EndsWith('/', StringComparison.Ordinal))
+        if (!withoutExtension.EndsWith(Slash, StringComparison.Ordinal))
         {
-            withoutExtension += "/";
+            withoutExtension += Slash;
         }
 
         return new Uri(NormalizeBaseUri(baseUri), withoutExtension);
@@ -125,15 +138,15 @@ public static class KnowledgeNaming
 
     public static string CreateEntityId(Uri baseUri, string label)
     {
-        return new Uri(NormalizeBaseUri(baseUri), $"id/{Slugify(label)}").AbsoluteUri;
+        return new Uri(NormalizeBaseUri(baseUri), EntityIdPrefix + Slugify(label)).AbsoluteUri;
     }
 
     public static string NormalizeSourcePath(string sourcePath)
     {
         var normalized = sourcePath.Replace('\\', '/').TrimStart('/');
-        if (normalized.StartsWith("content/", StringComparison.OrdinalIgnoreCase))
+        if (normalized.StartsWith(ContentPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            normalized = normalized["content/".Length..];
+            normalized = normalized[ContentPrefix.Length..];
         }
 
         return normalized;
@@ -144,18 +157,15 @@ public static class KnowledgeNaming
         var normalized = queryText.Trim();
         if (normalized.Length == 0)
         {
-            failureReason = "SPARQL query is empty";
+            failureReason = EmptySparqlQueryMessage;
             return false;
         }
 
-        var upper = normalized.ToUpperInvariant();
-        foreach (var keyword in new[] { "INSERT", "DELETE", "LOAD", "CLEAR", "DROP", "CREATE", "MOVE", "COPY", "ADD", "WITH", "MODIFY" })
+        if (MutatingKeywordRegex.IsMatch(normalized.ToUpperInvariant()))
         {
-            if (Regex.IsMatch(upper, $@"\b{keyword}\b", RegexOptions.CultureInvariant))
-            {
-                failureReason = $"Mutating keyword '{keyword}' is not allowed";
-                return false;
-            }
+            var match = MutatingKeywordRegex.Match(normalized.ToUpperInvariant());
+            failureReason = MutatingKeywordMessagePrefix + match.Value + MutatingKeywordMessageSuffix;
+            return false;
         }
 
         failureReason = null;
@@ -165,6 +175,55 @@ public static class KnowledgeNaming
     public static string NormalizePredicate(string predicate)
     {
         var trimmed = predicate.Trim();
+
+        if (trimmed.Equals(SchemaAboutText, StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals(ExpectedSchemaAbout, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExpectedSchemaAbout;
+        }
+
+        if (trimmed.Equals(SchemaAuthorText, StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals(ExpectedSchemaAuthor, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExpectedSchemaAuthor;
+        }
+
+        if (trimmed.Equals(SchemaCreatorText, StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals(ExpectedSchemaCreator, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExpectedSchemaCreator;
+        }
+
+        if (trimmed.Equals(SchemaDescriptionText, StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals(ExpectedSchemaDescription, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExpectedSchemaDescription;
+        }
+
+        if (trimmed.Equals(SchemaKeywordsText, StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals(ExpectedSchemaKeywords, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExpectedSchemaKeywords;
+        }
+
+        if (trimmed.Equals(SchemaMentionsText, StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals(ExpectedSchemaMentions, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExpectedSchemaMentions;
+        }
+
+        if (trimmed.Equals(SchemaNameText, StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals(ExpectedSchemaName, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExpectedSchemaName;
+        }
+
+        if (trimmed.Equals(SchemaSameAsText, StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals(ExpectedSchemaSameAs, StringComparison.OrdinalIgnoreCase))
+        {
+            return ExpectedSchemaSameAs;
+        }
+
         if (trimmed.Contains(':', StringComparison.Ordinal))
         {
             return trimmed;
@@ -172,15 +231,19 @@ public static class KnowledgeNaming
 
         return trimmed.ToLowerInvariant() switch
         {
-            "mentions" => "schema:mentions",
-            "about" => "schema:about",
-            "author" => "schema:author",
-            "creator" => "schema:creator",
-            "sameas" => "schema:sameAs",
-            "description" => "schema:description",
-            "keywords" => "schema:keywords",
-            "relatedto" => "kb:relatedTo",
-            _ => "kb:relatedTo",
+            MentionPredicateKey => ExpectedSchemaMentions,
+            AboutPredicateKey => ExpectedSchemaAbout,
+            AuthorPredicateKey => ExpectedSchemaAuthor,
+            CreatorPredicateKey => ExpectedSchemaCreator,
+            SameAsPredicateKey => ExpectedSchemaSameAs,
+            DescriptionPredicateKey => ExpectedSchemaDescription,
+            KeywordsPredicateKey => ExpectedSchemaKeywords,
+            RelatedToPredicateKey => DefaultKbRelatedTo,
+            _ => DefaultKbRelatedTo,
         };
     }
+
+    private static readonly Regex MutatingKeywordRegex = new(
+        MutatingKeywordPattern,
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 }

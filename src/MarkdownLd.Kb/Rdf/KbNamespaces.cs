@@ -22,37 +22,71 @@ public static class KbNamespaces
     public static readonly Uri XsdUri = new(Xsd);
     public static readonly Uri KbUri = new(Kb);
 
-    public static readonly Uri SchemaThing = new($"{Schema}Thing");
-    public static readonly Uri SchemaArticle = new($"{Schema}Article");
-    public static readonly Uri SchemaPerson = new($"{Schema}Person");
-    public static readonly Uri SchemaOrganization = new($"{Schema}Organization");
-    public static readonly Uri SchemaSoftwareApplication = new($"{Schema}SoftwareApplication");
-    public static readonly Uri SchemaCreativeWork = new($"{Schema}CreativeWork");
+    private const string ThingSuffix = "Thing";
+    private const string ArticleSuffix = "Article";
+    private const string PersonSuffix = "Person";
+    private const string OrganizationSuffix = "Organization";
+    private const string SoftwareApplicationSuffix = "SoftwareApplication";
+    private const string CreativeWorkSuffix = "CreativeWork";
 
-    public static readonly Uri SchemaName = new($"{Schema}name");
-    public static readonly Uri SchemaKeywords = new($"{Schema}keywords");
-    public static readonly Uri SchemaDescription = new($"{Schema}description");
-    public static readonly Uri SchemaDatePublished = new($"{Schema}datePublished");
-    public static readonly Uri SchemaDateModified = new($"{Schema}dateModified");
-    public static readonly Uri SchemaMentions = new($"{Schema}mentions");
-    public static readonly Uri SchemaAbout = new($"{Schema}about");
-    public static readonly Uri SchemaAuthor = new($"{Schema}author");
-    public static readonly Uri SchemaCreator = new($"{Schema}creator");
-    public static readonly Uri SchemaSameAs = new($"{Schema}sameAs");
-    public static readonly Uri SchemaSubjectOf = new($"{Schema}subjectOf");
+    private const string NameSuffix = "name";
+    private const string KeywordsSuffix = "keywords";
+    private const string DescriptionSuffix = "description";
+    private const string DatePublishedSuffix = "datePublished";
+    private const string DateModifiedSuffix = "dateModified";
+    private const string MentionsSuffix = "mentions";
+    private const string AboutSuffix = "about";
+    private const string AuthorSuffix = "author";
+    private const string CreatorSuffix = "creator";
+    private const string SameAsSuffix = "sameAs";
+    private const string SubjectOfSuffix = "subjectOf";
 
-    public static readonly Uri RdfType = new($"{Rdf}type");
-    public static readonly Uri XsdDate = new($"{Xsd}date");
-    public static readonly Uri XsdDecimal = new($"{Xsd}decimal");
-    public static readonly Uri XsdInteger = new($"{Xsd}integer");
+    private const string TypeSuffix = "type";
+    private const string DateSuffix = "date";
+    private const string DecimalSuffix = "decimal";
+    private const string IntegerSuffix = "integer";
 
-    public static readonly Uri KbAssertion = new($"{Kb}Assertion");
-    public static readonly Uri KbConfidence = new($"{Kb}confidence");
-    public static readonly Uri KbRelatedTo = new($"{Kb}relatedTo");
-    public static readonly Uri KbChunk = new($"{Kb}chunk");
-    public static readonly Uri KbDocPath = new($"{Kb}docPath");
-    public static readonly Uri KbCharStart = new($"{Kb}charStart");
-    public static readonly Uri KbCharEnd = new($"{Kb}charEnd");
+    private const string AssertionSuffix = "Assertion";
+    private const string ConfidenceSuffix = "confidence";
+    private const string RelatedToSuffix = "relatedTo";
+    private const string ChunkSuffix = "chunk";
+    private const string DocPathSuffix = "docPath";
+    private const string CharStartSuffix = "charStart";
+    private const string CharEndSuffix = "charEnd";
+    private const string WasDerivedFromSuffix = "wasDerivedFrom";
+
+    public static readonly Uri SchemaThing = new(Schema + ThingSuffix);
+    public static readonly Uri SchemaArticle = new(Schema + ArticleSuffix);
+    public static readonly Uri SchemaPerson = new(Schema + PersonSuffix);
+    public static readonly Uri SchemaOrganization = new(Schema + OrganizationSuffix);
+    public static readonly Uri SchemaSoftwareApplication = new(Schema + SoftwareApplicationSuffix);
+    public static readonly Uri SchemaCreativeWork = new(Schema + CreativeWorkSuffix);
+
+    public static readonly Uri SchemaName = new(Schema + NameSuffix);
+    public static readonly Uri SchemaKeywords = new(Schema + KeywordsSuffix);
+    public static readonly Uri SchemaDescription = new(Schema + DescriptionSuffix);
+    public static readonly Uri SchemaDatePublished = new(Schema + DatePublishedSuffix);
+    public static readonly Uri SchemaDateModified = new(Schema + DateModifiedSuffix);
+    public static readonly Uri SchemaMentions = new(Schema + MentionsSuffix);
+    public static readonly Uri SchemaAbout = new(Schema + AboutSuffix);
+    public static readonly Uri SchemaAuthor = new(Schema + AuthorSuffix);
+    public static readonly Uri SchemaCreator = new(Schema + CreatorSuffix);
+    public static readonly Uri SchemaSameAs = new(Schema + SameAsSuffix);
+    public static readonly Uri SchemaSubjectOf = new(Schema + SubjectOfSuffix);
+
+    public static readonly Uri RdfType = new(Rdf + TypeSuffix);
+    public static readonly Uri XsdDate = new(Xsd + DateSuffix);
+    public static readonly Uri XsdDecimal = new(Xsd + DecimalSuffix);
+    public static readonly Uri XsdInteger = new(Xsd + IntegerSuffix);
+
+    public static readonly Uri KbAssertion = new(Kb + AssertionSuffix);
+    public static readonly Uri KbConfidence = new(Kb + ConfidenceSuffix);
+    public static readonly Uri KbRelatedTo = new(Kb + RelatedToSuffix);
+    public static readonly Uri KbChunk = new(Kb + ChunkSuffix);
+    public static readonly Uri KbDocPath = new(Kb + DocPathSuffix);
+    public static readonly Uri KbCharStart = new(Kb + CharStartSuffix);
+    public static readonly Uri KbCharEnd = new(Kb + CharEndSuffix);
+    public static readonly Uri ProvWasDerivedFrom = new(Prov + WasDerivedFromSuffix);
 
     public static void Register(IGraph graph)
     {

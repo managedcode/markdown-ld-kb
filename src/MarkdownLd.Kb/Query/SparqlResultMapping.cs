@@ -19,6 +19,11 @@ public sealed record SparqlQueryResult(
 
 public static class SparqlResultMapper
 {
+    private const string UriNodeKind = "uri";
+    private const string LiteralNodeKind = "literal";
+    private const string BlankNodeKind = "blank";
+    private const string UnknownNodeKind = "unknown";
+
     public static SparqlQueryResult Map(SparqlResultSet resultSet)
     {
         ArgumentNullException.ThrowIfNull(resultSet);
@@ -60,14 +65,14 @@ public static class SparqlResultMapper
 
         return node switch
         {
-            IUriNode uriNode => new SparqlBindingValue("uri", uriNode.Uri.AbsoluteUri),
+            IUriNode uriNode => new SparqlBindingValue(UriNodeKind, uriNode.Uri.AbsoluteUri),
             ILiteralNode literalNode => new SparqlBindingValue(
-                "literal",
+                LiteralNodeKind,
                 literalNode.Value,
                 literalNode.DataType?.AbsoluteUri,
                 string.IsNullOrWhiteSpace(literalNode.Language) ? null : literalNode.Language),
-            IBlankNode blankNode => new SparqlBindingValue("blank", blankNode.InternalID),
-            _ => new SparqlBindingValue("unknown", node.ToString())
+            IBlankNode blankNode => new SparqlBindingValue(BlankNodeKind, blankNode.InternalID),
+            _ => new SparqlBindingValue(UnknownNodeKind, node.ToString())
         };
     }
 }

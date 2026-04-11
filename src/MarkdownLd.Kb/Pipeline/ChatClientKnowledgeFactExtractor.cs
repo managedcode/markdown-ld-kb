@@ -1,50 +1,71 @@
 using Microsoft.Extensions.AI;
+using ManagedCode.MarkdownLd.Kb;
+using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
-namespace ManagedCode.MarkdownLd.Kb;
-
-public sealed record KnowledgeChatExtractionEnvelope
-{
-    public List<KnowledgeEntityFact> Entities { get; init; } = [];
-    public List<KnowledgeAssertionFact> Assertions { get; init; } = [];
-}
+namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class ChatClientKnowledgeFactExtractor
 {
-    private readonly IChatClient _chatClient;
+    private readonly global::ManagedCode.MarkdownLd.Kb.ChatClientKnowledgeFactExtractor _extractor;
 
     public ChatClientKnowledgeFactExtractor(IChatClient chatClient)
     {
-        _chatClient = chatClient;
+        _extractor = new global::ManagedCode.MarkdownLd.Kb.ChatClientKnowledgeFactExtractor(chatClient);
     }
 
     public async Task<KnowledgeExtractionResult> ExtractAsync(MarkdownDocument document, CancellationToken cancellationToken = default)
     {
-        var prompt = BuildPrompt(document);
-        var response = await _chatClient.GetResponseAsync<KnowledgeChatExtractionEnvelope>(
-            prompt,
-            cancellationToken: cancellationToken);
+        ArgumentNullException.ThrowIfNull(document);
 
-        var envelope = response.Result ?? new KnowledgeChatExtractionEnvelope();
-        return new KnowledgeExtractionResult
-        {
-            Entities = envelope.Entities ?? [],
-            Assertions = envelope.Assertions ?? [],
-        };
+        var request = BuildRequest(document);
+        var result = await _extractor.ExtractAsync(request, cancellationToken).ConfigureAwait(false);
+        return Convert(result);
     }
 
-    private static string BuildPrompt(MarkdownDocument document)
+    private static global::ManagedCode.MarkdownLd.Kb.KnowledgeFactExtractionRequest BuildRequest(MarkdownDocument document)
     {
-        var sections = string.Join(
-            Environment.NewLine + Environment.NewLine,
-            document.Sections.Select(section =>
-                $"SECTION: {section.Heading}{Environment.NewLine}{section.Text}"));
+        var frontMatter = document.FrontMatter.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value?.ToString(),
+            StringComparer.OrdinalIgnoreCase);
 
-        return
-            "Extract knowledge facts from the Markdown document. " +
-            "Return only JSON matching the requested structured output envelope. " +
-            $"DOCUMENT_URI: {document.DocumentUri.AbsoluteUri}{Environment.NewLine}" +
-            $"TITLE: {document.Title}{Environment.NewLine}" +
-            $"BODY:{Environment.NewLine}{document.Body}{Environment.NewLine}{Environment.NewLine}" +
-            $"SECTIONS:{Environment.NewLine}{sections}";
+        var sectionPath = document.Sections.Count == 0
+            ? null
+            : string.Join(PathSeparator, document.Sections[0].HeadingPath);
+
+        return new global::ManagedCode.MarkdownLd.Kb.KnowledgeFactExtractionRequest(
+            document.DocumentUri.AbsoluteUri,
+            KnowledgeNaming.Slugify(document.SourcePath),
+            document.Body,
+            document.Title,
+            sectionPath,
+            frontMatter);
+    }
+
+    private static KnowledgeExtractionResult Convert(global::ManagedCode.MarkdownLd.Kb.KnowledgeFactExtractionResult result)
+    {
+        return new KnowledgeExtractionResult
+        {
+            Entities = result.Entities
+                .Select(entity => new KnowledgeEntityFact
+                {
+                    Id = string.IsNullOrWhiteSpace(entity.Id) ? null : entity.Id,
+                    Label = entity.Label,
+                    Type = entity.Type,
+                    SameAs = entity.SameAs?.ToList() ?? [],
+                    Source = result.DocumentId,
+                })
+                .ToList(),
+            Assertions = result.Assertions
+                .Select(assertion => new KnowledgeAssertionFact
+                {
+                    SubjectId = assertion.SubjectId,
+                    Predicate = assertion.Predicate,
+                    ObjectId = assertion.ObjectId,
+                    Confidence = assertion.Confidence,
+                    Source = assertion.Source ?? result.DocumentId,
+                })
+                .ToList(),
+        };
     }
 }

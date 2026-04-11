@@ -1,7 +1,9 @@
+using System.Collections;
 using System.Globalization;
 using System.Text;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
+using static ManagedCode.MarkdownLd.Kb.Extraction.MarkdownKnowledgeConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Extraction;
 
@@ -14,8 +16,8 @@ internal static class MarkdownFrontMatterParser
             return new MarkdownFrontMatterParseResult(new MarkdownFrontMatter(), string.Empty, false);
         }
 
-        var normalized = markdown.TrimStart('\uFEFF').Replace("\r\n", "\n");
-        if (!normalized.StartsWith("---\n", StringComparison.Ordinal))
+        var normalized = markdown.TrimStart('\uFEFF').Replace(CarriageReturnLineFeed, LineFeed);
+        if (!normalized.StartsWith(FrontMatterStart, StringComparison.Ordinal))
         {
             return new MarkdownFrontMatterParseResult(new MarkdownFrontMatter(), normalized, false);
         }
@@ -46,14 +48,14 @@ internal static class MarkdownFrontMatterParser
 
             frontMatter = new MarkdownFrontMatter
             {
-                Title = ReadString(values, "title"),
-                Summary = ReadString(values, "summary"),
-                CanonicalUrl = ReadString(values, "canonical_url"),
-                DatePublished = ReadString(values, "date_published"),
-                DateModified = ReadString(values, "date_modified"),
+                Title = ReadString(values, TitleKey),
+                Summary = ReadString(values, SummaryKey),
+                CanonicalUrl = ReadString(values, CanonicalUrlKey),
+                DatePublished = ReadString(values, DatePublishedKey),
+                DateModified = ReadString(values, DateModifiedKey),
                 Authors = ReadAuthors(values),
-                Tags = ReadStringList(values, "tags"),
-                About = ReadTopics(values, "about"),
+                Tags = ReadStringList(values, TagsKey),
+                About = ReadTopics(values, AboutKey),
                 EntityHints = ReadEntityHints(values),
             };
             return true;
@@ -74,7 +76,7 @@ internal static class MarkdownFrontMatterParser
     {
         using var reader = new StringReader(markdown);
         var firstLine = reader.ReadLine();
-        if (!string.Equals(firstLine?.Trim(), "---", StringComparison.Ordinal))
+        if (!string.Equals(firstLine?.Trim(), FrontMatterFence, StringComparison.Ordinal))
         {
             return (string.Empty, markdown, false);
         }
@@ -83,7 +85,7 @@ internal static class MarkdownFrontMatterParser
         string? line;
         while ((line = reader.ReadLine()) is not null)
         {
-            if (string.Equals(line.Trim(), "---", StringComparison.Ordinal))
+            if (string.Equals(line.Trim(), FrontMatterFence, StringComparison.Ordinal))
             {
                 var body = reader.ReadToEnd();
                 return (frontMatter.ToString(), body.TrimStart('\n'), true);
@@ -120,6 +122,7 @@ internal static class MarkdownFrontMatterParser
         return NormalizeSequence(value)
             .Select(item => item switch
             {
+                null => null,
                 string s => s.Trim(),
                 IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture)?.Trim(),
                 _ => item.ToString()?.Trim(),
@@ -132,7 +135,7 @@ internal static class MarkdownFrontMatterParser
 
     private static IReadOnlyList<MarkdownAuthor> ReadAuthors(IReadOnlyDictionary<string, object?> values)
     {
-        if (!values.TryGetValue("authors", out var value) || value is null)
+        if (!values.TryGetValue(AuthorsKey, out var value) || value is null)
         {
             return [];
         }
@@ -161,16 +164,16 @@ internal static class MarkdownFrontMatterParser
         {
             return new MarkdownAuthor
             {
-                Name = ReadString(map, "name") ?? ReadString(map, "label") ?? string.Empty,
-                SameAs = ReadString(map, "sameAs") ?? ReadString(map, "same_as"),
-                Type = ReadString(map, "type"),
+                Name = ReadString(map, NameKey) ?? ReadString(map, LabelKey) ?? string.Empty,
+                SameAs = ReadString(map, SameAsKey) ?? ReadString(map, SameAsSnakeKey),
+                Type = ReadString(map, TypeKey),
             };
         }
 
         if (item is IDictionary<object, object?> dynamicMap)
         {
-            var map = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? string.Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
-            return ReadAuthor(map);
+            var dictionary = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? string.Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+            return ReadAuthor(dictionary);
         }
 
         return new MarkdownAuthor { Name = item.ToString()?.Trim() ?? string.Empty };
@@ -187,7 +190,7 @@ internal static class MarkdownFrontMatterParser
             .Select(ReadTopic)
             .Where(topic => topic is not null && !string.IsNullOrWhiteSpace(topic.Label))
             .Select(topic => topic!)
-            .DistinctBy(topic => $"{topic.Label}|{topic.SameAs}", StringComparer.OrdinalIgnoreCase)
+            .DistinctBy(BuildTopicKey, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -207,15 +210,15 @@ internal static class MarkdownFrontMatterParser
         {
             return new MarkdownTopic
             {
-                Label = ReadString(map, "label") ?? ReadString(map, "name") ?? ReadString(map, "value") ?? string.Empty,
-                SameAs = ReadString(map, "sameAs") ?? ReadString(map, "same_as"),
+                Label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? ReadString(map, ValueKey) ?? string.Empty,
+                SameAs = ReadString(map, SameAsKey) ?? ReadString(map, SameAsSnakeKey),
             };
         }
 
         if (item is IDictionary<object, object?> dynamicMap)
         {
-            var map = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? string.Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
-            return ReadTopic(map);
+            var dictionary = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? string.Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+            return ReadTopic(dictionary);
         }
 
         return new MarkdownTopic { Label = NormalizeLabel(item.ToString() ?? string.Empty) };
@@ -223,7 +226,7 @@ internal static class MarkdownFrontMatterParser
 
     private static IReadOnlyList<MarkdownEntityHint> ReadEntityHints(IReadOnlyDictionary<string, object?> values)
     {
-        if (!values.TryGetValue("entity_hints", out var value) || value is null)
+        if (!values.TryGetValue(EntityHintsKey, out var value) || value is null)
         {
             return [];
         }
@@ -232,7 +235,7 @@ internal static class MarkdownFrontMatterParser
             .Select(ReadEntityHint)
             .Where(hint => hint is not null && !string.IsNullOrWhiteSpace(hint.Label))
             .Select(hint => hint!)
-            .DistinctBy(hint => $"{hint.Label}|{hint.SameAs}|{hint.Type}", StringComparer.OrdinalIgnoreCase)
+            .DistinctBy(BuildHintKey, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -252,16 +255,16 @@ internal static class MarkdownFrontMatterParser
         {
             return new MarkdownEntityHint
             {
-                Label = ReadString(map, "label") ?? ReadString(map, "name") ?? string.Empty,
-                SameAs = ReadString(map, "sameAs") ?? ReadString(map, "same_as"),
-                Type = ReadString(map, "type"),
+                Label = ReadString(map, LabelKey) ?? ReadString(map, NameKey) ?? string.Empty,
+                SameAs = ReadString(map, SameAsKey) ?? ReadString(map, SameAsSnakeKey),
+                Type = ReadString(map, TypeKey),
             };
         }
 
         if (item is IDictionary<object, object?> dynamicMap)
         {
-            var map = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? string.Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
-            return ReadEntityHint(map);
+            var dictionary = dynamicMap.ToDictionary(entry => entry.Key.ToString() ?? string.Empty, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+            return ReadEntityHint(dictionary);
         }
 
         return new MarkdownEntityHint { Label = NormalizeLabel(item.ToString() ?? string.Empty) };
@@ -282,10 +285,21 @@ internal static class MarkdownFrontMatterParser
         return MarkdownKnowledgeIds.HumanizeLabel(text);
     }
 
+    private static string BuildTopicKey(MarkdownTopic topic)
+    {
+        return string.Concat(topic.Label, SameAsKeySeparator, topic.SameAs);
+    }
+
+    private static string BuildHintKey(MarkdownEntityHint hint)
+    {
+        return string.Concat(hint.Label, SameAsKeySeparator, hint.SameAs, SameAsKeySeparator, hint.Type);
+    }
+
     private static IEnumerable<object?> NormalizeSequence(object value)
     {
         return value switch
         {
+            string => [value],
             IEnumerable<object?> enumerable => enumerable,
             IEnumerable enumerable => enumerable.Cast<object?>(),
             _ => [value],
