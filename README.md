@@ -1,5 +1,14 @@
 # Markdown-LD Knowledge Bank
 
+[![PR validation](https://github.com/managedcode/markdown-ld-kb/actions/workflows/validation.yml/badge.svg)](https://github.com/managedcode/markdown-ld-kb/actions/workflows/validation.yml)
+[![Release](https://github.com/managedcode/markdown-ld-kb/actions/workflows/release.yml/badge.svg)](https://github.com/managedcode/markdown-ld-kb/actions/workflows/release.yml)
+[![CodeQL](https://github.com/managedcode/markdown-ld-kb/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/managedcode/markdown-ld-kb/actions/workflows/codeql-analysis.yml)
+[![NuGet](https://img.shields.io/nuget/v/ManagedCode.MarkdownLd.Kb.svg?logo=nuget)](https://www.nuget.org/packages/ManagedCode.MarkdownLd.Kb)
+[![NuGet downloads](https://img.shields.io/nuget/dt/ManagedCode.MarkdownLd.Kb.svg?logo=nuget)](https://www.nuget.org/packages/ManagedCode.MarkdownLd.Kb)
+[![GitHub release](https://img.shields.io/github/v/release/managedcode/markdown-ld-kb?include_prereleases&logo=github)](https://github.com/managedcode/markdown-ld-kb/releases)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 Markdown-LD Knowledge Bank is a .NET 10 library for turning Markdown knowledge-base files into an in-memory RDF graph that can be searched, queried with read-only SPARQL, exported as RDF, and rendered as a diagram.
 
 It ports the core idea from [lqdev/markdown-ld-kb](https://github.com/lqdev/markdown-ld-kb) into a C# library package. The runtime is local and in-memory: no localhost server, no Azure Functions host, no database server, and no hosted graph service are required.
@@ -148,7 +157,7 @@ You do not need to pass a base URI for normal use. Document identity is resolved
 - the file path, normalized the same way as the upstream project: `content/notes/rdf.md` becomes a stable document IRI
 - the generated inline document path when `BuildFromMarkdownAsync` is called without a path
 
-The library uses `urn:managedcode:markdown-ld-kb:/` as an internal default base URI only to create valid RDF IRIs when the Markdown does not provide a canonical URL. Pass `new MarkdownKnowledgePipeline(new Uri("https://your-domain/"))` only when you want generated document/entity IRIs to live under your own domain.
+The library uses `urn:managedcode:markdown-ld-kb:/` as an internal default base URI only to create valid RDF IRIs when the source does not provide `KnowledgeDocumentConversionOptions.CanonicalUri`. Pass `new MarkdownKnowledgePipeline(new Uri("https://your-domain/"))` only when you want generated document/entity IRIs to live under your own domain.
 
 ## Optional AI Extraction
 
@@ -307,7 +316,7 @@ var rows = await shared.Graph.SearchAsync("rdf");
 | `KnowledgeGraph` | In-memory dotNetRDF graph with query, search, export, and merge. |
 | `KnowledgeGraphSnapshot` | Immutable view with `Nodes` (`KnowledgeGraphNode`) and `Edges` (`KnowledgeGraphEdge`). |
 | `MarkdownDocument` | Pipeline parsed document: `FrontMatter`, `Body`, and `Sections`. |
-| `MarkdownFrontMatter` | Typed access to YAML front matter fields. |
+| `MarkdownFrontMatter` | Typed front matter model used by the low-level Markdown parser. |
 | `KnowledgeExtractionResult` | Merged collection of `KnowledgeEntityFact` and `KnowledgeAssertionFact`. |
 | `SparqlQueryResult` | Query result with `Variables` and `Rows` of `SparqlRow`. |
 | `KnowledgeSourceDocumentConverter` | Converts files and directories into pipeline-ready source documents. |
@@ -344,7 +353,7 @@ Recognized front matter keys:
 | `author` | `schema:author` | string or list |
 | `tags` / `keywords` | `schema:keywords` | list |
 | `about` | `schema:about` | list |
-| `canonicalUrl` / `canonical_url` | root parser document identity; use `KnowledgeDocumentConversionOptions.CanonicalUri` for pipeline identity | string (URL) |
+| `canonicalUrl` / `canonical_url` | low-level Markdown parser document identity; use `KnowledgeDocumentConversionOptions.CanonicalUri` for pipeline identity | string (URL) |
 | `entity_hints` / `entityHints` | entity hints | list of `{label, type, sameAs}` |
 
 Optional advanced predicate forms:
