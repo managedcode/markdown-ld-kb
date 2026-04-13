@@ -3,7 +3,6 @@ using ManagedCode.MarkdownLd.Kb.Tests.Support;
 using Shouldly;
 using RootMarkdownDocumentParser = ManagedCode.MarkdownLd.Kb.Parsing.MarkdownDocumentParser;
 using RootMarkdownDocumentSource = ManagedCode.MarkdownLd.Kb.MarkdownDocumentSource;
-using RootMarkdownParsingOptions = ManagedCode.MarkdownLd.Kb.MarkdownParsingOptions;
 
 namespace ManagedCode.MarkdownLd.Kb.Tests.Integration;
 
@@ -547,23 +546,6 @@ ASK WHERE {
     private static readonly string[] ExpectedMergeFactKeywords = [ComplexKeywordAlpha, ComplexKeywordBeta];
 
     [Test]
-    public async Task Root_document_parser_output_feeds_pipeline_graph_queries()
-    {
-        var rootParser = new RootMarkdownDocumentParser();
-        var parsed = rootParser.Parse(
-            new RootMarkdownDocumentSource(RootFlowMarkdown, ContentRootFlowPath, BaseUrl),
-            new RootMarkdownParsingOptions { ChunkTokenTarget = 3 });
-
-        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
-        var graph = await pipeline.BuildAsync([
-            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
-        ]);
-
-        var ask = await graph.Graph.ExecuteAskAsync(RootFlowAskQuery);
-        ask.ShouldBeTrue();
-    }
-
-    [Test]
     public async Task Root_document_parser_rejects_invalid_yaml_output()
     {
         var rootParser = new RootMarkdownDocumentParser();
@@ -571,21 +553,6 @@ ASK WHERE {
             rootParser.Parse(new RootMarkdownDocumentSource(InvalidRootFlowMarkdown, ContentInvalidRootFlowPath, BaseUrl)));
 
         await Task.CompletedTask;
-    }
-
-    [Test]
-    public async Task Root_document_parser_scalar_and_blank_yaml_items_feed_graph_queries()
-    {
-        var rootParser = new RootMarkdownDocumentParser();
-        var parsed = rootParser.Parse(new RootMarkdownDocumentSource(ScalarRootMarkdown, ContentScalarRootPath, BaseUrl));
-
-        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
-        var graph = await pipeline.BuildAsync([
-            new MarkdownSourceDocument(parsed.ContentPath!, parsed.BodyMarkdown, new Uri(parsed.DocumentId)),
-        ]);
-
-        var ask = await graph.Graph.ExecuteAskAsync(ScalarRootAskQuery);
-        ask.ShouldBeTrue();
     }
 
     [Test]
@@ -607,11 +574,9 @@ ASK WHERE {
             metadata.Rows.All(row => row.Values[SummaryDictionaryKey] == ComplexSummary).ShouldBeTrue();
             metadata.Rows.Select(row => row.Values[KeywordDictionaryKey]).ShouldBe(ExpectedComplexKeywords);
 
-            var author = await result.Graph.ExecuteAskAsync(ComplexAuthorAskQuery);
-            author.ShouldBeTrue();
-
-            var hint = await result.Graph.ExecuteAskAsync(ComplexHintAskQuery);
-            hint.ShouldBeTrue();
+            result.ExtractionMode.ShouldBe(MarkdownKnowledgeExtractionMode.None);
+            result.Facts.Entities.ShouldBeEmpty();
+            result.Facts.Assertions.ShouldBeEmpty();
         }
         finally
         {
@@ -649,42 +614,7 @@ ASK WHERE {
     }
 
     [Test]
-    public async Task Pipeline_deterministic_extraction_handles_front_matter_and_link_edge_cases()
-    {
-        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
-        var result = await pipeline.BuildAsync([
-            new MarkdownSourceDocument(ContentEdgePath, EdgeMarkdown),
-        ]);
-
-        var positive = await result.Graph.ExecuteAskAsync(EdgePositiveAskQuery);
-        positive.ShouldBeTrue();
-
-        var negative = await result.Graph.ExecuteAskAsync(EdgeNegativeAskQuery);
-        negative.ShouldBeFalse();
-
-        var custom = await result.Graph.ExecuteSelectAsync(EdgeCustomSelectQuery);
-        custom.Rows.Single().Values[ObjectDictionaryKey].ShouldBe(EdgeCustomObject);
-    }
-
-    [Test]
-    public async Task Pipeline_merges_deterministic_and_chat_duplicates_into_queryable_rdf()
-    {
-        var chatClient = new TestChatClient((_, _) => MergePayload);
-        var pipeline = new MarkdownKnowledgePipeline(BaseUri, chatClient);
-        var result = await pipeline.BuildAsync([
-            new MarkdownSourceDocument(ContentMergePath, MergeMarkdown),
-        ]);
-
-        var merged = await result.Graph.ExecuteAskAsync(MergeAskQuery);
-        merged.ShouldBeTrue();
-
-        var rows = await result.Graph.SearchAsync(MergeEntityLabel);
-        rows.Rows.Count.ShouldBeGreaterThan(0);
-        chatClient.CallCount.ShouldBe(1);
-    }
-
-    [Test]
-    public async Task Pipeline_keeps_markdown_graph_queryable_when_chat_returns_empty_payload()
+    public async Task Pipeline_keeps_document_metadata_queryable_when_chat_returns_empty_payload()
     {
         var chatClient = new TestChatClient((_, _) => EmptyJsonPayload);
         var pipeline = new MarkdownKnowledgePipeline(BaseUri, chatClient);
@@ -693,8 +623,10 @@ ASK WHERE {
             new MarkdownSourceDocument(ContentEmptyChatPath, EmptyChatMarkdown),
         ]);
 
-        var ask = await result.Graph.ExecuteAskAsync(EmptyChatAskQuery);
-        ask.ShouldBeTrue();
+        result.Facts.Entities.ShouldBeEmpty();
+        result.Facts.Assertions.ShouldBeEmpty();
+        var rows = await result.Graph.SearchAsync(EmptyChatTitle);
+        rows.Rows.Count.ShouldBe(1);
         chatClient.CallCount.ShouldBe(1);
     }
 
@@ -712,14 +644,10 @@ ASK WHERE {
         var pipeline = new MarkdownKnowledgePipeline(BaseUri);
         var result = await pipeline.BuildAsync([document]);
 
-        var related = await result.Graph.ExecuteAskAsync(ConverterRelatedAskQuery);
-        related.ShouldBeTrue();
-
-        var unknown = await result.Graph.ExecuteAskAsync(ConverterUnknownPredicateAskQuery);
-        unknown.ShouldBeFalse();
-
-        var normalizedPredicates = await result.Graph.ExecuteAskAsync(ConverterNormalizedPredicatesAskQuery);
-        normalizedPredicates.ShouldBeTrue();
+        result.ExtractionMode.ShouldBe(MarkdownKnowledgeExtractionMode.None);
+        result.Facts.Assertions.ShouldBeEmpty();
+        var rows = await result.Graph.SearchAsync(ConverterTitle);
+        rows.Rows.Count.ShouldBe(1);
     }
 
     [Test]
@@ -736,8 +664,8 @@ ASK WHERE {
             var pipeline = new MarkdownKnowledgePipeline(BaseUri);
             var result = await pipeline.BuildFromDirectoryAsync(root);
 
-            var positive = await result.Graph.ExecuteAskAsync(DirectoryPositiveAskQuery);
-            positive.ShouldBeTrue();
+            result.ExtractionMode.ShouldBe(MarkdownKnowledgeExtractionMode.None);
+            result.Documents.Single().Title.ShouldBe(PlainMarkdownFileName.Replace(".md", string.Empty, StringComparison.Ordinal));
 
             await File.WriteAllTextAsync(Path.Combine(root, MarkerOnlyFileName), DirectoryMarkerOnlyMarkdown);
             await File.WriteAllTextAsync(Path.Combine(root, UnclosedFileName), DirectoryUnclosedMarkdown);

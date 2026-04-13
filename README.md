@@ -11,7 +11,7 @@
 
 Markdown-LD Knowledge Bank is a .NET 10 library for turning Markdown knowledge-base files into an in-memory RDF graph that can be searched, queried with read-only SPARQL, exported as RDF, and rendered as a diagram.
 
-It ports the core idea from [lqdev/markdown-ld-kb](https://github.com/lqdev/markdown-ld-kb) into a C# library package. The runtime is local and in-memory: no localhost server, no Azure Functions host, no database server, and no hosted graph service are required.
+The package is a C# library implementation of the Markdown-LD knowledge graph workflow. The runtime is local and in-memory: no localhost server, no Azure Functions host, no database server, and no hosted graph service are required.
 
 Use it when you want plain Markdown notes to become a queryable knowledge graph without making your application depend on a specific model provider, graph server, or hosted indexing service.
 
@@ -21,10 +21,13 @@ Use it when you want plain Markdown notes to become a queryable knowledge graph 
 flowchart LR
     Source["Markdown / MDX / text\nJSON / YAML / CSV"] --> Converter["KnowledgeSourceDocumentConverter"]
     Converter --> Parser["MarkdownDocumentParser\n→ MarkdownDocument"]
-    Parser --> Det["DeterministicKnowledgeFactExtractor\n→ entities, assertions"]
-    Parser --> Chat["ChatClientKnowledgeFactExtractor\n(optional IChatClient)"]
-    Det --> Merge["KnowledgeFactMerger\n→ merged KnowledgeExtractionResult"]
+    Parser --> Mode["Extraction mode\nAuto / None / ChatClient / Tiktoken"]
+    Mode --> None["None\nmetadata only"]
+    Mode --> Chat["ChatClientKnowledgeFactExtractor\nIChatClient"]
+    Mode --> Token["Tiktoken token-distance extractor\nMicrosoft.ML.Tokenizers"]
+    None --> Merge["KnowledgeFactMerger\n→ merged KnowledgeExtractionResult"]
     Chat --> Merge
+    Token --> Merge
     Merge --> Builder["KnowledgeGraphBuilder\n→ dotNetRDF in-memory graph"]
     Builder --> Search["SearchAsync"]
     Builder --> Sparql["ExecuteSelectAsync\nExecuteAskAsync"]
@@ -33,15 +36,14 @@ flowchart LR
     Builder --> Export["SerializeTurtle\nSerializeJsonLd"]
 ```
 
-**Deterministic extraction** produces facts without any network call:
+Extraction is explicit:
 
-- article identity, title, summary, dates, tags, authors, and topics from YAML front matter
-- heading sections and document identity from Markdown structure
-- Markdown links such as `[SPARQL](https://www.w3.org/TR/sparql11-query/)`
-- optional wikilinks such as `[[RDF]]`
-- optional assertion arrows such as `article --mentions--> RDF`
+- `Auto` uses `IChatClient` when one is supplied, otherwise extracts no facts and reports a diagnostic.
+- `None` builds document metadata only.
+- `ChatClient` builds facts only from structured `Microsoft.Extensions.AI.IChatClient` output.
+- `Tiktoken` builds a local corpus graph from Tiktoken token IDs, section/segment structure, explicit front matter entity hints, and local keyphrase topics using `Microsoft.ML.Tokenizers`.
 
-**Optional AI extraction** enriches the graph with LLM-produced entities and assertions through `Microsoft.Extensions.AI.IChatClient`. No provider-specific SDK is required in the core library.
+Tiktoken mode is deterministic and network-free. It uses lexical token-distance search rather than semantic embedding search. Its default local weighting is subword TF-IDF; raw term frequency and binary presence are also available. It creates `schema:DefinedTerm` topic nodes, explicit front matter hint entities, and `schema:hasPart` / `schema:about` / `schema:mentions` edges.
 
 **Graph outputs:**
 
@@ -75,9 +77,7 @@ using ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal static class MinimalGraphDemo
 {
-    private const string SearchTerm = "rdf";
-    private const string NameKey = "name";
-    private const string RdfLabel = "RDF";
+    private const string SearchTerm = "RDF SPARQL Markdown graph";
 
     private const string ArticleMarkdown = """
 ---
@@ -94,31 +94,16 @@ author:
 Markdown-LD Knowledge Bank links [RDF](https://www.w3.org/RDF/) and [SPARQL](https://www.w3.org/TR/sparql11-query/).
 """;
 
-    private const string SelectFactsQuery = """
-PREFIX schema: <https://schema.org/>
-SELECT ?article ?entity ?name WHERE {
-  ?article a schema:Article ;
-           schema:name "Zero Cost Knowledge Graph" ;
-           schema:keywords "markdown" ;
-           schema:mentions ?entity .
-  ?entity schema:name ?name ;
-          schema:sameAs <https://www.w3.org/RDF/> .
-}
-""";
-
     public static async Task RunAsync()
     {
-        var pipeline = new MarkdownKnowledgePipeline();
+        var pipeline = new MarkdownKnowledgePipeline(
+            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
 
         var result = await pipeline.BuildFromMarkdownAsync(ArticleMarkdown);
 
-        var graphRows = await result.Graph.ExecuteSelectAsync(SelectFactsQuery);
-        var search = await result.Graph.SearchAsync(SearchTerm);
+        var search = await result.Graph.SearchByTokenDistanceAsync(SearchTerm);
 
-        Console.WriteLine(graphRows.Rows.Count);
-        Console.WriteLine(search.Rows.Any(row =>
-            row.Values.TryGetValue(NameKey, out var name) &&
-            name == RdfLabel));
+        Console.WriteLine(search[0].Text);
     }
 }
 ```
@@ -161,7 +146,7 @@ The library uses `urn:managedcode:markdown-ld-kb:/` as an internal default base 
 
 ## Optional AI Extraction
 
-Optional AI extraction enriches the deterministic Markdown graph with entities and assertions returned by an injected `Microsoft.Extensions.AI.IChatClient`. The package stays provider-neutral: it does not reference OpenAI, Azure OpenAI, Anthropic, or any other model-specific SDK. If no chat client is provided, the pipeline still runs fully locally and builds the graph from Markdown/front matter/link extraction only.
+AI extraction builds graph facts from entities and assertions returned by an injected `Microsoft.Extensions.AI.IChatClient`. The package stays provider-neutral: it does not reference OpenAI, Azure OpenAI, Anthropic, or any other model-specific SDK. If no chat client is provided, `Auto` mode extracts no facts and reports a diagnostic; choose `Tiktoken` mode explicitly for local token-distance extraction.
 
 ```csharp
 using ManagedCode.MarkdownLd.Kb.Pipeline;
@@ -204,7 +189,48 @@ ASK WHERE {
 }
 ```
 
-The built-in chat extractor requests structured output through `GetResponseAsync<T>()`, normalizes the returned entity/assertion payload, merges it with deterministic facts, and then builds the same in-memory RDF graph used by search and SPARQL. Tests use one local non-network `IChatClient` implementation so the full extraction-to-graph flow is covered without a live model.
+The built-in chat extractor requests structured output through `GetResponseAsync<T>()`, normalizes the returned entity/assertion payload, and then builds the same in-memory RDF graph used by search and SPARQL. Tests use one local non-network `IChatClient` implementation so the full extraction-to-graph flow is covered without a live model.
+
+## Local Tiktoken Extraction
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+
+internal static class TiktokenGraphDemo
+{
+    private const string Markdown = """
+The observatory stores telescope images in a cold archive near the mountain lab.
+River sensors use cached forecasts to protect orchards from frost.
+""";
+
+    public static async Task RunAsync()
+    {
+        var pipeline = new MarkdownKnowledgePipeline(
+            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
+
+        var result = await pipeline.BuildFromMarkdownAsync(Markdown);
+        var matches = await result.Graph.SearchByTokenDistanceAsync("telescope image archive");
+
+        Console.WriteLine(matches[0].Text);
+    }
+}
+```
+
+Tiktoken mode uses `Microsoft.ML.Tokenizers` to encode section/paragraph text into token IDs, builds normalized sparse vectors, and calculates Euclidean distance. The default weighting is `SubwordTfIdf`, fitted over the current build corpus and reused for query vectors. `TermFrequency` uses raw token counts, and `Binary` uses token presence/absence.
+
+Tiktoken mode also builds a corpus graph:
+
+- heading or loose document sections and paragraph/line segments become `schema:CreativeWork` nodes
+- local Unicode word n-gram keyphrases become `schema:DefinedTerm` topic nodes
+- explicit front matter `entity_hints` / `entityHints` become graph entities with stable hash IDs and preserved `sameAs` links
+- containment uses `schema:hasPart`
+- segment/topic membership uses `schema:about`
+- document/entity-hint membership uses `schema:mentions`
+- segment similarity uses `kb:relatedTo`
+
+The local lexical design follows [Multilingual Search with Subword TF-IDF](https://arxiv.org/abs/2209.14281): use subword tokenization plus TF-IDF instead of manually curated tokenization, stop words, or stemming rules. It is designed for same-language lexical retrieval. Cross-language semantic retrieval requires a translation or embedding layer owned by the host application.
+
+The current test corpus validates top-1 token-distance retrieval across English, Ukrainian, French, and German. Same-language queries hit the expected segment at `10/10` for each language in the test corpus. Sampled cross-language aligned hits stay low at `3/40`, which matches the lexical design.
 
 ## Query The Graph
 
@@ -321,6 +347,9 @@ var rows = await shared.Graph.SearchAsync("rdf");
 | `SparqlQueryResult` | Query result with `Variables` and `Rows` of `SparqlRow`. |
 | `KnowledgeSourceDocumentConverter` | Converts files and directories into pipeline-ready source documents. |
 | `ChatClientKnowledgeFactExtractor` | AI extraction adapter behind `IChatClient`. |
+| `TiktokenKnowledgeGraphOptions` | Options for explicit Tiktoken token-distance extraction. |
+| `TokenVectorWeighting` | Local token weighting mode: `SubwordTfIdf`, `TermFrequency`, or `Binary`. |
+| `TokenDistanceSearchResult` | Search result returned by `SearchByTokenDistanceAsync`. |
 
 ## Markdown Conventions
 
@@ -354,9 +383,9 @@ Recognized front matter keys:
 | `tags` / `keywords` | `schema:keywords` | list |
 | `about` | `schema:about` | list |
 | `canonicalUrl` / `canonical_url` | low-level Markdown parser document identity; use `KnowledgeDocumentConversionOptions.CanonicalUri` for pipeline identity | string (URL) |
-| `entity_hints` / `entityHints` | entity hints | list of `{label, type, sameAs}` |
+| `entity_hints` / `entityHints` | explicit graph entities in `Tiktoken` mode; parsed as front matter metadata otherwise | list of `{label, type, sameAs}` |
 
-Optional advanced predicate forms:
+Predicate normalization for explicit chat/token facts:
 
 - `mentions` becomes `schema:mentions`
 - `about` becomes `schema:about`
@@ -367,16 +396,21 @@ Optional advanced predicate forms:
 - prefixed predicates such as `schema:mentions`, `kb:relatedTo`, `prov:wasDerivedFrom`, and `rdf:type` are preserved
 - absolute predicate URIs are preserved when valid
 
+Markdown links, wikilinks, and arrow assertions are not implicitly converted into graph facts. Use `IChatClient` extraction or explicit `Tiktoken` mode when you want body content to produce graph nodes and edges.
+
 ## Architecture Choices
 
 - `Markdig` parses Markdown structure.
 - `YamlDotNet` parses front matter.
 - `dotNetRDF` builds the RDF graph, runs local SPARQL, and serializes Turtle/JSON-LD.
 - `Microsoft.Extensions.AI.IChatClient` is the only AI boundary in the core pipeline.
-- Embeddings are not required for the current graph/search flow.
-- Microsoft Agent Framework is treated as host-level orchestration for future workflows, not a core package dependency.
+- `Microsoft.ML.Tokenizers` powers the explicit Tiktoken token-distance mode.
+- Subword TF-IDF is the default local token weighting because it downweights corpus-common tokens without adding language-specific preprocessing or model runtime dependencies.
+- Local topic graph construction uses Unicode word n-gram keyphrases and RDF `schema:DefinedTerm`, `schema:hasPart`, and `schema:about` edges.
+- Embeddings are not required for the current graph/search flow; Tiktoken mode uses token IDs, not embedding vectors.
+- Microsoft Agent Framework is treated as host-level orchestration, not a core package dependency.
 
-See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), and [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md).
+See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), and [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md).
 
 ## Inspiration And Attribution
 
@@ -388,7 +422,7 @@ This project is inspired by Luis Quintanilla's Markdown-LD / AI Memex work:
 - [W3C SPARQL Federated Query](https://github.com/w3c/sparql-federated-query) - SPARQL federation reference material
 - [dotNetRDF](https://github.com/dotnetrdf/dotnetrdf) - RDF/SPARQL engine used by this C# implementation
 
-The original repository is kept as a read-only submodule under `external/lqdev-markdown-ld-kb`. This package ports the technology and API direction into a reusable .NET library instead of copying the Python repository layout.
+The upstream reference repository is kept as a read-only submodule under `external/lqdev-markdown-ld-kb`.
 
 ## Development
 
@@ -400,10 +434,12 @@ dotnet format MarkdownLd.Kb.slnx --verify-no-changes
 dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings"
 ```
 
-Current verification baseline:
+Coverage is collected through `Microsoft.Testing.Extensions.CodeCoverage`. Cobertura is the XML output format used for line and branch reporting; the test project does not reference Coverlet.
 
-- tests: 70 passed, 0 failed
-- line coverage: 95.93%
-- branch coverage: 84.55%
+Current verification:
+
+- tests: 77 passed, 0 failed
+- line coverage: 96.30%
+- branch coverage: 85.23%
 - target framework: .NET 10
 - package version: 0.0.1

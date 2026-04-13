@@ -55,8 +55,13 @@ Key points:
 ```mermaid
 flowchart LR
     Markdown["Markdown documents"] --> Parser["Markdig + YamlDotNet parser"]
-    Parser --> Extractor["Deterministic + IChatClient extractors"]
-    Extractor --> Builder["Graph builder"]
+    Parser --> Extractor["Explicit extraction modes"]
+    Extractor --> Chat["IChatClient extractor"]
+    Extractor --> Token["Tiktoken extractor"]
+    Extractor --> None["No extractor"]
+    Chat --> Builder["Graph builder"]
+    Token --> Builder
+    None --> Builder
     Builder --> DotNetRdf["dotNetRDF graph"]
     DotNetRdf --> Sparql["Local SPARQL execution"]
     DotNetRdf --> Turtle["Turtle writer"]
@@ -146,7 +151,8 @@ Mitigations:
   - Serialize the graph and parse/inspect the output.
 - Negative flows:
   - Reject mutating SPARQL operations.
-  - Ignore malformed deterministic assertion syntax.
+  - Default no-extractor mode.
+  - Explicit Tiktoken token-distance mode.
 - Edge flows:
   - Empty Markdown input.
   - Duplicate entity mentions and assertions.

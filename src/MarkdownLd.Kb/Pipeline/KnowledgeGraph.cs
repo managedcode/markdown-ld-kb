@@ -13,11 +13,15 @@ public sealed partial class KnowledgeGraph
 {
     private readonly Graph _graph;
     private readonly ReaderWriterLockSlim _graphLock = new();
+    private readonly TokenizedKnowledgeIndex? _tokenIndex;
 
-    internal KnowledgeGraph(Graph graph)
+    internal KnowledgeGraph(Graph graph, TokenizedKnowledgeIndex? tokenIndex = null)
     {
         _graph = graph;
+        _tokenIndex = tokenIndex;
     }
+
+    public bool CanSearchByTokenDistance => _tokenIndex is not null;
 
     public int TripleCount
     {
@@ -70,6 +74,20 @@ public sealed partial class KnowledgeGraph
     {
         var searchQuery = SearchQueryTemplate.Replace(SearchTermToken, EscapeSparqlLiteral(term), StringComparison.Ordinal);
         return ExecuteSelectAsync(searchQuery, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<TokenDistanceSearchResult>> SearchByTokenDistanceAsync(
+        string query,
+        int limit = DefaultMaxRelatedTokenSegments,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_tokenIndex is null)
+        {
+            throw new InvalidOperationException(TokenDistanceSearchUnavailableMessage);
+        }
+
+        return Task.FromResult(_tokenIndex.Search(query, limit));
     }
 
     public KnowledgeGraphSnapshot ToSnapshot()

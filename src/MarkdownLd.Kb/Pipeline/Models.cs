@@ -68,7 +68,12 @@ public sealed record SparqlQueryResult(IReadOnlyList<string> Variables, IReadOnl
 public sealed record MarkdownKnowledgeBuildResult(
     IReadOnlyList<MarkdownDocument> Documents,
     KnowledgeExtractionResult Facts,
-    KnowledgeGraph Graph);
+    KnowledgeGraph Graph)
+{
+    public MarkdownKnowledgeExtractionMode ExtractionMode { get; init; } = MarkdownKnowledgeExtractionMode.None;
+
+    public IReadOnlyList<string> Diagnostics { get; init; } = [];
+}
 
 public sealed record KnowledgeGraphSnapshot(
     IReadOnlyList<KnowledgeGraphNode> Nodes,
@@ -104,6 +109,8 @@ public static class KnowledgeNaming
         [ExpectedSchemaAuthor] = ExpectedSchemaAuthor,
         [SchemaCreatorText] = ExpectedSchemaCreator,
         [ExpectedSchemaCreator] = ExpectedSchemaCreator,
+        [SchemaHasPartText] = ExpectedSchemaHasPart,
+        [ExpectedSchemaHasPart] = ExpectedSchemaHasPart,
         [SchemaDescriptionText] = ExpectedSchemaDescription,
         [ExpectedSchemaDescription] = ExpectedSchemaDescription,
         [SchemaKeywordsText] = ExpectedSchemaKeywords,
@@ -122,6 +129,7 @@ public static class KnowledgeNaming
         [AboutPredicateKey] = ExpectedSchemaAbout,
         [AuthorPredicateKey] = ExpectedSchemaAuthor,
         [CreatorPredicateKey] = ExpectedSchemaCreator,
+        [HasPartPredicateKey] = ExpectedSchemaHasPart,
         [SameAsPredicateKey] = ExpectedSchemaSameAs,
         [DescriptionPredicateKey] = ExpectedSchemaDescription,
         [KeywordsPredicateKey] = ExpectedSchemaKeywords,

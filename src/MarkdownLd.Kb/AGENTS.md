@@ -8,7 +8,8 @@ Purpose: Production library for Markdown-LD Knowledge Bank.
 - `ManagedCode.MarkdownLd.Kb` namespace
 - `Pipeline/MarkdownKnowledgePipeline` for end-to-end Markdown-to-graph orchestration
 - `Parsing/*` for Markdown and YAML front matter parsing
-- `Extraction/*` for deterministic and `IChatClient` fact extraction
+- `Ai/*` and `Pipeline/ChatClientKnowledgeFactExtractor` for `IChatClient` fact extraction
+- `Pipeline/Tiktoken*`, `Pipeline/TokenKeyphraseExtractor`, and `Pipeline/TokenizedKnowledgeFactFactory` for explicit experimental Tiktoken local corpus graph extraction
 - `Rdf/*` and `Query/*` for RDF graph construction, serialization, SPARQL, and search
 
 ## Boundaries

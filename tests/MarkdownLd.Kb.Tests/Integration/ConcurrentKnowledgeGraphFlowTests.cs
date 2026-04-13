@@ -27,15 +27,16 @@ This note links [Thread Entity {INDEX}](https://example.com/concurrent/{INDEX}).
     private const string ConcurrentEntityAskQueryTemplate = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
-  <https://concurrent.example/write/{INDEX}/> schema:mentions <https://concurrent.example/id/thread-entity-{INDEX}> .
-  <https://concurrent.example/id/thread-entity-{INDEX}> schema:sameAs <https://example.com/concurrent/{INDEX}> .
+  <https://concurrent.example/write/{INDEX}/> schema:mentions ?segment .
+  ?segment schema:name ?name .
+  FILTER(CONTAINS(STR(?name), "{INDEX}"))
 }
 """;
     private const string ConcurrentEntitySelectQuery = """
 PREFIX schema: <https://schema.org/>
 SELECT ?entity WHERE {
   ?entity schema:name ?name .
-  FILTER(STRSTARTS(STR(?name), "Thread Entity"))
+  FILTER(CONTAINS(STR(?name), "Thread Entity"))
 }
 ORDER BY ?entity
 """;
@@ -46,7 +47,9 @@ ORDER BY ?entity
     [NotInParallel]
     public async Task SharedGraphSupportsConcurrentMarkdownWritesAndSearchesAcrossOneHundredWorkers()
     {
-        var pipeline = new MarkdownKnowledgePipeline(ConcurrentBaseUri);
+        var pipeline = new MarkdownKnowledgePipeline(
+            ConcurrentBaseUri,
+            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
         var shared = await pipeline.BuildFromMarkdownAsync(string.Empty, ConcurrentSeedPath);
         var start = new ManualResetEventSlim();
 

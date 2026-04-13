@@ -9,7 +9,10 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
 {
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
 
-    public KnowledgeGraph Build(IReadOnlyList<MarkdownDocument> documents, KnowledgeExtractionResult facts)
+    public KnowledgeGraph Build(
+        IReadOnlyList<MarkdownDocument> documents,
+        KnowledgeExtractionResult facts,
+        TokenizedKnowledgeIndex? tokenIndex = null)
     {
         var graph = new Graph();
         RegisterNamespaces(graph);
@@ -29,7 +32,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
             AddAssertion(graph, assertion);
         }
 
-        return new KnowledgeGraph(graph);
+        return new KnowledgeGraph(graph, tokenIndex);
     }
 
     private static void RegisterNamespaces(IGraph graph)
@@ -216,6 +219,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
             AboutPredicateKey => SchemaAboutUri,
             AuthorPredicateKey => SchemaAuthorUri,
             CreatorPredicateKey => SchemaCreatorUri,
+            HasPartPredicateKey => SchemaHasPartUri,
             SameAsPredicateKey => SchemaSameAsUri,
             _ => null,
         };

@@ -1,5 +1,4 @@
 using System.Text;
-using ManagedCode.MarkdownLd.Kb.Extraction;
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 using ManagedCode.MarkdownLd.Kb.Query;
 using ManagedCode.MarkdownLd.Kb.Tests.Rdf;
@@ -491,33 +490,22 @@ ASK WHERE {
 
         var converter = new KnowledgeSourceDocumentConverter();
         var source = converter.ConvertContent(markdown, LargeMarkdownPath);
-        var pipeline = new MarkdownKnowledgePipeline(new Uri(LargeMarkdownBaseUri));
+        var pipeline = new MarkdownKnowledgePipeline(
+            new Uri(LargeMarkdownBaseUri),
+            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
         var result = await pipeline.BuildAsync([source]);
 
         result.Documents.Count.ShouldBe(LargeMarkdownExpectedDocumentCount);
         result.Documents[0].Sections.Count.ShouldBe(LargeMarkdownExpectedSectionCount);
         result.Facts.Assertions.Count.ShouldBeGreaterThan(LargeMarkdownMinimumAssertionCount);
-        var entityExtractor = result.Facts.Entities.Single(entity => entity.Label == LargeMarkdownEntityExtractorLabel);
-        entityExtractor.Type.ShouldBe(LargeMarkdownEntityExtractorType);
-        entityExtractor.SameAs.ShouldContain(LargeMarkdownEntityExtractorSameAs);
-
-        var documentAsk = await result.Graph.ExecuteAskAsync(LargeMarkdownDocumentAskQuery);
-        documentAsk.ShouldBeTrue();
-
-        var entityTypeAsk = await result.Graph.ExecuteAskAsync(LargeMarkdownEntityTypeAskQuery);
-        entityTypeAsk.ShouldBeTrue();
-
-        var entitySameAsAsk = await result.Graph.ExecuteAskAsync(LargeMarkdownEntitySameAsAskQuery);
-        entitySameAsAsk.ShouldBeTrue();
-
-        var entityRelatedAsk = await result.Graph.ExecuteAskAsync(LargeMarkdownEntityRelatedAskQuery);
-        entityRelatedAsk.ShouldBeTrue();
-
-        var dotNetRdfAsk = await result.Graph.ExecuteAskAsync(LargeMarkdownDotNetRdfAskQuery);
-        dotNetRdfAsk.ShouldBeTrue();
+        result.Facts.Entities.Any(entity => entity.Label.Contains(LargeMarkdownEntityExtractorLabel, StringComparison.Ordinal)).ShouldBeTrue();
+        result.Graph.CanSearchByTokenDistance.ShouldBeTrue();
 
         var search = await result.Graph.SearchAsync(LargeMarkdownSearchTerm);
         search.Rows.Count.ShouldBeGreaterThan(0);
+
+        var tokenSearch = await result.Graph.SearchByTokenDistanceAsync(LargeMarkdownEntityExtractorLabel);
+        tokenSearch[0].Text.ShouldContain(LargeMarkdownEntityExtractorLabel);
     }
 
     [Test]
@@ -562,55 +550,6 @@ ASK WHERE {
     }
 
     [Test]
-    public void Extraction_flow_handles_url_labels_scalar_values_code_fences_and_canonical_ids()
-    {
-        var extractor = new MarkdownKnowledgeExtractor();
-        var empty = extractor.Extract(string.Empty);
-        empty.Article.Title.ShouldBe(RichExtractionExpectedTitle);
-        empty.Article.Id.ShouldBe(RichExtractionExpectedEmptyArticleId);
-        empty.Entities.ShouldBeEmpty();
-
-        var result = extractor.Extract(RichExtractionMarkdown);
-
-        result.Article.Id.ShouldBe(RichExtractionDocumentId);
-        result.Article.Authors.Select(author => author.Name).ShouldContain(RichExtractionAuthors[0]);
-        result.Article.Tags.ShouldBe(RichExtractionTags);
-        result.Entities.Any(entity => entity.Label == RichExtractionExpectedSoftwareLabel && entity.Type == RichExtractionExpectedSoftwareType).ShouldBeTrue();
-        result.Entities.Any(entity => entity.Label == RichExtractionExpectedRdfLabel).ShouldBeTrue();
-        result.Entities.Any(entity => entity.Label == RichExtractionIgnoredLabel).ShouldBeFalse();
-        result.Assertions.Any(assertion =>
-            assertion.SubjectId == result.Article.Id &&
-            assertion.Predicate == RichExtractionPredicate &&
-            assertion.ObjectId == RichExtractionExpectedLargeLanguageModelEntity).ShouldBeTrue();
-    }
-
-    [Test]
-    public void Extraction_flow_handles_missing_front_matter_unclosed_yaml_scalar_sequences_and_id_helpers()
-    {
-        var extractor = new MarkdownKnowledgeExtractor();
-        var noFrontMatter = extractor.Extract(MissingFrontMatterMarkdown, MissingFrontMatterDocumentPath);
-
-        noFrontMatter.Article.Title.ShouldBe(MissingFrontMatterTitle);
-        noFrontMatter.Assertions.Any(assertion =>
-            assertion.SubjectId == noFrontMatter.Article.Id &&
-            assertion.ObjectId == MissingFrontMatterTargetEntity).ShouldBeTrue();
-
-        Should.Throw<InvalidDataException>(() => extractor.Extract(MissingFenceMarkdown, MissingFenceDocumentPath));
-
-        var scalar = extractor.Extract(ScalarExtractionMarkdown);
-
-        scalar.Article.Authors.Any(author => author.Name == RichExtractionAuthors[0]).ShouldBeTrue();
-        scalar.Article.Tags.ShouldBe(ScalarExtractionTags);
-        scalar.Article.About.Single().Label.ShouldBe(ScalarExtractionAbout);
-        scalar.Entities.Any(entity => entity.Label == ScalarExtractionEntity).ShouldBeTrue();
-
-        MarkdownKnowledgeIds.Slugify(string.Empty).ShouldBe(ExpectedEmptyItemSlug);
-        MarkdownKnowledgeIds.Slugify(TripleAsterisk).ShouldBe(ExpectedEmptyItemSlug);
-        MarkdownKnowledgeIds.HumanizeLabel(string.Empty).ShouldBeEmpty();
-        MarkdownKnowledgeIds.BuildArticleId(null, null).ShouldBe(ExpectedUntitledArticleId);
-    }
-
-    [Test]
     public async Task Chat_extraction_flow_filters_null_blank_and_duplicate_structured_output()
     {
         var chatClient = new TestChatClient((_, _) => ChatExtractionPayload);
@@ -643,12 +582,9 @@ ASK WHERE {
         var result = await pipeline.BuildAsync([source]);
 
         result.Documents[0].Title.ShouldBe(PipelineExpectedTitle);
-        result.Facts.Entities.Any(entity => entity.Label == PipelineExpectedSoftwareLabel && entity.Type == PipelineExpectedSoftwareType).ShouldBeTrue();
-        result.Facts.Assertions.Any(assertion => assertion.Predicate == PipelinePredicateCreator).ShouldBeTrue();
-        result.Facts.Assertions.Any(assertion => assertion.Predicate == PipelinePredicateRelatedTo).ShouldBeTrue();
-        result.Facts.Assertions.Any(assertion => assertion.Predicate == PipelinePredicateWasDerivedFrom).ShouldBeTrue();
-        result.Facts.Assertions.Any(assertion => assertion.Predicate == PipelinePredicateRdfType).ShouldBeTrue();
-        result.Facts.Assertions.Any(assertion => assertion.Predicate == PipelinePredicateXsdInteger).ShouldBeTrue();
+        result.ExtractionMode.ShouldBe(MarkdownKnowledgeExtractionMode.None);
+        result.Facts.Entities.ShouldBeEmpty();
+        result.Facts.Assertions.ShouldBeEmpty();
 
         var dateResult = await result.Graph.ExecuteSelectAsync(PipelineQuery);
         dateResult.Rows.Count.ShouldBe(1);

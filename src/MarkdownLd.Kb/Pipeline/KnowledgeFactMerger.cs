@@ -46,7 +46,7 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
     private KnowledgeEntityFact CanonicalizeEntity(KnowledgeEntityFact entity)
     {
         var label = entity.Label.Trim();
-        var canonicalId = KnowledgeNaming.CreateEntityId(_baseUri, label);
+        var canonicalId = CanonicalizeNodeId(entity.Id ?? label);
         return entity with
         {
             Id = canonicalId,

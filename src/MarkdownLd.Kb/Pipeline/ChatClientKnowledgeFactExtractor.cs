@@ -6,9 +6,16 @@ using RootKnowledgeFactExtractionResult = ManagedCode.MarkdownLd.Kb.KnowledgeFac
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed class ChatClientKnowledgeFactExtractor(IChatClient chatClient)
+public sealed class ChatClientKnowledgeFactExtractor
 {
-    private readonly RootChatClientKnowledgeFactExtractor _extractor = new(chatClient);
+    private readonly RootChatClientKnowledgeFactExtractor _extractor;
+
+    public ChatClientKnowledgeFactExtractor(IChatClient chatClient, Uri baseUri)
+    {
+        ArgumentNullException.ThrowIfNull(chatClient);
+        ArgumentNullException.ThrowIfNull(baseUri);
+        _extractor = new RootChatClientKnowledgeFactExtractor(chatClient, baseUri.AbsoluteUri);
+    }
 
     public async Task<KnowledgeExtractionResult> ExtractAsync(MarkdownDocument document, CancellationToken cancellationToken = default)
     {

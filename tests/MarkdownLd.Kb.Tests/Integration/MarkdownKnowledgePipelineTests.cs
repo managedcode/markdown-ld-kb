@@ -90,7 +90,7 @@ SELECT ?mention WHERE {
     private static readonly Uri ArticleGraphUri = new(GraphUri);
 
     [Test]
-    public async Task BuildFromMarkdownAsync_uses_library_defaults_for_inline_markdown_graph_and_search_flow()
+    public async Task BuildFromMarkdownAsync_uses_library_defaults_for_inline_markdown_metadata_without_fact_extraction()
     {
         var pipeline = new MarkdownKnowledgePipeline();
 
@@ -99,17 +99,13 @@ SELECT ?mention WHERE {
         result.Documents.Count.ShouldBe(1);
         result.Documents[0].Title.ShouldBe(InlineMarkdownTitle);
 
-        var graphRows = await result.Graph.ExecuteSelectAsync(SelectInlineMarkdownFactsQuery);
-        graphRows.Rows.Count.ShouldBe(1);
-        graphRows.Rows[0].Values[ArticleBindingKey].ShouldNotBeNullOrWhiteSpace();
-        graphRows.Rows[0].Values[EntityBindingKey].ShouldNotBeNullOrWhiteSpace();
-        graphRows.Rows[0].Values[ArticleBindingKey].ShouldStartWith(MarkdownKnowledgeDefaults.BaseUriText);
-        graphRows.Rows[0].Values[EntityBindingKey].ShouldStartWith(MarkdownKnowledgeDefaults.BaseUriText);
+        result.ExtractionMode.ShouldBe(MarkdownKnowledgeExtractionMode.None);
+        result.Diagnostics.ShouldNotBeEmpty();
+        result.Facts.Entities.ShouldBeEmpty();
+        result.Facts.Assertions.ShouldBeEmpty();
 
-        var searchRows = await result.Graph.SearchAsync(InlineSearchTerm);
-        searchRows.Rows.Any(row =>
-            row.Values.TryGetValue(NameBindingKey, out var name) &&
-            name == InlineRdfLabel).ShouldBeTrue();
+        var searchRows = await result.Graph.SearchAsync(InlineMarkdownTitle);
+        searchRows.Rows.Count.ShouldBe(1);
     }
 
     private static readonly string ChatResponse = $$"""
@@ -137,7 +133,7 @@ SELECT ?mention WHERE {
     """;
 
     [Test]
-    public async Task BuildAsync_merges_markdown_and_chat_facts_into_a_searchable_graph()
+    public async Task BuildAsync_uses_chat_facts_into_a_searchable_graph()
     {
         var chatClient = new TestChatClient((_, _) => ChatResponse);
         var pipeline = new MarkdownKnowledgePipeline(BaseUri, chatClient);
@@ -180,31 +176,6 @@ SELECT ?mention WHERE {
         jsonLd.ShouldContain(MarkdownLiterals[3]);
 
         chatClient.CallCount.ShouldBe(1);
-    }
-
-    [Test]
-    public async Task BuildAsync_handles_duplicate_facts_and_ignores_malformed_assertions()
-    {
-        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
-        var source = new MarkdownSourceDocument(
-            ContentPathDuplicateFacts,
-            FixtureLoader.Read(FixtureDuplicateFacts));
-
-        var result = await pipeline.BuildAsync([source]);
-
-        result.Facts.Entities.Count(entity => entity.Label == RdfLabel).ShouldBe(1);
-        result.Facts.Assertions.Count(assertion =>
-            assertion.SubjectId == DuplicateArticleUri &&
-            assertion.Predicate == SchemaMentions &&
-            assertion.ObjectId == EntityRdfUri).ShouldBe(1);
-        result.Facts.Assertions.Count(assertion =>
-            assertion.SubjectId == EntityRdfUri &&
-            assertion.Predicate == SchemaMentions &&
-            assertion.ObjectId == EntityRdfUri).ShouldBe(1);
-
-        var graphResults = await result.Graph.ExecuteSelectAsync(SelectDuplicateMentionsQuery);
-        graphResults.Rows.Count.ShouldBe(1);
-        graphResults.Rows[0].Values[MentionBindingKey].ShouldBe(EntityRdfUri);
     }
 
     [Test]

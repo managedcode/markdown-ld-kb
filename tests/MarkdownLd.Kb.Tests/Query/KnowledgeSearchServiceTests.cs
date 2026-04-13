@@ -2,6 +2,7 @@ using ManagedCode.MarkdownLd.Kb.Query;
 using ManagedCode.MarkdownLd.Kb.Rdf;
 using ManagedCode.MarkdownLd.Kb.Tests.Rdf;
 using Shouldly;
+using VDS.RDF;
 
 namespace ManagedCode.MarkdownLd.Kb.Tests.Query;
 
@@ -16,8 +17,15 @@ public sealed class KnowledgeSearchServiceTests
     private const string KnowledgeGraphTitle = "What is a Knowledge Graph?";
     private const string RdfEntityUriText = "https://example.com/id/rdf";
     private const string KnowledgeGraphArticleUriText = "https://example.com/articles/what-is-a-knowledge-graph/";
+    private const string DuplicateArticleTerm = "duplicate";
+    private const string DuplicateArticleUriText = "https://example.com/articles/duplicate-optionals/";
+    private const string DuplicateArticleTitle = "Duplicate Optional Article";
+    private const string DuplicateArticleSummary = "A duplicate-row article summary.";
+    private const string DuplicateArticleKeyword = "duplicate";
+    private const string DuplicateArticleSecondKeyword = "merge";
     private static readonly Uri RdfEntityUri = new(RdfEntityUriText);
     private static readonly Uri KnowledgeGraphArticleUri = new(KnowledgeGraphArticleUriText);
+    private static readonly Uri DuplicateArticleUri = new(DuplicateArticleUriText);
 
     [Test]
     public void SearchEntitiesFindsMatchingEntity()
@@ -67,6 +75,20 @@ public sealed class KnowledgeSearchServiceTests
     }
 
     [Test]
+    public void SearchArticlesMergesDuplicateRowsFromRepeatedOptionalValues()
+    {
+        var service = new KnowledgeSearchService(BuildGraphWithRepeatedArticleOptionals());
+
+        var results = service.SearchArticles(DuplicateArticleTerm);
+
+        results.Count.ShouldBe(1);
+        results[0].Id.ShouldBe(DuplicateArticleUri);
+        results[0].Title.ShouldBe(DuplicateArticleTitle);
+        results[0].Summary.ShouldBe(DuplicateArticleSummary);
+        new[] { DuplicateArticleKeyword, DuplicateArticleSecondKeyword }.ShouldContain(results[0].Keywords);
+    }
+
+    [Test]
     public void SearchArticlesByEntityLabelFindsMentionedArticle()
     {
         var service = new KnowledgeSearchService(TestKnowledgeGraphFactory.BuildGraph());
@@ -85,5 +107,20 @@ public sealed class KnowledgeSearchServiceTests
         var results = service.SearchArticlesByEntityLabel(NoSuchEntityTerm);
 
         results.ShouldBeEmpty();
+    }
+
+    private static Graph BuildGraphWithRepeatedArticleOptionals()
+    {
+        var graph = new Graph();
+        KbNamespaces.Register(graph);
+
+        var article = graph.CreateUriNode(DuplicateArticleUri);
+        graph.Assert(article, graph.CreateUriNode(KbNamespaces.RdfType), graph.CreateUriNode(KbNamespaces.SchemaArticle));
+        graph.Assert(article, graph.CreateUriNode(KbNamespaces.SchemaName), graph.CreateLiteralNode(DuplicateArticleTitle));
+        graph.Assert(article, graph.CreateUriNode(KbNamespaces.SchemaDescription), graph.CreateLiteralNode(DuplicateArticleSummary));
+        graph.Assert(article, graph.CreateUriNode(KbNamespaces.SchemaKeywords), graph.CreateLiteralNode(DuplicateArticleKeyword));
+        graph.Assert(article, graph.CreateUriNode(KbNamespaces.SchemaKeywords), graph.CreateLiteralNode(DuplicateArticleSecondKeyword));
+
+        return graph;
     }
 }

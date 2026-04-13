@@ -6,21 +6,29 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 public sealed class MarkdownKnowledgePipeline
 {
     private readonly MarkdownDocumentParser _parser;
-    private readonly DeterministicKnowledgeFactExtractor _deterministicExtractor;
     private readonly KnowledgeFactMerger _factMerger;
     private readonly KnowledgeGraphBuilder _graphBuilder;
     private readonly KnowledgeSourceDocumentConverter _documentConverter;
     private readonly ChatClientKnowledgeFactExtractor? _chatExtractor;
+    private readonly TiktokenKnowledgeGraphExtractor? _tiktokenExtractor;
+    private readonly MarkdownKnowledgeExtractionMode _configuredExtractionMode;
 
-    public MarkdownKnowledgePipeline(Uri? baseUri = null, IChatClient? chatClient = null)
+    public MarkdownKnowledgePipeline(
+        Uri? baseUri = null,
+        IChatClient? chatClient = null,
+        MarkdownKnowledgeExtractionMode extractionMode = MarkdownKnowledgeExtractionMode.Auto,
+        TiktokenKnowledgeGraphOptions? tiktokenOptions = null)
     {
         var effectiveBaseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
         _parser = new MarkdownDocumentParser(effectiveBaseUri);
-        _deterministicExtractor = new DeterministicKnowledgeFactExtractor(effectiveBaseUri);
         _factMerger = new KnowledgeFactMerger(effectiveBaseUri);
         _graphBuilder = new KnowledgeGraphBuilder(effectiveBaseUri);
         _documentConverter = new KnowledgeSourceDocumentConverter();
-        _chatExtractor = chatClient is null ? null : new ChatClientKnowledgeFactExtractor(chatClient);
+        _chatExtractor = chatClient is null ? null : new ChatClientKnowledgeFactExtractor(chatClient, effectiveBaseUri);
+        _tiktokenExtractor = extractionMode == MarkdownKnowledgeExtractionMode.Tiktoken
+            ? new TiktokenKnowledgeGraphExtractor(effectiveBaseUri, tiktokenOptions)
+            : null;
+        _configuredExtractionMode = extractionMode;
     }
 
     public Task<MarkdownKnowledgeBuildResult> BuildAsync(IEnumerable<KnowledgeSourceDocument> sources, CancellationToken cancellationToken = default)
@@ -74,8 +82,7 @@ public sealed class MarkdownKnowledgePipeline
         ArgumentNullException.ThrowIfNull(sources);
 
         var documents = new List<MarkdownDocument>();
-        var deterministicResults = new List<KnowledgeExtractionResult>();
-        var chatResults = new List<KnowledgeExtractionResult>();
+        var effectiveMode = ResolveExtractionMode();
 
         foreach (var source in sources)
         {
@@ -83,19 +90,58 @@ public sealed class MarkdownKnowledgePipeline
 
             var document = _parser.Parse(source);
             documents.Add(document);
+        }
 
-            var deterministic = _deterministicExtractor.Extract(document);
-            deterministicResults.Add(deterministic);
-
-            if (_chatExtractor is not null)
+        var extractionResults = new List<KnowledgeExtractionResult>();
+        TokenizedKnowledgeExtractionResult? tokenResult = null;
+        if (effectiveMode == MarkdownKnowledgeExtractionMode.ChatClient)
+        {
+            foreach (var document in documents)
             {
-                var chatResult = await _chatExtractor.ExtractAsync(document, cancellationToken).ConfigureAwait(false);
-                chatResults.Add(chatResult);
+                cancellationToken.ThrowIfCancellationRequested();
+                extractionResults.Add(await _chatExtractor!.ExtractAsync(document, cancellationToken).ConfigureAwait(false));
             }
         }
 
-        var mergedFacts = _factMerger.Merge(deterministicResults.Concat(chatResults).ToArray());
-        var graph = _graphBuilder.Build(documents, mergedFacts);
-        return new MarkdownKnowledgeBuildResult(documents, mergedFacts, graph);
+        if (effectiveMode == MarkdownKnowledgeExtractionMode.Tiktoken)
+        {
+            tokenResult = _tiktokenExtractor!.Extract(documents);
+            extractionResults.Add(tokenResult.Facts);
+        }
+
+        var mergedFacts = _factMerger.Merge(extractionResults.ToArray());
+        var tokenIndex = effectiveMode == MarkdownKnowledgeExtractionMode.Tiktoken
+            ? _tiktokenExtractor!.CreateIndex(tokenResult!.Segments, tokenResult.VectorSpace)
+            : null;
+        var graph = _graphBuilder.Build(documents, mergedFacts, tokenIndex);
+        return new MarkdownKnowledgeBuildResult(documents, mergedFacts, graph)
+        {
+            ExtractionMode = effectiveMode,
+            Diagnostics = CreateDiagnostics(effectiveMode),
+        };
+    }
+
+    private MarkdownKnowledgeExtractionMode ResolveExtractionMode()
+    {
+        if (_configuredExtractionMode == MarkdownKnowledgeExtractionMode.Auto)
+        {
+            return _chatExtractor is null
+                ? MarkdownKnowledgeExtractionMode.None
+                : MarkdownKnowledgeExtractionMode.ChatClient;
+        }
+
+        if (_configuredExtractionMode == MarkdownKnowledgeExtractionMode.ChatClient && _chatExtractor is null)
+        {
+            throw new InvalidOperationException(MissingChatClientMessage);
+        }
+
+        return _configuredExtractionMode;
+    }
+
+    private static IReadOnlyList<string> CreateDiagnostics(MarkdownKnowledgeExtractionMode effectiveMode)
+    {
+        return effectiveMode == MarkdownKnowledgeExtractionMode.None
+            ? [NoExtractorDiagnostic]
+            : [];
     }
 }

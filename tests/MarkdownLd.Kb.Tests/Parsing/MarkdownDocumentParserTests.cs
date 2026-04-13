@@ -5,6 +5,7 @@ namespace ManagedCode.MarkdownLd.Kb.Tests.Parsing;
 
 public sealed class MarkdownDocumentParserTests
 {
+    private const string BomOnlyMarkdown = "\uFEFF";
     private const string MarkdownWithFrontMatter = """
         ---
         title: Markdown-LD Knowledge Bank
@@ -72,6 +73,52 @@ public sealed class MarkdownDocumentParserTests
         Body text.
         """;
 
+    private const string MarkdownMetadataEdgeCases = """
+        ---
+        title: Metadata Edge Cases
+        "": ignored blank key
+        summary: Summary from summary key.
+        canonicalUrl: https://kb.example/articles/metadata-edge-cases/
+        datePublished: 2026-04-12
+        dateModified: 2026-04-13
+        authors:
+          - name: Grace Hopper
+          -
+          - 123
+        tags:
+          - alpha, beta
+          -
+        about:
+          - label: Graphs
+          - 99
+          -
+        entityHints:
+          - 42
+          - value: Value Hint
+            type: schema:DefinedTerm
+            sameAs: https://example.com/value-hint
+          -
+          - label:
+        ---
+        Body text.
+        """;
+
+    private const string MarkdownEmptyFrontMatter = """
+        ---
+        ---
+        Body text.
+        """;
+
+    private const string MarkdownNullFrontMatterValues = """
+        ---
+        author:
+        entityHints:
+        tags:
+        about:
+        ---
+        Body text.
+        """;
+
     private const string MarkdownMalformedFrontMatter = """
         ---
         title: [broken
@@ -108,6 +155,21 @@ public sealed class MarkdownDocumentParserTests
     private const string CanonicalSummary = "Canonical summary.";
     private const string AdaLovelace = "Ada Lovelace";
     private const string GraceHopper = "Grace Hopper";
+    private const string NumericMetadataValue = "123";
+    private const string NumericEntityHint = "42";
+    private const string NumericAbout = "99";
+    private const string MetadataEdgeCasesContentPath = "content/metadata-edge-cases.md";
+    private const string MetadataEdgeCasesDocumentId = "https://kb.example/articles/metadata-edge-cases/";
+    private const string MetadataEdgeCasesTitle = "Metadata Edge Cases";
+    private const string MetadataEdgeCasesSummary = "Summary from summary key.";
+    private const string MetadataEdgeCasesDatePublished = "2026-04-12";
+    private const string MetadataEdgeCasesDateModified = "2026-04-13";
+    private const string MetadataEdgeCasesValueHint = "Value Hint";
+    private const string MetadataEdgeCasesValueHintType = "schema:DefinedTerm";
+    private const string MetadataEdgeCasesValueHintSameAs = "https://example.com/value-hint";
+    private const string EmptyFrontMatterContentPath = "content/empty-front-matter.md";
+    private const string NullFrontMatterValuesContentPath = "content/null-front-matter-values.md";
+    private const string BomOnlyContentPath = "content/bom-only.md";
     private const string Graphs = "Graphs";
     private const string BodyText = "Body text.";
     private const string InvalidFrontMatterSourcePath = "content/broken.md";
@@ -130,6 +192,10 @@ public sealed class MarkdownDocumentParserTests
     private static readonly string[] ExpectedCanonicalAuthors = [AdaLovelace, GraceHopper];
     private static readonly string[] ExpectedCanonicalTags = ["rdf", "markdown"];
     private static readonly string[] ExpectedCanonicalAbout = [Graphs, RdfLabel];
+    private static readonly string[] ExpectedMetadataEdgeCaseAuthors = [GraceHopper, NumericMetadataValue];
+    private static readonly string[] ExpectedMetadataEdgeCaseTags = ["alpha", "beta"];
+    private static readonly string[] ExpectedMetadataEdgeCaseAbout = [Graphs, NumericAbout];
+
     [Test]
     public async Task Parse_reads_front_matter_sections_chunks_and_links_from_fixture()
     {
@@ -219,6 +285,47 @@ public sealed class MarkdownDocumentParserTests
         document.FrontMatter.EntityHints.ShouldContain(hint => hint.Label == RdfLabel && hint.SameAs!.Contains(RdfSameAs));
         document.Sections.Count.ShouldBe(1);
         document.Chunks.Count.ShouldBe(1);
+
+        await Task.CompletedTask;
+    }
+
+    [Test]
+    public async Task Parse_handles_empty_front_matter_and_metadata_edge_cases()
+    {
+        var parser = new MarkdownDocumentParser();
+        var bomOnly = parser.Parse(new MarkdownDocumentSource(BomOnlyMarkdown, BomOnlyContentPath, BaseUri));
+        var empty = parser.Parse(new MarkdownDocumentSource(MarkdownEmptyFrontMatter, EmptyFrontMatterContentPath, BaseUri));
+        var nullValues = parser.Parse(new MarkdownDocumentSource(MarkdownNullFrontMatterValues, NullFrontMatterValuesContentPath, BaseUri));
+        var document = parser.Parse(new MarkdownDocumentSource(MarkdownMetadataEdgeCases, MetadataEdgeCasesContentPath, BaseUri));
+
+        bomOnly.SourceMarkdown.ShouldBeEmpty();
+        bomOnly.BodyMarkdown.ShouldBeEmpty();
+        bomOnly.Sections.ShouldBeEmpty();
+
+        empty.FrontMatter.RawYaml.ShouldBeEmpty();
+        empty.FrontMatter.Title.ShouldBeNull();
+        empty.FrontMatter.Tags.ShouldBeEmpty();
+        empty.Sections.Single().HeadingText.ShouldBeNull();
+        empty.Sections.Single().Markdown.ShouldBe(BodyText);
+
+        nullValues.FrontMatter.Authors.ShouldBeEmpty();
+        nullValues.FrontMatter.EntityHints.ShouldBeEmpty();
+        nullValues.FrontMatter.Tags.ShouldBeEmpty();
+        nullValues.FrontMatter.About.ShouldBeEmpty();
+
+        document.DocumentId.ShouldBe(MetadataEdgeCasesDocumentId);
+        document.FrontMatter.Title.ShouldBe(MetadataEdgeCasesTitle);
+        document.FrontMatter.Summary.ShouldBe(MetadataEdgeCasesSummary);
+        document.FrontMatter.DatePublished.ShouldBe(MetadataEdgeCasesDatePublished);
+        document.FrontMatter.DateModified.ShouldBe(MetadataEdgeCasesDateModified);
+        document.FrontMatter.Authors.ShouldBe(ExpectedMetadataEdgeCaseAuthors);
+        document.FrontMatter.Tags.ShouldBe(ExpectedMetadataEdgeCaseTags);
+        document.FrontMatter.About.ShouldBe(ExpectedMetadataEdgeCaseAbout);
+        document.FrontMatter.EntityHints.ShouldContain(hint => hint.Label == NumericEntityHint);
+        document.FrontMatter.EntityHints.ShouldContain(hint =>
+            hint.Label == MetadataEdgeCasesValueHint &&
+            hint.Type == MetadataEdgeCasesValueHintType &&
+            hint.SameAs!.Contains(MetadataEdgeCasesValueHintSameAs));
 
         await Task.CompletedTask;
     }

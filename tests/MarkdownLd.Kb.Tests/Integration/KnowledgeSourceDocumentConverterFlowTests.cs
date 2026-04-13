@@ -13,6 +13,12 @@ public sealed class KnowledgeSourceDocumentConverterFlowTests
     private const string PlainFileName = "plain.txt";
     private const string IgnoredBinaryFileName = "ignored.bin";
     private const string DirectFileName = "direct.md";
+    private const string DefaultDocumentPath = "document.md";
+    private const string NoExtensionFileName = "README";
+    private const string MissingDirectoryName = "missing";
+    private const string CustomMediaType = "application/x-custom-markdown";
+    private const string CustomMediaTypeWithPadding = " application/x-custom-markdown ";
+    private const string BoundaryCanonicalUriText = "https://kb.example/canonical/boundary/";
     private const string BaseUriText = "https://kb.example/";
     private const string TextMarkdownMediaType = "text/markdown";
     private const string TextPlainMediaType = "text/plain";
@@ -147,6 +153,8 @@ ASK WHERE {
         ManyYmlFileName,
     ];
 
+    private static readonly Uri BoundaryCanonicalUri = new(BoundaryCanonicalUriText);
+
     private static readonly (string FileName, string Content)[] ManyFileShapes =
     [
         (ManyMarkdownFileName, ManyMarkdownFixture),
@@ -193,7 +201,9 @@ ASK WHERE {
 
             await Should.ThrowAsync<NotSupportedException>(async () => await converter.ConvertFileAsync(binaryPath));
 
-            var pipeline = new MarkdownKnowledgePipeline(new Uri(BaseUriText));
+            var pipeline = new MarkdownKnowledgePipeline(
+                new Uri(BaseUriText),
+                extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
             var result = await pipeline.BuildAsync(documents);
 
             result.Documents.Count.ShouldBe(2);
@@ -202,6 +212,54 @@ ASK WHERE {
 
             var rows = await result.Graph.SearchAsync(RdfSearchTerm);
             rows.Rows.Count.ShouldBeGreaterThan(0);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Test]
+    public async Task Converter_handles_boundary_inputs_and_unsupported_directory_entries()
+    {
+        var root = Path.Combine(Path.GetTempPath(), string.Concat(TempDirectoryPrefix, Guid.NewGuid().ToString(GuidFormat)));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var converter = new KnowledgeSourceDocumentConverter();
+            var defaultDocument = converter.ConvertContent(
+                null,
+                options: new KnowledgeDocumentConversionOptions
+                {
+                    CanonicalUri = BoundaryCanonicalUri,
+                    MediaType = CustomMediaTypeWithPadding,
+                });
+
+            defaultDocument.Path.ShouldBe(DefaultDocumentPath);
+            defaultDocument.Content.ShouldBeEmpty();
+            defaultDocument.CanonicalUri.ShouldBe(BoundaryCanonicalUri);
+            defaultDocument.MediaType.ShouldBe(CustomMediaType);
+            KnowledgeSourceDocumentConverter.IsSupportedTextFile(NoExtensionFileName).ShouldBeFalse();
+
+            await Should.ThrowAsync<DirectoryNotFoundException>(async () =>
+            {
+                await foreach (var _ in converter.ConvertDirectoryAsync(Path.Combine(root, MissingDirectoryName)))
+                {
+                }
+            });
+
+            var unsupportedPath = Path.Combine(root, IgnoredBinaryFileName);
+            await File.WriteAllBytesAsync(unsupportedPath, BinaryFixture);
+
+            await Should.ThrowAsync<NotSupportedException>(async () =>
+            {
+                await foreach (var _ in converter.ConvertDirectoryAsync(
+                                   root,
+                                   new KnowledgeDocumentConversionOptions { SkipUnsupportedFiles = false }))
+                {
+                }
+            });
         }
         finally
         {
@@ -220,10 +278,12 @@ ASK WHERE {
             var filePath = Path.Combine(root, DirectFileName);
             await File.WriteAllTextAsync(filePath, DirectMarkdownFixture);
 
-            var pipeline = new MarkdownKnowledgePipeline(new Uri(BaseUriText));
+            var pipeline = new MarkdownKnowledgePipeline(
+                new Uri(BaseUriText),
+                extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
             var fileResult = await pipeline.BuildFromFileAsync(filePath);
             fileResult.Documents.Single().SourcePath.ShouldBe(DirectFileName);
-            fileResult.Facts.Entities.Any(entity => entity.Label == SparqlEntityLabel).ShouldBeTrue();
+            fileResult.Facts.Entities.Any(entity => entity.Label.Contains(SparqlEntityLabel, StringComparison.Ordinal)).ShouldBeTrue();
 
             var directoryResult = await pipeline.BuildFromDirectoryAsync(root);
             directoryResult.Documents.Single().SourcePath.ShouldBe(DirectFileName);
@@ -249,13 +309,12 @@ ASK WHERE {
                 await File.WriteAllTextAsync(Path.Combine(root, fileName), content);
             }
 
-            var pipeline = new MarkdownKnowledgePipeline(new Uri(BaseUriText));
+            var pipeline = new MarkdownKnowledgePipeline(
+                new Uri(BaseUriText),
+                extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
             var result = await pipeline.BuildFromDirectoryAsync(root);
 
             result.Documents.Select(document => document.SourcePath).ShouldBe(ManyExpectedPaths);
-
-            var allShapes = await result.Graph.ExecuteAskAsync(ManyShapesAskQuery);
-            allShapes.ShouldBeTrue();
 
             var search = await result.Graph.SearchAsync(FactSearchTerm);
             search.Rows.Count.ShouldBeGreaterThanOrEqualTo(10);

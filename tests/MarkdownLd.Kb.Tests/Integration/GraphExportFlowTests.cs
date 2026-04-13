@@ -10,10 +10,10 @@ public sealed class GraphExportFlowTests
     private const string GraphExportTitle = "Graph Export";
     private const string RdfLabel = "RDF";
     private const string GraphExportDocumentId = "https://kb.example/export/";
-    private const string RdfEntityId = "https://kb.example/id/rdf";
     private const string LiteralGraphExportId = "literal:Graph Export";
     private const string SchemaMentionsPredicateId = "https://schema.org/mentions";
     private const string SchemaMentionsPredicateLabel = "schema:mentions";
+    private const string TokenSegmentIdPrefix = "https://kb.example/token-segment/";
     private const string MermaidHeader = "graph LR";
     private const string MermaidMentionEdge = "|\"schema:mentions\"|";
     private const string DotHeader = "digraph KnowledgeGraph";
@@ -42,7 +42,9 @@ RDF --sameas--> https://www.w3.org/RDF/
     [Test]
     public async Task Markdown_graph_export_flow_returns_snapshot_mermaid_and_dot()
     {
-        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+        var pipeline = new MarkdownKnowledgePipeline(
+            BaseUri,
+            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
         var result = await pipeline.BuildAsync([
             new MarkdownSourceDocument(ExportPath, ExportMarkdown),
         ]);
@@ -52,9 +54,9 @@ RDF --sameas--> https://www.w3.org/RDF/
         snapshot.Nodes.ShouldContain(node =>
             node.Id == GraphExportDocumentId &&
             node.Kind == KnowledgeGraphNodeKind.Uri);
-        snapshot.Nodes.ShouldContain(node =>
-            node.Id == RdfEntityId &&
-            node.Label == RdfLabel &&
+        var rdfSegment = snapshot.Nodes.First(node =>
+            node.Id.StartsWith(TokenSegmentIdPrefix, StringComparison.Ordinal) &&
+            node.Label.Contains(RdfLabel, StringComparison.Ordinal) &&
             node.Kind == KnowledgeGraphNodeKind.Uri);
         snapshot.Nodes.ShouldContain(node =>
             node.Id == LiteralGraphExportId &&
@@ -64,7 +66,7 @@ RDF --sameas--> https://www.w3.org/RDF/
             edge.SubjectId == GraphExportDocumentId &&
             edge.PredicateId == SchemaMentionsPredicateId &&
             edge.PredicateLabel == SchemaMentionsPredicateLabel &&
-            edge.ObjectId == RdfEntityId);
+            edge.ObjectId == rdfSegment.Id);
 
         var mermaid = result.Graph.SerializeMermaidFlowchart();
         mermaid.ShouldContain(MermaidHeader);

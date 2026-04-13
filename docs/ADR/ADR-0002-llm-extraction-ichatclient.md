@@ -86,7 +86,7 @@ flowchart LR
 Mitigations:
 
 - Depend on abstractions only.
-- Keep deterministic extraction available for Markdown-native cues and non-network tests.
+- Keep non-network tests around the `IChatClient` boundary and the explicit Tiktoken token-distance mode.
 - Document provider/runtime assumptions in future app-level docs.
 
 ## Verification
