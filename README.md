@@ -9,7 +9,7 @@
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Markdown-LD Knowledge Bank is a .NET 10 library for turning Markdown knowledge-base files into an in-memory RDF graph that can be searched, queried with read-only SPARQL, exported as RDF, and rendered as a diagram.
+Markdown-LD Knowledge Bank is a .NET 10 library for turning Markdown knowledge-base files into an in-memory RDF graph that can be searched, queried with read-only SPARQL, validated with SHACL, exported as RDF, and rendered as a diagram.
 
 The package is a C# library implementation of the Markdown-LD knowledge graph workflow. The runtime is local and in-memory: no localhost server, no Azure Functions host, no database server, and no hosted graph service are required.
 
@@ -31,6 +31,7 @@ flowchart LR
     Merge --> Builder["KnowledgeGraphBuilder\n→ dotNetRDF in-memory graph"]
     Builder --> Search["SearchAsync"]
     Builder --> Sparql["ExecuteSelectAsync\nExecuteAskAsync"]
+    Builder --> Shacl["ValidateShacl\nSHACL report"]
     Builder --> Snap["ToSnapshot"]
     Builder --> Diagram["SerializeMermaidFlowchart\nSerializeDotGraph"]
     Builder --> Export["SerializeTurtle\nSerializeJsonLd"]
@@ -54,6 +55,8 @@ Tiktoken mode is deterministic and network-free. It uses lexical token-distance 
 - `SerializeJsonLd()` — JSON-LD serialization
 - `ExecuteSelectAsync(sparql)` — read-only SPARQL SELECT returning `SparqlQueryResult`
 - `ExecuteAskAsync(sparql)` — read-only SPARQL ASK returning `bool`
+- `ValidateShacl()` — SHACL validation against the built-in Markdown-LD Knowledge Bank shapes
+- `ValidateShacl(shapesTurtle)` — SHACL validation against caller-supplied Turtle shapes
 - `SearchAsync(term)` — case-insensitive search across `schema:name`, `schema:description`, and `schema:keywords`, returning matching graph subjects as `SparqlQueryResult`
 - `SearchFocusedAsync(term)` — sparse graph search that returns primary, related, and next-step matches plus a bounded focused graph snapshot
 
@@ -200,6 +203,8 @@ internal static class CapabilityGraphDemo
 
 Use `BuildAsync(documents, KnowledgeGraphBuildOptions)` when graph rules are assembled by the host application instead of authored in Markdown front matter.
 
+Entities with the same `schema:sameAs` target are merged before assertions are emitted, and assertion endpoints are rewritten to the chosen canonical entity IRI. This keeps the graph sparse and avoids duplicated workflow edges when callers provide multiple labels or IDs for the same outside resource.
+
 ## Optional AI Extraction
 
 AI extraction builds graph facts from entities and assertions returned by an injected `Microsoft.Extensions.AI.IChatClient`. The package stays provider-neutral: it does not reference OpenAI, Azure OpenAI, Anthropic, or any other model-specific SDK. If no chat client is provided, `Auto` mode extracts no facts and reports a diagnostic; choose `Tiktoken` mode explicitly for local token-distance extraction.
@@ -328,6 +333,56 @@ LIMIT 100
 
 SPARQL execution is intentionally read-only. `SELECT` and `ASK` are allowed; mutation forms such as `INSERT`, `DELETE`, `LOAD`, `CLEAR`, `DROP`, and `CREATE` are rejected before execution.
 
+## Validate With SHACL
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+
+internal static class ShaclValidationDemo
+{
+    public static void Run(MarkdownKnowledgeBuildResult result)
+    {
+        KnowledgeGraphShaclValidationReport report = result.ValidateShacl();
+
+        if (!report.Conforms)
+        {
+            foreach (var issue in report.Results)
+            {
+                Console.WriteLine(issue.FocusNode);
+                Console.WriteLine(issue.Message);
+            }
+        }
+
+        Console.WriteLine(report.ReportTurtle);
+    }
+}
+```
+
+`ValidateShacl()` uses default Markdown-LD Knowledge Bank shapes backed by `dotNetRdf.Shacl`. The default shapes validate article names, entity names, `schema:sameAs` IRIs, provenance IRIs, and assertion confidence metadata.
+
+Graph assertions remain direct RDF edges for existing SPARQL and search callers. Each assertion also gets RDF reification metadata as an `rdf:Statement` with `rdf:subject`, `rdf:predicate`, `rdf:object`, `kb:confidence`, and optional `prov:wasDerivedFrom`, so SHACL can validate assertion metadata without changing the query shape of the main graph.
+
+Pass custom Turtle shapes when the host application needs stricter rules:
+
+```csharp
+const string Shapes = """
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix schema: <https://schema.org/> .
+
+<urn:shape:ArticleDatePublished> a sh:NodeShape ;
+  sh:targetClass schema:Article ;
+  sh:property [
+    sh:path schema:datePublished ;
+    sh:minCount 1 ;
+    sh:message "Every Article must have a schema:datePublished." ;
+  ] .
+""";
+
+var report = result.Graph.ValidateShacl(Shapes);
+```
+
+Invalid caller-authored `sameAs` or provenance values are kept as RDF literals so the SHACL report can expose the exact violation instead of silently dropping the malformed fact.
+
 ## Export The Graph
 
 ```csharp
@@ -395,8 +450,10 @@ var rows = await shared.Graph.SearchAsync("rdf");
 |---|---|
 | `MarkdownKnowledgePipeline` | Entry point. Orchestrates parsing, extraction, merge, and graph build. |
 | `MarkdownKnowledgeBuildResult` | Holds `Documents`, `Facts`, and the built `Graph`. |
-| `KnowledgeGraph` | In-memory dotNetRDF graph with query, search, export, and merge. |
+| `KnowledgeGraph` | In-memory dotNetRDF graph with query, search, SHACL validation, export, and merge. |
 | `KnowledgeGraphSnapshot` | Immutable view with `Nodes` (`KnowledgeGraphNode`) and `Edges` (`KnowledgeGraphEdge`). |
+| `KnowledgeGraphShaclValidationReport` | SHACL conformance result with flattened issues and Turtle report output. |
+| `KnowledgeGraphShaclValidationIssue` | Caller-readable SHACL result fields such as focus node, path, value, severity, and message. |
 | `MarkdownDocument` | Pipeline parsed document: `FrontMatter`, `Body`, and `Sections`. |
 | `MarkdownFrontMatter` | Typed front matter model used by the low-level Markdown parser. |
 | `KnowledgeExtractionResult` | Merged collection of `KnowledgeEntityFact` and `KnowledgeAssertionFact`. |
@@ -459,6 +516,7 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 - `Markdig` parses Markdown structure.
 - `YamlDotNet` parses front matter.
 - `dotNetRDF` builds the RDF graph, runs local SPARQL, and serializes Turtle/JSON-LD.
+- `dotNetRdf.Shacl` validates built graphs with default or caller-supplied SHACL shapes.
 - `Microsoft.Extensions.AI.IChatClient` is the only AI boundary in the core pipeline.
 - `Microsoft.ML.Tokenizers` powers the explicit Tiktoken token-distance mode.
 - Subword TF-IDF is the default local token weighting because it downweights corpus-common tokens without adding language-specific preprocessing or model runtime dependencies.
@@ -466,7 +524,7 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 - Embeddings are not required for the current graph/search flow; Tiktoken mode uses token IDs, not embedding vectors.
 - Microsoft Agent Framework is treated as host-level orchestration, not a core package dependency.
 
-See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), and [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md).
+See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md), and [Graph SHACL Validation](docs/Features/GraphShaclValidation.md).
 
 ## Inspiration And Attribution
 
@@ -476,7 +534,7 @@ This project is inspired by Luis Quintanilla's Markdown-LD / AI Memex work:
 - [Zero-Cost Knowledge Graph from Markdown](https://lqdev.me/resources/ai-memex/blog-post-zero-cost-knowledge-graph-from-markdown/) - core idea for using Markdown, YAML front matter, LLM extraction, RDF, JSON-LD, Turtle, and SPARQL
 - [Project Report: Entity Extraction & RDF Pipeline](https://lqdev.me/resources/ai-memex/project-report-entity-extraction-rdf-pipeline/) - extraction and RDF pipeline context
 - [W3C SPARQL Federated Query](https://github.com/w3c/sparql-federated-query) - SPARQL federation reference material
-- [dotNetRDF](https://github.com/dotnetrdf/dotnetrdf) - RDF/SPARQL engine used by this C# implementation
+- [dotNetRDF](https://github.com/dotnetrdf/dotnetrdf) - RDF/SPARQL/SHACL engine used by this C# implementation
 
 The upstream reference repository is kept as a read-only submodule under `external/lqdev-markdown-ld-kb`.
 
@@ -494,8 +552,8 @@ Coverage is collected through `Microsoft.Testing.Extensions.CodeCoverage`. Cober
 
 Current verification:
 
-- tests: 77 passed, 0 failed
-- line coverage: 96.30%
-- branch coverage: 85.23%
+- tests: 87 passed, 0 failed
+- line coverage: 96.76%
+- branch coverage: 87.12%
 - target framework: .NET 10
 - package version: 0.0.1
