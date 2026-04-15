@@ -8,33 +8,59 @@ public sealed class MarkdownKnowledgePipeline
     private readonly MarkdownDocumentParser _parser;
     private readonly KnowledgeFactMerger _factMerger;
     private readonly KnowledgeGraphBuilder _graphBuilder;
+    private readonly KnowledgeGraphRuleExtractor _ruleExtractor;
     private readonly KnowledgeSourceDocumentConverter _documentConverter;
     private readonly ChatClientKnowledgeFactExtractor? _chatExtractor;
     private readonly TiktokenKnowledgeGraphExtractor? _tiktokenExtractor;
     private readonly MarkdownKnowledgeExtractionMode _configuredExtractionMode;
+    private readonly KnowledgeGraphBuildOptions _buildOptions;
 
     public MarkdownKnowledgePipeline(
         Uri? baseUri = null,
         IChatClient? chatClient = null,
         MarkdownKnowledgeExtractionMode extractionMode = MarkdownKnowledgeExtractionMode.Auto,
         TiktokenKnowledgeGraphOptions? tiktokenOptions = null)
+        : this(baseUri, chatClient, extractionMode, tiktokenOptions, null)
+    {
+    }
+
+    private MarkdownKnowledgePipeline(
+        Uri? baseUri,
+        IChatClient? chatClient,
+        MarkdownKnowledgeExtractionMode extractionMode,
+        TiktokenKnowledgeGraphOptions? tiktokenOptions,
+        KnowledgeGraphBuildOptions? buildOptions)
     {
         var effectiveBaseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
         _parser = new MarkdownDocumentParser(effectiveBaseUri);
         _factMerger = new KnowledgeFactMerger(effectiveBaseUri);
         _graphBuilder = new KnowledgeGraphBuilder(effectiveBaseUri);
+        _ruleExtractor = new KnowledgeGraphRuleExtractor(effectiveBaseUri);
         _documentConverter = new KnowledgeSourceDocumentConverter();
         _chatExtractor = chatClient is null ? null : new ChatClientKnowledgeFactExtractor(chatClient, effectiveBaseUri);
         _tiktokenExtractor = extractionMode == MarkdownKnowledgeExtractionMode.Tiktoken
             ? new TiktokenKnowledgeGraphExtractor(effectiveBaseUri, tiktokenOptions)
             : null;
         _configuredExtractionMode = extractionMode;
+        _buildOptions = buildOptions ?? KnowledgeGraphBuildOptions.Default;
     }
 
     public Task<MarkdownKnowledgeBuildResult> BuildAsync(IEnumerable<KnowledgeSourceDocument> sources, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sources);
         return BuildAsync(sources.Select(static source => source.ToMarkdownSourceDocument()), cancellationToken);
+    }
+
+    public Task<MarkdownKnowledgeBuildResult> BuildAsync(
+        IEnumerable<KnowledgeSourceDocument> sources,
+        KnowledgeGraphBuildOptions buildOptions,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        return BuildAsync(
+            sources.Select(static source => source.ToMarkdownSourceDocument()),
+            buildOptions,
+            cancellationToken);
     }
 
     public async Task<MarkdownKnowledgeBuildResult> BuildFromFileAsync(
@@ -79,7 +105,16 @@ public sealed class MarkdownKnowledgePipeline
 
     public async Task<MarkdownKnowledgeBuildResult> BuildAsync(IEnumerable<MarkdownSourceDocument> sources, CancellationToken cancellationToken = default)
     {
+        return await BuildAsync(sources, _buildOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<MarkdownKnowledgeBuildResult> BuildAsync(
+        IEnumerable<MarkdownSourceDocument> sources,
+        KnowledgeGraphBuildOptions buildOptions,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(buildOptions);
 
         var documents = new List<MarkdownDocument>();
         var effectiveMode = ResolveExtractionMode();
@@ -108,6 +143,8 @@ public sealed class MarkdownKnowledgePipeline
             tokenResult = _tiktokenExtractor!.Extract(documents);
             extractionResults.Add(tokenResult.Facts);
         }
+
+        extractionResults.Add(_ruleExtractor.Extract(documents, buildOptions));
 
         var mergedFacts = _factMerger.Merge(extractionResults.ToArray());
         var tokenIndex = effectiveMode == MarkdownKnowledgeExtractionMode.Tiktoken

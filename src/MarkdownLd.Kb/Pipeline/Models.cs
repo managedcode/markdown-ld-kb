@@ -134,6 +134,8 @@ public static class KnowledgeNaming
         [DescriptionPredicateKey] = ExpectedSchemaDescription,
         [KeywordsPredicateKey] = ExpectedSchemaKeywords,
         [RelatedToPredicateKey] = KbRelatedTo,
+        [MemberOfPredicateKey] = KbMemberOf,
+        [NextStepPredicateKey] = KbNextStep,
     };
 
     private static readonly Regex NonAlphaNumeric = new(NonAlphaNumericPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);

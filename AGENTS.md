@@ -49,6 +49,8 @@ Target capabilities:
 
 - Keep the core Markdown-to-graph pipeline deterministic and testable without network access.
 - Keep the core runtime in-memory. Do not introduce localhost, HTTP server, background service, database server, or hosted API dependencies into the production library.
+- Graph construction must support caller-supplied build rules so applications can turn Markdown corpora into structured capability/workflow graphs with groups, typed relationships, related-node expansion, and focused subgraphs instead of only flat document/topic graphs.
+- Graph search APIs must support sparse, high-precision retrieval and explainable related/next-step candidates so callers can select the smallest useful result set and request additional graph-neighbor results later.
 - Treat LLM/entity extraction as an adapter behind a small interface and implement that adapter through `Microsoft.Extensions.AI.IChatClient` from the start.
 - Do not add an embedding dependency to the core graph pipeline. If vector/semantic indexing is added later, expose it as an optional adapter boundary through `Microsoft.Extensions.AI.IEmbeddingGenerator<,>` or a similarly small port, with the concrete provider owned by the host app.
 - It is allowed for the production library to reference `Microsoft.Extensions.AI.Abstractions`; concrete OpenAI/Azure/Foundry providers must remain app-level dependencies unless an ADR says otherwise.

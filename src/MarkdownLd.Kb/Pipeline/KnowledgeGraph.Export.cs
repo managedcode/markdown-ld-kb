@@ -7,6 +7,18 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed partial class KnowledgeGraph
 {
+    public static string SerializeMermaidFlowchart(KnowledgeGraphSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return BuildMermaidFlowchart(snapshot);
+    }
+
+    public static string SerializeDotGraph(KnowledgeGraphSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return BuildDotGraph(snapshot);
+    }
+
     private static KnowledgeGraphSnapshot CreateGraphSnapshot(IEnumerable<Triple> triples)
     {
         var nodes = new Dictionary<string, KnowledgeGraphNode>(StringComparer.Ordinal);

@@ -55,6 +55,7 @@ Tiktoken mode is deterministic and network-free. It uses lexical token-distance 
 - `ExecuteSelectAsync(sparql)` — read-only SPARQL SELECT returning `SparqlQueryResult`
 - `ExecuteAskAsync(sparql)` — read-only SPARQL ASK returning `bool`
 - `SearchAsync(term)` — case-insensitive search across `schema:name`, `schema:description`, and `schema:keywords`, returning matching graph subjects as `SparqlQueryResult`
+- `SearchFocusedAsync(term)` — sparse graph search that returns primary, related, and next-step matches plus a bounded focused graph snapshot
 
 All async methods accept an optional `CancellationToken`.
 
@@ -143,6 +144,61 @@ You do not need to pass a base URI for normal use. Document identity is resolved
 - the generated inline document path when `BuildFromMarkdownAsync` is called without a path
 
 The library uses `urn:managedcode:markdown-ld-kb:/` as an internal default base URI only to create valid RDF IRIs when the source does not provide `KnowledgeDocumentConversionOptions.CanonicalUri`. Pass `new MarkdownKnowledgePipeline(new Uri("https://your-domain/"))` only when you want generated document/entity IRIs to live under your own domain.
+
+## Capability Graph Rules
+
+Markdown can include deterministic graph rules in front matter. These rules are useful for capability catalogs, tool catalogs, workflow graphs, and any corpus where related and next-step nodes matter more than broad top-N search.
+
+```markdown
+---
+title: Story Delete Tool
+summary: Delete a story after the caller identifies the exact story item.
+graph_groups:
+  - Story tools
+  - Delete operation
+graph_related:
+  - https://kb.example/tools/story-feed-detail/
+graph_next_steps:
+  - https://kb.example/tools/story-comments/
+---
+# Story Delete Tool
+
+Use this capability to remove an existing story.
+```
+
+`graph_groups` creates `kb:memberOf` edges. `graph_related` creates `kb:relatedTo` edges. `graph_next_steps` creates `kb:nextStep` edges. For advanced graphs, use `graph_entities` and `graph_edges` to add explicit nodes and predicates. Absolute IRIs are preserved; plain labels become stable entity IRIs under the pipeline base URI.
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+
+internal static class CapabilityGraphDemo
+{
+    public static async Task RunAsync(IReadOnlyList<MarkdownSourceDocument> documents)
+    {
+        var pipeline = new MarkdownKnowledgePipeline(
+            new Uri("https://kb.example/"),
+            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
+
+        var result = await pipeline.BuildAsync(documents);
+        var focused = await result.Graph.SearchFocusedAsync(
+            "remove the selected story from the feed",
+            new KnowledgeGraphFocusedSearchOptions
+            {
+                MaxPrimaryResults = 1,
+                MaxRelatedResults = 3,
+                MaxNextStepResults = 3,
+            });
+
+        var primary = focused.PrimaryMatches[0];
+        var mermaid = KnowledgeGraph.SerializeMermaidFlowchart(focused.FocusedGraph);
+
+        Console.WriteLine(primary.Label);
+        Console.WriteLine(mermaid);
+    }
+}
+```
+
+Use `BuildAsync(documents, KnowledgeGraphBuildOptions)` when graph rules are assembled by the host application instead of authored in Markdown front matter.
 
 ## Optional AI Extraction
 

@@ -10,7 +10,7 @@ The upstream reference repository is kept as a read-only submodule at `external/
 
 The core runtime has no localhost, HTTP server, background service, database server, or hosted API dependency. Callers pass files, directories, or in-memory document content into the library, and the library returns in-memory graph/search/query results.
 
-The graph/search model does not require semantic embeddings. The AI boundary in the core pipeline is `Microsoft.Extensions.AI.IChatClient` for entity/assertion extraction. The library also exposes an explicit experimental Tiktoken mode that creates lexical sparse vectors from `Microsoft.ML.Tokenizers` token IDs and builds a local corpus graph. Its default weighting is corpus-fitted subword TF-IDF, with raw term frequency and binary presence kept as experimental baselines. Tiktoken mode also creates section/segment structure, local TF-IDF keyphrase topics, and explicit front matter entity hint nodes, but it is not a semantic embedding model. If semantic vector search is added later, it should be a separate optional adapter over `Microsoft.Extensions.AI.IEmbeddingGenerator<,>` or an equivalent small port, with the concrete provider owned by the host app.
+The graph/search model does not require semantic embeddings. The AI boundary in the core pipeline is `Microsoft.Extensions.AI.IChatClient` for entity/assertion extraction. The library also exposes an explicit experimental Tiktoken mode that creates lexical sparse vectors from `Microsoft.ML.Tokenizers` token IDs and builds a local corpus graph. Its default weighting is corpus-fitted subword TF-IDF, with raw term frequency and binary presence kept as experimental baselines. Tiktoken mode also creates section/segment structure, local TF-IDF keyphrase topics, and explicit front matter entity hint nodes, but it is not a semantic embedding model. Capability graph rules add deterministic caller-authored entities and edges for groups, related nodes, and next-step nodes so applications can build workflow/capability graphs without relying on a flat document-topic graph. If semantic vector search is added later, it should be a separate optional adapter over `Microsoft.Extensions.AI.IEmbeddingGenerator<,>` or an equivalent small port, with the concrete provider owned by the host app.
 
 ## System Boundaries
 
@@ -20,15 +20,18 @@ flowchart LR
     MarkdownFiles --> Loader["In-memory document converter and loader"]
     Loader --> Parser["Markdown parser and chunker"]
     Parser --> Router["Extraction mode router"]
+    Parser --> Rules["Capability graph rules"]
     Router --> ChatExtractor["IChatClient extractor"]
     Router --> TokenExtractor["Tiktoken token-distance extractor"]
     Router --> NoExtractor["No fact extractor"]
+    Rules --> Builder
     ChatExtractor --> Builder["RDF graph builder"]
     TokenExtractor --> Builder
     NoExtractor --> Builder
     Builder --> Graph["In-memory knowledge graph"]
     Graph --> Sparql["In-memory SPARQL executor API"]
     Graph --> Search["In-memory graph search API"]
+    Graph --> Focused["Focused graph search API"]
     Graph --> Serializers["Turtle and JSON-LD serializers"]
     Graph --> Merge["Thread-safe graph merge API"]
     IChatClient["Microsoft.Extensions.AI IChatClient"] --> ChatExtractor
@@ -53,6 +56,7 @@ sequenceDiagram
     Pipeline->>Parser: Parse Markdown and front matter
     Parser-->>Pipeline: Parsed document and sections
     Pipeline->>Router: Resolve Auto / None / ChatClient / Tiktoken
+    Pipeline->>Graph: Add deterministic capability graph rules
     alt ChatClient
         Router->>Chat: Structured LLM extraction
         Chat-->>Router: Knowledge extraction result
@@ -78,6 +82,7 @@ flowchart TB
         Parsing["Parsing: front matter, heading sections, wikilinks"]
         Ai["AI: IChatClient extraction port"]
         Tokens["Tiktoken: subword TF-IDF vectors, keyphrase topics, explicit entity hints, and token-distance search"]
+        Rules["Capability rules: graph_entities, graph_edges, graph_groups, graph_related, graph_next_steps"]
         Rdf["RDF: graph construction, namespaces, serialization"]
         Query["Query: SPARQL and graph search"]
     end
@@ -92,6 +97,7 @@ flowchart TB
     FlowTests --> Parsing
     FlowTests --> Ai
     FlowTests --> Tokens
+    FlowTests --> Rules
     FlowTests --> Rdf
     FlowTests --> Query
 ```
@@ -147,6 +153,7 @@ Required first-slice scenarios:
 - Markdown with front matter and headings builds a queryable document metadata graph without requiring fact extraction.
 - Empty Markdown input produces an empty graph without throwing.
 - Explicit Tiktoken mode builds section/segment/topic/entity-hint nodes plus `schema:hasPart`, `schema:about`, `schema:mentions`, and token-distance `kb:relatedTo` edges without network access.
+- Capability graph rules build `kb:memberOf`, `kb:relatedTo`, and `kb:nextStep` workflow edges from Markdown front matter or caller options, and focused search returns primary, related, and next-step result groups.
 - English, Ukrainian, French, and German queries over same-language token graphs produce a higher hit rate than cross-language translated-topic queries.
 - Term frequency, binary presence, and subword TF-IDF token weighting modes are covered by focused and flow tests.
 - SPARQL mutating queries are rejected before execution.
@@ -174,3 +181,5 @@ Coverage requirement: 95%+ line coverage for changed production code.
 - TextRank: `https://aclanthology.org/W04-3252/`
 - RDF/SPARQL dependency decision: `docs/ADR/ADR-0001-rdf-sparql-library.md`
 - LLM extraction dependency decision: `docs/ADR/ADR-0002-llm-extraction-ichatclient.md`
+- Capability graph rules decision: `docs/ADR/ADR-0004-capability-graph-rules.md`
+- Capability graph rules feature: `docs/Features/CapabilityGraphRules.md`
