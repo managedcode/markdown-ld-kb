@@ -149,16 +149,18 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
         var rdfType = graph.CreateUriNode(RdfTypeUri);
         var schemaName = graph.CreateUriNode(SchemaNameUri);
         var schemaSameAs = graph.CreateUriNode(SchemaSameAsUri);
+        var kbConfidence = graph.CreateUriNode(KbConfidenceUri);
+        var provWasDerivedFrom = graph.CreateUriNode(ProvWasDerivedFromUri);
 
         graph.Assert(new Triple(subject, rdfType, graph.CreateUriNode(NormalizeTypeUri(entity.Type))));
         graph.Assert(new Triple(subject, schemaName, graph.CreateLiteralNode(entity.Label)));
+        graph.Assert(new Triple(subject, kbConfidence, CreateConfidenceLiteral(graph, entity.Confidence)));
         foreach (var sameAs in entity.SameAs.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            if (Uri.TryCreate(sameAs, UriKind.Absolute, out var absolute))
-            {
-                graph.Assert(new Triple(subject, schemaSameAs, graph.CreateUriNode(absolute)));
-            }
+            graph.Assert(new Triple(subject, schemaSameAs, CreateUriOrLiteralNode(graph, sameAs)));
         }
+
+        AddSourceTriple(graph, subject, provWasDerivedFrom, entity.Source);
     }
 
     private static void AddAssertion(Graph graph, KnowledgeAssertionFact assertion)
@@ -181,11 +183,50 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
                 graph.CreateUriNode(subjectUri),
                 graph.CreateUriNode(predicateUri),
                 graph.CreateUriNode(objectUri)));
+        AddReifiedAssertion(graph, subjectUri, predicateUri, objectUri, assertion);
 
         if (!string.IsNullOrWhiteSpace(assertion.Source))
         {
-            graph.Assert(new Triple(graph.CreateUriNode(subjectUri), graph.CreateUriNode(ProvWasDerivedFromUri), graph.CreateUriNode(new Uri(assertion.Source))));
+            AddSourceTriple(graph, graph.CreateUriNode(subjectUri), graph.CreateUriNode(ProvWasDerivedFromUri), assertion.Source);
         }
+    }
+
+    private static void AddReifiedAssertion(
+        Graph graph,
+        Uri subjectUri,
+        Uri predicateUri,
+        Uri objectUri,
+        KnowledgeAssertionFact assertion)
+    {
+        var statement = graph.CreateBlankNode();
+        graph.Assert(new Triple(statement, graph.CreateUriNode(RdfTypeUri), graph.CreateUriNode(RdfStatementUri)));
+        graph.Assert(new Triple(statement, graph.CreateUriNode(RdfSubjectUri), graph.CreateUriNode(subjectUri)));
+        graph.Assert(new Triple(statement, graph.CreateUriNode(RdfPredicateUri), graph.CreateUriNode(predicateUri)));
+        graph.Assert(new Triple(statement, graph.CreateUriNode(RdfObjectUri), graph.CreateUriNode(objectUri)));
+        graph.Assert(new Triple(statement, graph.CreateUriNode(KbConfidenceUri), CreateConfidenceLiteral(graph, assertion.Confidence)));
+        AddSourceTriple(graph, statement, graph.CreateUriNode(ProvWasDerivedFromUri), assertion.Source);
+    }
+
+    private static void AddSourceTriple(Graph graph, INode subject, INode predicate, string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return;
+        }
+
+        graph.Assert(new Triple(subject, predicate, CreateUriOrLiteralNode(graph, source)));
+    }
+
+    private static INode CreateUriOrLiteralNode(Graph graph, string value)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
+            ? graph.CreateUriNode(absolute)
+            : graph.CreateLiteralNode(value);
+    }
+
+    private static ILiteralNode CreateConfidenceLiteral(Graph graph, double confidence)
+    {
+        return graph.CreateLiteralNode(confidence.ToString(CultureInfo.InvariantCulture), XsdDecimalUri);
     }
 
     private static Uri? ResolvePredicate(string predicate)

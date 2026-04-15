@@ -73,6 +73,11 @@ public sealed record MarkdownKnowledgeBuildResult(
     public MarkdownKnowledgeExtractionMode ExtractionMode { get; init; } = MarkdownKnowledgeExtractionMode.None;
 
     public IReadOnlyList<string> Diagnostics { get; init; } = [];
+
+    public KnowledgeGraphShaclValidationReport ValidateShacl(string? shapesTurtle = null)
+    {
+        return Graph.ValidateShacl(shapesTurtle);
+    }
 }
 
 public sealed record KnowledgeGraphSnapshot(

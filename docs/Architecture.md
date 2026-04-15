@@ -1,6 +1,6 @@
 # Markdown-LD Knowledge Bank Architecture
 
-Date: 2026-04-11
+Date: 2026-04-15
 
 ## Purpose
 
@@ -32,6 +32,7 @@ flowchart LR
     Graph --> Sparql["In-memory SPARQL executor API"]
     Graph --> Search["In-memory graph search API"]
     Graph --> Focused["Focused graph search API"]
+    Graph --> Shacl["SHACL validation API"]
     Graph --> Serializers["Turtle and JSON-LD serializers"]
     Graph --> Merge["Thread-safe graph merge API"]
     IChatClient["Microsoft.Extensions.AI IChatClient"] --> ChatExtractor
@@ -50,6 +51,7 @@ sequenceDiagram
     participant Chat as IChatClient
     participant Tokenizer as Tiktoken tokenizer
     participant Graph as KnowledgeGraphBuilder
+    participant BuiltGraph as KnowledgeGraph
     participant Query as InMemorySparqlExecutor
 
     Caller->>Pipeline: BuildAsync(documents, options)
@@ -69,6 +71,9 @@ sequenceDiagram
     Router-->>Pipeline: Entities, assertions, optional token index
     Pipeline->>Graph: Add facts as RDF triples
     Graph-->>Pipeline: In-memory KnowledgeGraph
+    Pipeline-->>Caller: MarkdownKnowledgeBuildResult
+    Caller->>BuiltGraph: ValidateShacl(optional shapes)
+    BuiltGraph-->>Caller: SHACL validation report
     Caller->>Query: ExecuteSelect(graph, sparql)
     Query-->>Caller: SPARQL bindings
 ```
@@ -84,6 +89,7 @@ flowchart TB
         Tokens["Tiktoken: subword TF-IDF vectors, keyphrase topics, explicit entity hints, and token-distance search"]
         Rules["Capability rules: graph_entities, graph_edges, graph_groups, graph_related, graph_next_steps"]
         Rdf["RDF: graph construction, namespaces, serialization"]
+        Shacl["SHACL: default shapes, validation reports, assertion metadata"]
         Query["Query: SPARQL and graph search"]
     end
 
@@ -99,6 +105,7 @@ flowchart TB
     FlowTests --> Tokens
     FlowTests --> Rules
     FlowTests --> Rdf
+    FlowTests --> Shacl
     FlowTests --> Query
 ```
 
@@ -138,6 +145,7 @@ flowchart LR
 
 - Parsing depends on Markdig and YamlDotNet.
 - RDF graph building and SPARQL execution depend on dotNetRDF.
+- SHACL validation depends on `dotNetRdf.Shacl` and runs against the in-memory graph through `VDS.RDF.Shacl.ShapesGraph`.
 - LLM extraction depends on `Microsoft.Extensions.AI.Abstractions` and accepts `IChatClient`.
 - Tiktoken extraction depends on `Microsoft.ML.Tokenizers` and the O200k data package. It uses tokenizer IDs and Unicode word n-gram keyphrase candidates only, and does not add an embedding provider. The default vector weighting is subword TF-IDF fitted over the current build corpus.
 - Embeddings are not required for the core graph build/query flow.
@@ -154,6 +162,7 @@ Required first-slice scenarios:
 - Empty Markdown input produces an empty graph without throwing.
 - Explicit Tiktoken mode builds section/segment/topic/entity-hint nodes plus `schema:hasPart`, `schema:about`, `schema:mentions`, and token-distance `kb:relatedTo` edges without network access.
 - Capability graph rules build `kb:memberOf`, `kb:relatedTo`, and `kb:nextStep` workflow edges from Markdown front matter or caller options, and focused search returns primary, related, and next-step result groups.
+- SHACL validation uses default Markdown-LD Knowledge Bank shapes or caller-supplied shapes, and assertion confidence/provenance metadata is represented as RDF statements so validation remains RDF-native.
 - English, Ukrainian, French, and German queries over same-language token graphs produce a higher hit rate than cross-language translated-topic queries.
 - Term frequency, binary presence, and subword TF-IDF token weighting modes are covered by focused and flow tests.
 - SPARQL mutating queries are rejected before execution.
@@ -183,3 +192,4 @@ Coverage requirement: 95%+ line coverage for changed production code.
 - LLM extraction dependency decision: `docs/ADR/ADR-0002-llm-extraction-ichatclient.md`
 - Capability graph rules decision: `docs/ADR/ADR-0004-capability-graph-rules.md`
 - Capability graph rules feature: `docs/Features/CapabilityGraphRules.md`
+- SHACL validation feature: `docs/Features/GraphShaclValidation.md`

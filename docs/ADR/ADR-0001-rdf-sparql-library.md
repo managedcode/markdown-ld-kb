@@ -11,6 +11,7 @@ Related Features: `docs/Architecture.md`
 - [x] Analyze upstream graph stack and .NET options.
 - [x] Choose the RDF/SPARQL dependency.
 - [x] Add dotNetRDF to the production project.
+- [x] Add `dotNetRdf.Shacl` when graph validation became a first-class library boundary.
 - [x] Add flow tests that query generated graphs through SPARQL.
 - [x] Run build, test, format, and coverage commands.
 - [x] Update `docs/Architecture.md` if dependency boundaries change.
@@ -41,12 +42,13 @@ Non-goals:
 
 ## Decision
 
-Use dotNetRDF as the RDF graph, serialization, and SPARQL engine for the first .NET implementation slice.
+Use dotNetRDF as the RDF graph, serialization, SPARQL, and SHACL validation engine for the .NET implementation.
 
 Key points:
 
 - dotNetRDF replaces Python RDFLib for the C# port.
 - The selected package supports RDF/SPARQL in .NET and the user guide documents in-memory RDF data and in-memory SPARQL querying, which matches the no-server core runtime boundary.
+- The `dotNetRdf.Shacl` package provides a SHACL processor over in-memory RDF graphs, which keeps validation standards-based and local.
 - Markdig and YamlDotNet will handle Markdown/front matter parsing separately.
 - AI extraction remains behind an extraction port that uses `Microsoft.Extensions.AI.IChatClient`; provider/orchestration packages are not part of this RDF dependency decision.
 
@@ -64,6 +66,7 @@ flowchart LR
     None --> Builder
     Builder --> DotNetRdf["dotNetRDF graph"]
     DotNetRdf --> Sparql["Local SPARQL execution"]
+    DotNetRdf --> Shacl["Local SHACL validation"]
     DotNetRdf --> Turtle["Turtle writer"]
     DotNetRdf --> JsonLd["JSON-LD writer"]
 ```
@@ -99,6 +102,7 @@ flowchart LR
 ### Negative / risks
 
 - The core library takes a dependency on dotNetRDF APIs.
+- SHACL validation uses dotNetRDF report objects internally, but public results stay in repository-owned models.
 - JSON-LD support may require a specific package shape or writer availability in the selected version.
 - Performance characteristics are inherited from dotNetRDF and must be measured before promising large-scale query throughput.
 
@@ -106,6 +110,7 @@ Mitigations:
 
 - Hide dependency details behind `KnowledgeGraph` query methods, `KnowledgeSearchService`, and serialization methods where practical.
 - Add tests for serialization and SPARQL query paths.
+- Add tests for SHACL conformance and violation report paths.
 - Keep remote/federated SPARQL out of the first slice.
 
 ## Impact
@@ -151,6 +156,7 @@ Mitigations:
   - Serialize the graph and parse/inspect the output.
 - Negative flows:
   - Reject mutating SPARQL operations.
+  - Validate malformed graph metadata through SHACL reports.
   - Default no-extractor mode.
   - Explicit Tiktoken token-distance mode.
 - Edge flows:
@@ -183,6 +189,7 @@ Mitigations:
 | TST-003 | Mutating SPARQL query | Integration | Rejected before execution | Safety |
 | TST-004 | Empty input | Integration | Empty graph and empty search results | Edge |
 | TST-005 | Malformed assertion syntax | Integration | Ignored without graph corruption | Negative |
+| TST-006 | SHACL validation | Integration | Valid graphs conform and invalid graph metadata reports violations | Standards validation |
 
 ## Rollout and migration
 
@@ -196,3 +203,4 @@ No migration exists yet. This is the initial implementation decision.
 - `external/lqdev-markdown-ld-kb/.ai-memex/blog-post-zero-cost-knowledge-graph-from-markdown.md`
 - dotNetRDF upstream repository: `https://github.com/dotnetrdf/dotnetrdf`
 - dotNetRDF user guide: `https://dotnetrdf.org/docs/stable/user_guide/index.html`
+- SHACL validation feature: `docs/Features/GraphShaclValidation.md`

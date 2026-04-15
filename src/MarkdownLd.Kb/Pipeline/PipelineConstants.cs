@@ -7,6 +7,7 @@ internal static class PipelineConstants
     internal const string KbRelatedTo = "kb:relatedTo";
     internal const string KbMemberOf = "kb:memberOf";
     internal const string KbNextStep = "kb:nextStep";
+    internal const string KbConfidenceSuffix = "confidence";
     internal const string TiktokenModelName = "gpt-5";
     internal const string TokenSegmentTypeText = "schema:CreativeWork";
     internal const string TokenTopicTypeText = "schema:DefinedTerm";
@@ -85,7 +86,12 @@ internal static class PipelineConstants
     internal const string SchemaDefinedTermTypeText = "schema:DefinedTerm";
     internal const string SchemaThingTypeText = "schema:Thing";
     internal const string RdfTypeText = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    internal const string RdfStatementText = RdfNamespaceText + "Statement";
+    internal const string RdfSubjectText = RdfNamespaceText + "subject";
+    internal const string RdfPredicateText = RdfNamespaceText + "predicate";
+    internal const string RdfObjectText = RdfNamespaceText + "object";
     internal const string XsdDateText = "http://www.w3.org/2001/XMLSchema#date";
+    internal const string XsdDecimalText = XsdNamespaceText + "decimal";
     internal const string TitleKey = "title";
     internal const string SummaryKey = "summary";
     internal const string DescriptionKey = "description";
@@ -149,6 +155,7 @@ internal static class PipelineConstants
     internal const string EscapedQuoteText = "\\\"";
     internal const string SpaceText = " ";
     internal const string LiteralNodePrefix = "literal:";
+    internal const string LiteralDatatypeSeparator = "^^";
     internal const string MermaidHeader = "graph LR";
     internal const string MermaidNodeIdPrefix = "n";
     internal const string MermaidIndent = "  ";
@@ -210,6 +217,7 @@ LIMIT 100
     internal const string MatchPredicateGroup = "predicate";
     internal const string MatchObjectGroup = "object";
     internal const string ProvWasDerivedFromSuffix = "wasDerivedFrom";
+    internal const string KbConfidenceText = KbNamespaceText + KbConfidenceSuffix;
     internal const string MarkdownMediaType = "text/markdown";
     internal const string MdxMediaType = "text/mdx";
     internal const string PlainTextMediaType = "text/plain";
@@ -238,6 +246,8 @@ LIMIT 100
     internal const string FrontMatterMappingExpectedMessage = "Markdown front matter must be a YAML mapping.";
     internal const char DoubleQuoteCharacter = '"';
     internal const char SingleQuoteCharacter = '\'';
+    internal const char LessThanCharacter = '<';
+    internal const char GreaterThanCharacter = '>';
     internal const char CommaCharacter = ',';
     internal const char SemicolonCharacter = ';';
 
@@ -259,8 +269,14 @@ LIMIT 100
     internal static readonly Uri SchemaCreatorUri = new(SchemaCreatorText);
     internal static readonly Uri SchemaHasPartUri = new(SchemaHasPartText);
     internal static readonly Uri RdfTypeUri = new(RdfTypeText);
+    internal static readonly Uri RdfStatementUri = new(RdfStatementText);
+    internal static readonly Uri RdfSubjectUri = new(RdfSubjectText);
+    internal static readonly Uri RdfPredicateUri = new(RdfPredicateText);
+    internal static readonly Uri RdfObjectUri = new(RdfObjectText);
     internal static readonly Uri XsdDateUri = new(XsdDateText);
+    internal static readonly Uri XsdDecimalUri = new(XsdDecimalText);
     internal static readonly Uri ProvWasDerivedFromUri = new(ProvNamespaceText + ProvWasDerivedFromSuffix);
+    internal static readonly Uri KbConfidenceUri = new(KbConfidenceText);
     internal static readonly double MaximumNormalizedTokenDistance = Math.Sqrt(OrthogonalSparseVectorDimensionCount);
     internal const TokenVectorWeighting DefaultTokenVectorWeighting = TokenVectorWeighting.SubwordTfIdf;
     internal static readonly char[] ArrowOperandTrimChars = [DoubleQuoteCharacter, SingleQuoteCharacter, CommaCharacter, SemicolonCharacter];
