@@ -144,7 +144,8 @@ public sealed class MarkdownKnowledgePipeline
             extractionResults.Add(tokenResult.Facts);
         }
 
-        extractionResults.Add(_ruleExtractor.Extract(documents, buildOptions));
+        var ruleResult = _ruleExtractor.Extract(documents, buildOptions);
+        extractionResults.Add(ruleResult.Facts);
 
         var mergedFacts = _factMerger.Merge(extractionResults.ToArray());
         var tokenIndex = effectiveMode == MarkdownKnowledgeExtractionMode.Tiktoken
@@ -154,7 +155,7 @@ public sealed class MarkdownKnowledgePipeline
         return new MarkdownKnowledgeBuildResult(documents, mergedFacts, graph)
         {
             ExtractionMode = effectiveMode,
-            Diagnostics = CreateDiagnostics(effectiveMode),
+            Diagnostics = CreateDiagnostics(effectiveMode).Concat(ruleResult.Diagnostics).ToArray(),
         };
     }
 

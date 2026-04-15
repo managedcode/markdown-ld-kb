@@ -175,18 +175,16 @@ public sealed partial class KnowledgeGraph
         IReadOnlyList<KnowledgeGraphFocusedSearchMatch> related,
         IReadOnlyList<KnowledgeGraphFocusedSearchMatch> nextSteps)
     {
-        var includedNodeIds = primary
+        var selectedMatchIds = primary
             .Concat(related)
             .Concat(nextSteps)
             .Select(static match => match.NodeId)
             .ToHashSet(StringComparer.Ordinal);
-        var includedEdges = SelectFocusedEdges(snapshot, includedNodeIds).ToArray();
-
-        foreach (var edge in includedEdges)
-        {
-            includedNodeIds.Add(edge.SubjectId);
-            includedNodeIds.Add(edge.ObjectId);
-        }
+        var explanatoryGroupIds = SelectExplanatoryGroupIds(snapshot, selectedMatchIds);
+        var includedNodeIds = selectedMatchIds
+            .Concat(explanatoryGroupIds)
+            .ToHashSet(StringComparer.Ordinal);
+        var includedEdges = SelectFocusedEdges(snapshot, selectedMatchIds, explanatoryGroupIds).ToArray();
 
         return new KnowledgeGraphSnapshot(
             snapshot.Nodes
@@ -196,28 +194,32 @@ public sealed partial class KnowledgeGraph
             includedEdges);
     }
 
-    private static IEnumerable<KnowledgeGraphEdge> SelectFocusedEdges(
+    private static IReadOnlySet<string> SelectExplanatoryGroupIds(
         KnowledgeGraphSnapshot snapshot,
-        IReadOnlySet<string> selectedNodeIds)
+        IReadOnlySet<string> selectedMatchIds)
     {
-        var selectedGroupIds = snapshot.Edges
-            .Where(edge => selectedNodeIds.Contains(edge.SubjectId) && edge.PredicateLabel == KbMemberOf)
+        return snapshot.Edges
+            .Where(edge => selectedMatchIds.Contains(edge.SubjectId) && edge.PredicateLabel == KbMemberOf)
             .Select(static edge => edge.ObjectId)
             .ToHashSet(StringComparer.Ordinal);
+    }
 
+    private static IEnumerable<KnowledgeGraphEdge> SelectFocusedEdges(
+        KnowledgeGraphSnapshot snapshot,
+        IReadOnlySet<string> selectedMatchIds,
+        IReadOnlySet<string> explanatoryGroupIds)
+    {
         return snapshot.Edges
             .Where(edge =>
-                (selectedNodeIds.Contains(edge.SubjectId) && selectedNodeIds.Contains(edge.ObjectId)) ||
-                (selectedNodeIds.Contains(edge.SubjectId) && selectedGroupIds.Contains(edge.ObjectId)) ||
-                (selectedNodeIds.Contains(edge.SubjectId) && IsFocusedPredicate(edge.PredicateLabel)))
+                (selectedMatchIds.Contains(edge.SubjectId) && selectedMatchIds.Contains(edge.ObjectId)) ||
+                (selectedMatchIds.Contains(edge.SubjectId) &&
+                 explanatoryGroupIds.Contains(edge.ObjectId) &&
+                 edge.PredicateLabel == KbMemberOf))
             .OrderBy(static edge => edge.SubjectId, StringComparer.Ordinal)
             .ThenBy(static edge => edge.PredicateId, StringComparer.Ordinal)
             .ThenBy(static edge => edge.ObjectId, StringComparer.Ordinal)
             .ToArray();
     }
-
-    private static bool IsFocusedPredicate(string predicateLabel)
-        => predicateLabel is KbMemberOf or KbRelatedTo or KbNextStep;
 
     private static bool IsArticleNode(KnowledgeGraphSnapshot snapshot, string nodeId)
         => snapshot.Edges.Any(edge =>

@@ -42,7 +42,11 @@ Rule values can be strings or maps. Strings become node labels. Maps can use `id
 - primary matches from graph metadata search when no token index is present
 - related matches from direct `kb:relatedTo` edges and shared `kb:memberOf` groups
 - next-step matches from direct `kb:nextStep` edges
-- a bounded focused graph snapshot containing the selected neighborhood
+- a bounded focused graph snapshot containing selected matches plus explanatory group nodes
+
+## Diagnostics
+
+Malformed caller-authored rule entries are skipped with caller-visible build diagnostics. The pipeline reports invalid shapes, missing predicates, unsupported predicates, missing objects, and blank node references in `MarkdownKnowledgeBuildResult.Diagnostics` instead of silently dropping them.
 
 ## Test Matrix
 
@@ -52,7 +56,8 @@ Rule values can be strings or maps. Strings become node labels. Maps can use `id
 | Focused search | Returns a small primary set before related or next-step candidates |
 | Related expansion | Includes same-group and explicit related nodes |
 | Next-step expansion | Includes explicit `kb:nextStep` nodes |
-| Focused export | Mermaid/DOT export includes only selected graph neighborhood |
+| Malformed rules | Reports skipped rule entries in build diagnostics |
+| Focused export | Mermaid/DOT export includes only selected graph neighborhood and explanatory groups |
 
 ## Verification
 

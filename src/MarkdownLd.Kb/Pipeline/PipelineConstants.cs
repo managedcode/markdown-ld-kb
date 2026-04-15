@@ -13,6 +13,16 @@ internal static class PipelineConstants
     internal const string NoExtractorDiagnostic = "No fact extractor was selected. Connect an IChatClient or set ExtractionMode to Tiktoken.";
     internal const string MissingChatClientMessage = "ChatClient extraction mode requires an IChatClient.";
     internal const string TokenDistanceSearchUnavailableMessage = "Token distance search requires a graph built with Tiktoken extraction mode.";
+    internal const string GraphRuleDiagnosticPrefix = "Graph rule skipped: ";
+    internal const string GraphRuleConfiguredEntityRule = "options.Entities";
+    internal const string GraphRuleConfiguredEdgeRule = "options.Edges";
+    internal const string GraphRuleMappingRequiredMessage = "requires a mapping value.";
+    internal const string GraphRuleLabelRequiredMessage = "requires a label.";
+    internal const string GraphRuleSubjectRequiredMessage = "requires a subject.";
+    internal const string GraphRulePredicateRequiredMessage = "requires a predicate.";
+    internal const string GraphRuleSupportedPredicateRequiredMessage = "requires a supported predicate.";
+    internal const string GraphRuleObjectRequiredMessage = "requires an object.";
+    internal const string GraphRuleNodeRequiredMessage = "requires a node label or id.";
     internal const int DefaultMaxRelatedTokenSegments = 3;
     internal const int DefaultMinimumTokenCount = 1;
     internal const int DefaultMaxTopicLabelsPerSegment = 8;
@@ -37,6 +47,8 @@ internal static class PipelineConstants
     internal const string Slash = "/";
     internal const string Colon = ":";
     internal const string Hyphen = "-";
+    internal const string OpenBracketText = "[";
+    internal const string CloseBracketText = "]";
     internal const string EmptySparqlQueryMessage = "SPARQL query is empty";
     internal const string ReadOnlySparqlQueryMessage = "SPARQL query is not read-only.";
     internal const string ExpectedResultSetMessage = "Expected a SPARQL result set.";
