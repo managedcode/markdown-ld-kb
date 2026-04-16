@@ -30,6 +30,26 @@ public sealed partial class KnowledgeGraph
         IReadOnlyDictionary<string, KnowledgeGraphNode> nodesById,
         CancellationToken cancellationToken)
     {
+        if (options.SemanticIndex is not null)
+        {
+            var rankedMatches = await SearchRankedAsync(
+                    query,
+                    new KnowledgeGraphRankedSearchOptions
+                    {
+                        Mode = KnowledgeGraphSearchMode.Hybrid,
+                        MaxResults = Math.Max(1, options.MaxPrimaryResults),
+                    },
+                    options.SemanticIndex,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            return rankedMatches
+                .Where(match => nodesById.ContainsKey(match.NodeId))
+                .Select(CreatePrimaryMatch)
+                .Take(Math.Max(1, options.MaxPrimaryResults))
+                .ToArray();
+        }
+
         if (_tokenIndex is not null)
         {
             var limit = Math.Max(options.MaxPrimaryResults * 4, options.MaxPrimaryResults);
@@ -44,17 +64,31 @@ public sealed partial class KnowledgeGraph
                 .ToArray();
         }
 
-        var rows = await SearchAsync(query, cancellationToken).ConfigureAwait(false);
-        return rows.Rows
-            .Select(static row => row.Values.TryGetValue("subject", out var id) ? id : null)
-            .Where(id => !string.IsNullOrWhiteSpace(id) && nodesById.ContainsKey(id!))
-            .Select(id => new KnowledgeGraphFocusedSearchMatch(
-                id!,
-                nodesById[id!].Label,
-                KnowledgeGraphFocusedSearchRole.Primary,
-                FullConfidence))
+        var rankedGraphMatches = await SearchRankedAsync(
+                query,
+                new KnowledgeGraphRankedSearchOptions
+                {
+                    Mode = KnowledgeGraphSearchMode.Graph,
+                    MaxResults = Math.Max(1, options.MaxPrimaryResults),
+                },
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        return rankedGraphMatches
+            .Where(match => nodesById.ContainsKey(match.NodeId))
+            .Select(CreatePrimaryMatch)
             .Take(Math.Max(1, options.MaxPrimaryResults))
             .ToArray();
+    }
+
+    private static KnowledgeGraphFocusedSearchMatch CreatePrimaryMatch(
+        KnowledgeGraphRankedSearchMatch match)
+    {
+        return new KnowledgeGraphFocusedSearchMatch(
+            match.NodeId,
+            match.Label,
+            KnowledgeGraphFocusedSearchRole.Primary,
+            match.Score);
     }
 
     private static KnowledgeGraphFocusedSearchMatch CreatePrimaryMatch(

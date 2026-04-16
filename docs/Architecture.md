@@ -10,7 +10,7 @@ The upstream reference repository is kept as a read-only submodule at `external/
 
 The core runtime has no localhost, HTTP server, background service, database server, or hosted API dependency. Callers pass files, directories, or in-memory document content into the library, and the library returns in-memory graph/search/query results.
 
-The graph/search model does not require semantic embeddings. The AI boundary in the core pipeline is `Microsoft.Extensions.AI.IChatClient` for entity/assertion extraction. The library also exposes an explicit experimental Tiktoken mode that creates lexical sparse vectors from `Microsoft.ML.Tokenizers` token IDs and builds a local corpus graph. Its default weighting is corpus-fitted subword TF-IDF, with raw term frequency and binary presence kept as experimental baselines. Tiktoken mode also creates section/segment structure, local TF-IDF keyphrase topics, and explicit front matter entity hint nodes, but it is not a semantic embedding model. Capability graph rules add deterministic caller-authored entities and edges for groups, related nodes, and next-step nodes so applications can build workflow/capability graphs without relying on a flat document-topic graph. If semantic vector search is added later, it should be a separate optional adapter over `Microsoft.Extensions.AI.IEmbeddingGenerator<,>` or an equivalent small port, with the concrete provider owned by the host app.
+The graph/search model does not require semantic embeddings. The AI boundary in the core pipeline is `Microsoft.Extensions.AI.IChatClient` for entity/assertion extraction. The library also exposes an explicit experimental Tiktoken mode that creates lexical sparse vectors from `Microsoft.ML.Tokenizers` token IDs and builds a local corpus graph. Its default weighting is corpus-fitted subword TF-IDF, with raw term frequency and binary presence kept as experimental baselines. Tiktoken mode also creates section/segment structure, local TF-IDF keyphrase topics, and explicit front matter entity hint nodes, but it is not a semantic embedding model. Capability graph rules add deterministic caller-authored entities and edges for groups, related nodes, and next-step nodes so applications can build workflow/capability graphs without relying on a flat document-topic graph. Cross-language retrieval can now use an optional semantic ranked-search adapter over `Microsoft.Extensions.AI.IEmbeddingGenerator<,>` that builds an in-memory semantic index from graph-native labels, descriptions, and related labels. The graph remains canonical; semantic hits are fallback or merge inputs rather than the source of truth.
 
 ## System Boundaries
 
@@ -31,10 +31,12 @@ flowchart LR
     Builder --> Graph["In-memory knowledge graph"]
     Graph --> Sparql["In-memory SPARQL executor API"]
     Graph --> Search["In-memory graph search API"]
+    Graph --> Ranked["Graph / semantic / hybrid ranked search API"]
     Graph --> Focused["Focused graph search API"]
     Graph --> Shacl["SHACL validation API"]
     Graph --> Serializers["Turtle and JSON-LD serializers"]
     Graph --> Merge["Thread-safe graph merge API"]
+    Embedder["Optional IEmbeddingGenerator semantic index"] --> Ranked
     IChatClient["Microsoft.Extensions.AI IChatClient"] --> ChatExtractor
     Tokenizer["Microsoft.ML.Tokenizers Tiktoken"] --> TokenExtractor
     AgentFramework["Future Microsoft Agent Framework orchestration"] -. "wraps IChatClient" .-> IChatClient
@@ -53,6 +55,7 @@ sequenceDiagram
     participant Graph as KnowledgeGraphBuilder
     participant BuiltGraph as KnowledgeGraph
     participant Query as InMemorySparqlExecutor
+    participant Embedder as Optional IEmbeddingGenerator
 
     Caller->>Pipeline: BuildAsync(documents, options)
     Pipeline->>Parser: Parse Markdown and front matter
@@ -72,6 +75,10 @@ sequenceDiagram
     Pipeline->>Graph: Add facts as RDF triples
     Graph-->>Pipeline: In-memory KnowledgeGraph
     Pipeline-->>Caller: MarkdownKnowledgeBuildResult
+    Caller->>BuiltGraph: BuildSemanticIndexAsync(embedder)
+    BuiltGraph->>Embedder: Generate graph-node embeddings
+    Embedder-->>BuiltGraph: Semantic index
+    Caller->>BuiltGraph: SearchRankedAsync(query, Graph | Semantic | Hybrid)
     Caller->>BuiltGraph: ValidateShacl(optional shapes)
     BuiltGraph-->>Caller: SHACL validation report
     Caller->>Query: ExecuteSelect(graph, sparql)
@@ -90,7 +97,7 @@ flowchart TB
         Rules["Capability rules: graph_entities, graph_edges, graph_groups, graph_related, graph_next_steps"]
         Rdf["RDF: graph construction, namespaces, serialization"]
         Shacl["SHACL: default shapes, validation reports, assertion metadata"]
-        Query["Query: SPARQL and graph search"]
+        Query["Query: SPARQL, ranked search, and graph search"]
     end
 
     subgraph Tests["tests/MarkdownLd.Kb.Tests"]
@@ -148,6 +155,7 @@ flowchart LR
 - SHACL validation depends on `dotNetRdf.Shacl` and runs against the in-memory graph through `VDS.RDF.Shacl.ShapesGraph`.
 - LLM extraction depends on `Microsoft.Extensions.AI.Abstractions` and accepts `IChatClient`.
 - Tiktoken extraction depends on `Microsoft.ML.Tokenizers` and the O200k data package. It uses tokenizer IDs and Unicode word n-gram keyphrase candidates only, and does not add an embedding provider. The default vector weighting is subword TF-IDF fitted over the current build corpus.
+- Optional semantic ranked search depends only on `Microsoft.Extensions.AI.IEmbeddingGenerator<string, Embedding<float>>` and keeps the concrete embedding provider in the host application.
 - Embeddings are not required for the core graph build/query flow.
 - Public API should prefer repository types over raw dependency types when feasible.
 - AI adapters depend on the core extraction port. The core library must not depend on concrete provider packages or agent orchestration packages in the first slice.
@@ -162,6 +170,7 @@ Required first-slice scenarios:
 - Empty Markdown input produces an empty graph without throwing.
 - Explicit Tiktoken mode builds section/segment/topic/entity-hint nodes plus `schema:hasPart`, `schema:about`, `schema:mentions`, and token-distance `kb:relatedTo` edges without network access.
 - Capability graph rules build `kb:memberOf`, `kb:relatedTo`, and `kb:nextStep` workflow edges from Markdown front matter or caller options, and focused search returns primary, related, and next-step result groups.
+- Ranked search supports `Graph`, `Semantic`, and `Hybrid` modes. Hybrid mode keeps canonical graph hits first, then appends semantic-only fallback hits when graph-native recall is insufficient.
 - SHACL validation uses default Markdown-LD Knowledge Bank shapes or caller-supplied shapes, and assertion confidence/provenance metadata is represented as RDF statements so validation remains RDF-native.
 - English, Ukrainian, French, and German queries over same-language token graphs produce a higher hit rate than cross-language translated-topic queries.
 - Term frequency, binary presence, and subword TF-IDF token weighting modes are covered by focused and flow tests.
@@ -170,6 +179,7 @@ Required first-slice scenarios:
 - `IChatClient` extractor accepts structured extraction output without depending on a provider-specific SDK.
 - Default no-chat mode emits no extracted facts and reports a diagnostic telling callers to connect `IChatClient` or choose Tiktoken mode.
 - No-match search returns an empty result instead of an error.
+- Semantic-only or hybrid search without a semantic index fails explicitly.
 - Turtle and JSON-LD serialization produce parseable output where dependency support is available.
 
 Coverage requirement: 95%+ line coverage for changed production code.
@@ -192,4 +202,5 @@ Coverage requirement: 95%+ line coverage for changed production code.
 - LLM extraction dependency decision: `docs/ADR/ADR-0002-llm-extraction-ichatclient.md`
 - Capability graph rules decision: `docs/ADR/ADR-0004-capability-graph-rules.md`
 - Capability graph rules feature: `docs/Features/CapabilityGraphRules.md`
+- Hybrid ranked search feature: `docs/Features/HybridGraphSearch.md`
 - SHACL validation feature: `docs/Features/GraphShaclValidation.md`

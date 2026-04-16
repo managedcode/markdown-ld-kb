@@ -14,6 +14,8 @@ internal static class PipelineConstants
     internal const string NoExtractorDiagnostic = "No fact extractor was selected. Connect an IChatClient or set ExtractionMode to Tiktoken.";
     internal const string MissingChatClientMessage = "ChatClient extraction mode requires an IChatClient.";
     internal const string TokenDistanceSearchUnavailableMessage = "Token distance search requires a graph built with Tiktoken extraction mode.";
+    internal const string SemanticSearchRequiresIndexMessage = "Semantic search requires a semantic index built from an embedding generator.";
+    internal const string SemanticSearchEmbeddingCountMismatchMessage = "Embedding generation returned an unexpected result count.";
     internal const string GraphRuleDiagnosticPrefix = "Graph rule skipped: ";
     internal const string GraphRuleConfiguredEntityRule = "options.Entities";
     internal const string GraphRuleConfiguredEdgeRule = "options.Edges";
@@ -25,6 +27,8 @@ internal static class PipelineConstants
     internal const string GraphRuleObjectRequiredMessage = "requires an object.";
     internal const string GraphRuleNodeRequiredMessage = "requires a node label or id.";
     internal const int DefaultMaxRelatedTokenSegments = 3;
+    internal const int DefaultRankedSearchMaxResults = 10;
+    internal const int DefaultSemanticSearchMaxResults = 10;
     internal const int DefaultMinimumTokenCount = 1;
     internal const int DefaultMaxTopicLabelsPerSegment = 8;
     internal const int DefaultMaxTopicPhraseWords = 3;
@@ -36,6 +40,10 @@ internal static class PipelineConstants
     internal const double IdfWeightOffset = 1;
     internal const double ZeroConfidence = 0;
     internal const double FullConfidence = 1;
+    internal const double DefaultMinimumSemanticScore = 0.4;
+    internal const double CanonicalLabelContainsScore = 0.95;
+    internal const double CanonicalDescriptionContainsScore = 0.75;
+    internal const double CanonicalRelatedLabelContainsScore = 0.65;
     internal const string DefaultItem = "item";
     internal const string DefaultDocument = "document";
     internal const string EntityIdPrefix = "id/";
@@ -196,6 +204,7 @@ LIMIT 100
     internal const string ExpectedSchemaSameAs = "schema:sameAs";
     internal const string ExpectedSchemaCreator = "schema:creator";
     internal const string ExpectedSchemaHasPart = "schema:hasPart";
+    internal static readonly string[] SearchContextPredicateIds = [SchemaMentionsText, SchemaAboutText];
     internal const string ArrowSeparator = "--";
     internal const string ArrowTail = "-->";
     internal const string NonAlphaNumericPattern = @"[^a-z0-9\s-]";

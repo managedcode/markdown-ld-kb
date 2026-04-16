@@ -46,6 +46,8 @@ public sealed record KnowledgeGraphFocusedSearchOptions
     public int MaxRelatedResults { get; init; } = 6;
 
     public int MaxNextStepResults { get; init; } = 6;
+
+    public KnowledgeGraphSemanticIndex? SemanticIndex { get; init; }
 }
 
 public sealed record KnowledgeGraphFocusedSearchResult(

@@ -39,7 +39,8 @@ Rule values can be strings or maps. Strings become node labels. Maps can use `id
 `SearchFocusedAsync` returns:
 
 - primary matches from token-distance search when the graph was built in Tiktoken mode
-- primary matches from graph metadata search when no token index is present
+- primary matches from hybrid ranked search when a semantic index is supplied
+- primary matches from graph metadata search when no token index or semantic index is present
 - related matches from direct `kb:relatedTo` edges and shared `kb:memberOf` groups
 - next-step matches from direct `kb:nextStep` edges
 - a bounded focused graph snapshot containing selected matches plus explanatory group nodes
