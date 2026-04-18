@@ -30,7 +30,9 @@ internal sealed class TiktokenKnowledgeGraphExtractor
         var segments = candidates.Select(candidate => CreateSegment(candidate, vectorSpace)).ToArray();
         var topics = _topicExtractor.Extract(candidates);
         var entityHints = _entityHintExtractor.Extract(documents);
-        var relations = BuildRelations(segments).ToArray();
+        var relations = _options.BuildAutoRelatedSegmentRelations
+            ? BuildRelations(segments).ToArray()
+            : [];
         var facts = TokenizedKnowledgeFactFactory.Build(sections, segments, topics, entityHints, relations);
         return new TokenizedKnowledgeExtractionResult(facts, segments, vectorSpace);
     }

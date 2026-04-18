@@ -8,6 +8,8 @@ public sealed record TiktokenKnowledgeGraphOptions
 
     public TokenVectorWeighting Weighting { get; init; } = DefaultTokenVectorWeighting;
 
+    public bool BuildAutoRelatedSegmentRelations { get; init; } = true;
+
     public int MaxRelatedSegments { get; init; } = DefaultMaxRelatedTokenSegments;
 
     public int MinimumTokenCount { get; init; } = DefaultMinimumTokenCount;

@@ -224,13 +224,32 @@ The school kitchen tracks allergy meals separately from the regular lunch menu.
         ukrainianToEnglishHits.ShouldBeLessThanOrEqualTo(ExpectedCrossLanguageMaximumHits);
     }
 
-    private static Task<MarkdownKnowledgeBuildResult> BuildTokenGraphAsync(string path, string markdown)
+    [Test]
+    public async Task Tiktoken_mode_can_disable_auto_related_segment_relations_and_keep_token_distance_search()
+    {
+        var result = await BuildTokenGraphAsync(
+            EnglishPath,
+            EnglishMarkdown,
+            buildAutoRelatedSegmentRelations: false);
+
+        result.ExtractionMode.ShouldBe(MarkdownKnowledgeExtractionMode.Tiktoken);
+        result.Graph.CanSearchByTokenDistance.ShouldBeTrue();
+
+        var hits = await CountTopHitsAsync(result.Graph, EnglishQueries);
+        hits.ShouldBeGreaterThanOrEqualTo(ExpectedSameLanguageMinimumHits);
+    }
+
+    private static Task<MarkdownKnowledgeBuildResult> BuildTokenGraphAsync(
+        string path,
+        string markdown,
+        bool buildAutoRelatedSegmentRelations = true)
     {
         var pipeline = new MarkdownKnowledgePipeline(
             BaseUri,
             extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken,
             tiktokenOptions: new TiktokenKnowledgeGraphOptions
             {
+                BuildAutoRelatedSegmentRelations = buildAutoRelatedSegmentRelations,
                 MaxRelatedSegments = 2,
             });
 
