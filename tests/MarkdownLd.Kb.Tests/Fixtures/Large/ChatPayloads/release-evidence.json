@@ -1,0 +1,32 @@
+{
+  "entities": [
+    {
+      "id": "https://large-fixture.example/id/release-evidence-checklist",
+      "type": "schema:CreativeWork",
+      "label": "Release Evidence Checklist",
+      "sameAs": ["https://example.com/components/release-evidence-checklist"]
+    },
+    {
+      "id": "https://large-fixture.example/id/coverage-dashboard-snapshot",
+      "type": "schema:CreativeWork",
+      "label": "Coverage Dashboard Snapshot",
+      "sameAs": ["https://example.com/components/coverage-dashboard-snapshot"]
+    }
+  ],
+  "assertions": [
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/release-evidence-checklist",
+      "confidence": 0.97,
+      "source": "__SOURCE__"
+    },
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/coverage-dashboard-snapshot",
+      "confidence": 0.94,
+      "source": "__SOURCE__"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "entities": [
+    {
+      "id": "https://large-fixture.example/id/cross-language-recall-map",
+      "type": "schema:CreativeWork",
+      "label": "Cross-Language Recall Map",
+      "sameAs": ["https://example.com/components/cross-language-recall-map"]
+    },
+    {
+      "id": "https://large-fixture.example/id/caller-wording-log",
+      "type": "schema:CreativeWork",
+      "label": "Caller Wording Log",
+      "sameAs": []
+    }
+  ],
+  "assertions": [
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/cross-language-recall-map",
+      "confidence": 0.97,
+      "source": "__SOURCE__"
+    },
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/caller-wording-log",
+      "confidence": 0.94,
+      "source": "__SOURCE__"
+    }
+  ]
+}

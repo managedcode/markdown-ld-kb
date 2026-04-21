@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
@@ -5,6 +7,9 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class FileKnowledgeExtractionCache : IKnowledgeExtractionCache
 {
+    private const string TemporaryFileSuffix = ".tmp-";
+    private const int CacheKeyHashLength = 24;
+
     private readonly string _directoryPath;
     private readonly JsonSerializerOptions _serializerOptions;
 
@@ -34,10 +39,18 @@ public sealed class FileKnowledgeExtractionCache : IKnowledgeExtractionCache
         }
 
         await using var stream = File.OpenRead(path);
-        var entry = await JsonSerializer.DeserializeAsync<KnowledgeExtractionCacheEntry>(
-            stream,
-            _serializerOptions,
-            cancellationToken).ConfigureAwait(false) ?? throw new InvalidDataException(CacheEntryMissingMessage);
+        KnowledgeExtractionCacheEntry entry;
+        try
+        {
+            entry = await JsonSerializer.DeserializeAsync<KnowledgeExtractionCacheEntry>(
+                stream,
+                _serializerOptions,
+                cancellationToken).ConfigureAwait(false) ?? throw new InvalidDataException(CacheEntryMissingMessage);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException(CacheEntryMissingMessage, exception);
+        }
 
         return entry.Key.Matches(key) ? entry : null;
     }
@@ -51,8 +64,25 @@ public sealed class FileKnowledgeExtractionCache : IKnowledgeExtractionCache
         Directory.CreateDirectory(_directoryPath);
 
         var path = GetCacheFilePath(entry.Key);
-        await using var stream = File.Create(path);
-        await JsonSerializer.SerializeAsync(stream, entry, _serializerOptions, cancellationToken).ConfigureAwait(false);
+        var temporaryPath = path + TemporaryFileSuffix + Guid.NewGuid().ToString("N");
+
+        try
+        {
+            await using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                await JsonSerializer.SerializeAsync(stream, entry, _serializerOptions, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
     }
 
     private string GetCacheFilePath(KnowledgeExtractionCacheKey key)
@@ -61,6 +91,7 @@ public sealed class FileKnowledgeExtractionCache : IKnowledgeExtractionCache
         var chunker = KnowledgeNaming.Slugify(key.ChunkerProfileId);
         var prompt = KnowledgeNaming.Slugify(key.PromptVersion);
         var model = KnowledgeNaming.Slugify(key.ModelId);
+        var keyHash = CreateCacheKeyHash(key);
         var fileName = string.Concat(
             slug,
             DotSeparator,
@@ -71,8 +102,20 @@ public sealed class FileKnowledgeExtractionCache : IKnowledgeExtractionCache
             prompt,
             DotSeparator,
             model,
+            DotSeparator,
+            keyHash,
             CacheFileExtension);
 
         return Path.Combine(_directoryPath, fileName);
+    }
+
+    private string CreateCacheKeyHash(KnowledgeExtractionCacheKey key)
+    {
+        var keyJson = JsonSerializer.Serialize(key, _serializerOptions);
+        var keyBytes = Encoding.UTF8.GetBytes(keyJson);
+        var hashBytes = SHA256.HashData(keyBytes);
+        var hash = Convert.ToHexString(hashBytes);
+
+        return hash[..CacheKeyHashLength];
     }
 }

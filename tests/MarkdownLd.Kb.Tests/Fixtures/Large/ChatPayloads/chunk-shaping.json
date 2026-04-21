@@ -1,0 +1,32 @@
+{
+  "entities": [
+    {
+      "id": "https://large-fixture.example/id/whole-section-chunker",
+      "type": "schema:SoftwareApplication",
+      "label": "Whole Section Chunker",
+      "sameAs": ["https://example.com/components/whole-section-chunker"]
+    },
+    {
+      "id": "https://large-fixture.example/id/chunk-boundary-ledger",
+      "type": "schema:CreativeWork",
+      "label": "Chunk Boundary Ledger",
+      "sameAs": []
+    }
+  ],
+  "assertions": [
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/whole-section-chunker",
+      "confidence": 0.97,
+      "source": "__SOURCE__"
+    },
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/chunk-boundary-ledger",
+      "confidence": 0.94,
+      "source": "__SOURCE__"
+    }
+  ]
+}

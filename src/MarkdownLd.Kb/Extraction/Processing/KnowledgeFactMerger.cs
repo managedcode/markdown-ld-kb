@@ -4,6 +4,19 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 {
+    private static readonly IReadOnlyDictionary<string, int> TypePriorities = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+    {
+        [SchemaPersonTypeText] = 5,
+        [SchemaOrganizationTypeText] = 5,
+        [SchemaSoftwareApplicationTypeText] = 5,
+        [SchemaTechArticleTypeText] = 4,
+        [SchemaScholarlyArticleTypeText] = 4,
+        [SchemaBlogPostingTypeText] = 4,
+        [SchemaCreativeWorkTypeText] = 4,
+        [SchemaArticleTypeText] = 4,
+        [SchemaThingTypeText] = 1,
+    };
+
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
 
     public KnowledgeExtractionResult Merge(params KnowledgeExtractionResult[] results)
@@ -206,18 +219,6 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 
     private static int TypePriority(string type)
     {
-        return type switch
-        {
-            SchemaPersonTypeText => 5,
-            SchemaOrganizationTypeText => 5,
-            SchemaSoftwareApplicationTypeText => 5,
-            SchemaTechArticleTypeText => 4,
-            SchemaScholarlyArticleTypeText => 4,
-            SchemaBlogPostingTypeText => 4,
-            SchemaCreativeWorkTypeText => 4,
-            SchemaArticleTypeText => 4,
-            SchemaThingTypeText => 1,
-            _ => 0,
-        };
+        return TypePriorities.TryGetValue(type, out var priority) ? priority : 0;
     }
 }

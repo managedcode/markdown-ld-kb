@@ -133,6 +133,18 @@ public sealed class ChatClientNaturalLanguageSparqlTranslator : INaturalLanguage
             throw new InvalidOperationException(EmptyTranslationMessage);
         }
 
+        var fenced = ExtractFencedQuery(trimmed, SparqlFence, StringComparison.OrdinalIgnoreCase);
+        if (fenced is not null)
+        {
+            return fenced;
+        }
+
+        fenced = ExtractFencedQuery(trimmed, CodeFence, StringComparison.Ordinal);
+        if (fenced is not null)
+        {
+            return fenced;
+        }
+
         if (trimmed.StartsWith(SparqlFence, StringComparison.OrdinalIgnoreCase))
         {
             trimmed = trimmed[SparqlFence.Length..].Trim();
@@ -142,12 +154,25 @@ public sealed class ChatClientNaturalLanguageSparqlTranslator : INaturalLanguage
             trimmed = trimmed[CodeFence.Length..].Trim();
         }
 
-        if (trimmed.EndsWith(CodeFence, StringComparison.Ordinal))
+        return trimmed.EndsWith(CodeFence, StringComparison.Ordinal)
+            ? trimmed[..^CodeFence.Length].Trim()
+            : trimmed;
+    }
+
+    private static string? ExtractFencedQuery(string text, string openingFence, StringComparison comparison)
+    {
+        var start = text.IndexOf(openingFence, comparison);
+        if (start < 0)
         {
-            trimmed = trimmed[..^CodeFence.Length].Trim();
+            return null;
         }
 
-        return trimmed;
+        var contentStart = start + openingFence.Length;
+        var content = text[contentStart..].Trim();
+        var end = content.IndexOf(CodeFence, StringComparison.Ordinal);
+        return end >= 0
+            ? content[..end].Trim()
+            : content;
     }
 
     private static NaturalLanguageSparqlQueryKind ResolveQueryKind(string queryText)

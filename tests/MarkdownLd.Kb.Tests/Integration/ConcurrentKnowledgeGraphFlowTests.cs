@@ -14,6 +14,9 @@ public sealed class ConcurrentKnowledgeGraphFlowTests
     private const string ConcurrentPathTemplate = "content/write/{INDEX}.md";
     private const string ConcurrentSearchTerm = "Thread Entity";
     private const string ConcurrentEntityKey = "entity";
+    private const string TokenSeedPath = "content/token/seed.md";
+    private const string TokenAddedPath = "content/token/added.md";
+    private const string TokenAddedTitle = "Merged Token Article";
     private const string ConcurrentMarkdownTemplate = """
 ---
 title: Concurrent Article {INDEX}
@@ -23,6 +26,22 @@ tags:
 # Concurrent Article {INDEX}
 
 This note links [Thread Entity {INDEX}](https://example.com/concurrent/{INDEX}).
+""";
+    private const string TokenSeedMarkdown = """
+---
+title: Seed Token Article
+---
+# Seed Token Article
+
+Seed token content for the initial graph.
+""";
+    private const string TokenAddedMarkdown = """
+---
+title: Merged Token Article
+---
+# Merged Token Article
+
+Fresh token content that will be merged into the shared graph.
 """;
     private const string ConcurrentEntityAskQueryTemplate = """
 PREFIX schema: <https://schema.org/>
@@ -68,6 +87,28 @@ ORDER BY ?entity
         var finalRows = await shared.Graph.ExecuteSelectAsync(ConcurrentEntitySelectQuery);
         finalRows.Rows.Count.ShouldBe(ConcurrentWorkerCount);
         finalRows.Rows.Select(row => row.Values[ConcurrentEntityKey]).Distinct(StringComparer.OrdinalIgnoreCase).Count().ShouldBe(ConcurrentWorkerCount);
+    }
+
+    [Test]
+    public async Task MergeAsync_invalidates_token_distance_index_after_graph_contents_change()
+    {
+        var pipeline = new MarkdownKnowledgePipeline(
+            ConcurrentBaseUri,
+            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
+        var shared = await pipeline.BuildFromMarkdownAsync(TokenSeedMarkdown, TokenSeedPath);
+        var added = await pipeline.BuildFromMarkdownAsync(TokenAddedMarkdown, TokenAddedPath);
+
+        shared.Graph.CanSearchByTokenDistance.ShouldBeTrue();
+        added.Graph.CanSearchByTokenDistance.ShouldBeTrue();
+
+        await shared.Graph.MergeAsync(added.Graph);
+
+        shared.Graph.CanSearchByTokenDistance.ShouldBeFalse();
+        await Should.ThrowAsync<InvalidOperationException>(async () =>
+            await shared.Graph.SearchByTokenDistanceAsync(TokenAddedTitle));
+
+        var mergedSearch = await shared.Graph.SearchAsync(TokenAddedTitle);
+        mergedSearch.Rows.ShouldNotBeEmpty();
     }
 
     private static async Task RunConcurrentWorkerAsync(

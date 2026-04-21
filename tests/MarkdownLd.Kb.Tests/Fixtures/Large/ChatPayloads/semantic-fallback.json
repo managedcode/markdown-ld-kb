@@ -1,0 +1,32 @@
+{
+  "entities": [
+    {
+      "id": "https://large-fixture.example/id/hybrid-semantic-fallback",
+      "type": "schema:Thing",
+      "label": "Hybrid Semantic Fallback",
+      "sameAs": ["https://example.com/components/hybrid-semantic-fallback"]
+    },
+    {
+      "id": "https://large-fixture.example/id/embedding-calibration-notes",
+      "type": "schema:CreativeWork",
+      "label": "Embedding Calibration Notes",
+      "sameAs": ["https://example.com/components/embedding-calibration-notes"]
+    }
+  ],
+  "assertions": [
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/hybrid-semantic-fallback",
+      "confidence": 0.96,
+      "source": "__SOURCE__"
+    },
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/embedding-calibration-notes",
+      "confidence": 0.93,
+      "source": "__SOURCE__"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "entities": [
+    {
+      "id": "https://large-fixture.example/id/read-only-query-guard",
+      "type": "schema:SoftwareApplication",
+      "label": "Read Only Query Guard",
+      "sameAs": ["https://example.com/components/read-only-query-guard"]
+    },
+    {
+      "id": "https://large-fixture.example/id/federated-endpoint-allowlist",
+      "type": "schema:CreativeWork",
+      "label": "Federated Endpoint Allowlist",
+      "sameAs": ["https://example.com/components/federated-endpoint-allowlist"]
+    }
+  ],
+  "assertions": [
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/read-only-query-guard",
+      "confidence": 0.98,
+      "source": "__SOURCE__"
+    },
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/federated-endpoint-allowlist",
+      "confidence": 0.95,
+      "source": "__SOURCE__"
+    }
+  ]
+}

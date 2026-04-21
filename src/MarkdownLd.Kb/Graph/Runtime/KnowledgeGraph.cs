@@ -13,7 +13,7 @@ public sealed partial class KnowledgeGraph
 {
     private readonly Graph _graph;
     private readonly ReaderWriterLockSlim _graphLock = new();
-    private readonly TokenizedKnowledgeIndex? _tokenIndex;
+    private TokenizedKnowledgeIndex? _tokenIndex;
 
     internal KnowledgeGraph(Graph graph, TokenizedKnowledgeIndex? tokenIndex = null)
     {
@@ -190,6 +190,7 @@ public sealed partial class KnowledgeGraph
         {
             cancellationToken.ThrowIfCancellationRequested();
             _graph.Merge(graph);
+            _tokenIndex = null;
         }
         finally
         {

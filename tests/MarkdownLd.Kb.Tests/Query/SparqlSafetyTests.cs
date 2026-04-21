@@ -19,9 +19,32 @@ public sealed class SparqlSafetyTests
     private const string OnlySelectAndAskMessage = "Only SELECT and ASK";
     private const string DefaultLimit = "LIMIT 100";
     private const string ExistingLimit = "LIMIT 25";
+    private const string InvalidQueryWithStringLiteralContainsMutatingKeyword = """SELEC ?label WHERE { VALUES ?label { "DELETE" } }""";
+    private const string InvalidQueryWithCommentContainsMutatingKeyword = """
+        SELEC ?s WHERE {
+          ?s ?p ?o
+        }
+        # DELETE should stay inside the comment
+        """;
+    private const string InvalidQueryWithIriContainsMutatingKeyword = """
+        SELEC ?type WHERE {
+          <https://example.com/actions/delete-action> a ?type .
+        }
+        """;
     private const string StringLiteralContainsMutatingKeywordQuery = """
         SELECT ?label WHERE {
           VALUES ?label { "DELETE" }
+        }
+        """;
+    private const string IriContainsMutatingKeywordQuery = """
+        SELECT ?type WHERE {
+          <https://example.com/actions/delete-action> a ?type .
+        }
+        """;
+    private const string CommentContainsMutatingKeywordQuery = """
+        # DELETE should not make a read-only query fail
+        SELECT ?s WHERE {
+          ?s ?p ?o
         }
         """;
     [Test]
@@ -89,9 +112,40 @@ public sealed class SparqlSafetyTests
     }
 
     [Test]
+    [Arguments(InvalidQueryWithStringLiteralContainsMutatingKeyword)]
+    [Arguments(InvalidQueryWithCommentContainsMutatingKeyword)]
+    [Arguments(InvalidQueryWithIriContainsMutatingKeyword)]
+    public void ReportsSyntaxErrorsWithoutTreatingMaskedKeywordsAsMutation(string query)
+    {
+        var result = SparqlSafety.EnforceReadOnly(query);
+
+        result.IsAllowed.ShouldBeFalse();
+        result.ErrorMessage.ShouldNotBeNull();
+        result.ErrorMessage.ShouldNotContain(OnlySelectAndAskMessage);
+    }
+
+    [Test]
     public void AllowsStringLiteralsContainingMutatingKeywords()
     {
         var result = SparqlSafety.EnforceReadOnly(StringLiteralContainsMutatingKeywordQuery);
+
+        result.IsAllowed.ShouldBeTrue();
+        result.Query.ShouldContain(DefaultLimit);
+    }
+
+    [Test]
+    public void AllowsIrisContainingMutatingKeywords()
+    {
+        var result = SparqlSafety.EnforceReadOnly(IriContainsMutatingKeywordQuery);
+
+        result.IsAllowed.ShouldBeTrue();
+        result.Query.ShouldContain(DefaultLimit);
+    }
+
+    [Test]
+    public void AllowsCommentsContainingMutatingKeywords()
+    {
+        var result = SparqlSafety.EnforceReadOnly(CommentContainsMutatingKeywordQuery);
 
         result.IsAllowed.ShouldBeTrue();
         result.Query.ShouldContain(DefaultLimit);

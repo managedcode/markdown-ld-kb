@@ -14,13 +14,23 @@ public sealed class NaturalLanguageSparqlTranslatorTests
     private const string Question = "What is the article title?";
     private const string MutatingQuestion = "Delete everything.";
     private const string SelectQuery = """
-```sparql
-PREFIX schema: <https://schema.org/>
-SELECT ?title WHERE {
-  <https://nl.example/nl-query/> schema:name ?title .
-}
-```
-""";
+    ```sparql
+    PREFIX schema: <https://schema.org/>
+    SELECT ?title WHERE {
+      <https://nl.example/nl-query/> schema:name ?title .
+    }
+    ```
+    """;
+    private const string SelectQueryWithLeadingText = """
+    Here is the safest query:
+
+    ```sparql
+    PREFIX schema: <https://schema.org/>
+    SELECT ?title WHERE {
+      <https://nl.example/nl-query/> schema:name ?title .
+    }
+    ```
+    """;
     private const string MutatingQuery = "DELETE WHERE { ?s ?p ?o }";
 
     private const string Markdown = """
@@ -60,5 +70,21 @@ Plain content.
 
         await Should.ThrowAsync<ReadOnlySparqlQueryException>(async () =>
             await translator.TranslateAsync(graph, MutatingQuestion));
+    }
+
+    [Test]
+    public async Task Translator_extracts_fenced_query_when_model_prepends_explanatory_text()
+    {
+        var pipeline = new MarkdownKnowledgePipeline(new Uri(BaseUriText));
+        var graph = (await pipeline.BuildAsync([
+            new MarkdownSourceDocument(DocumentPath, Markdown),
+        ])).Graph;
+        var translator = new ChatClientNaturalLanguageSparqlTranslator(new TestChatClient((_, _) => SelectQueryWithLeadingText));
+
+        var result = await translator.ExecuteAsync(graph, Question);
+
+        result.Translation.QueryKind.ShouldBe(NaturalLanguageSparqlQueryKind.Select);
+        result.SelectResult.ShouldNotBeNull();
+        result.SelectResult.Rows.Single().Values[TitleVariable].ShouldBe(DocumentTitle);
     }
 }

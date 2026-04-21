@@ -1,0 +1,32 @@
+{
+  "entities": [
+    {
+      "id": "https://large-fixture.example/id/prompt-version-gate",
+      "type": "schema:Thing",
+      "label": "Prompt Version Gate",
+      "sameAs": ["https://example.com/components/prompt-version-gate"]
+    },
+    {
+      "id": "https://large-fixture.example/id/atomic-cache-file-move",
+      "type": "schema:Thing",
+      "label": "Atomic Cache File Move",
+      "sameAs": ["https://example.com/components/atomic-cache-file-move"]
+    }
+  ],
+  "assertions": [
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/prompt-version-gate",
+      "confidence": 0.98,
+      "source": "__SOURCE__"
+    },
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/atomic-cache-file-move",
+      "confidence": 0.95,
+      "source": "__SOURCE__"
+    }
+  ]
+}

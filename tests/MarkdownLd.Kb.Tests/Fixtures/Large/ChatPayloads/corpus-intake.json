@@ -1,0 +1,32 @@
+{
+  "entities": [
+    {
+      "id": "https://large-fixture.example/id/corpus-intake-checklist",
+      "type": "schema:CreativeWork",
+      "label": "Corpus Intake Checklist",
+      "sameAs": ["https://example.com/components/corpus-intake-checklist"]
+    },
+    {
+      "id": "https://large-fixture.example/id/front-matter-manifest",
+      "type": "schema:CreativeWork",
+      "label": "Front Matter Manifest",
+      "sameAs": []
+    }
+  ],
+  "assertions": [
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/corpus-intake-checklist",
+      "confidence": 0.98,
+      "source": "__SOURCE__"
+    },
+    {
+      "s": "<ARTICLE_ID>",
+      "p": "schema:mentions",
+      "o": "https://large-fixture.example/id/front-matter-manifest",
+      "confidence": 0.95,
+      "source": "__SOURCE__"
+    }
+  ]
+}
