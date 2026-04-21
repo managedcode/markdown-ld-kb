@@ -6,7 +6,7 @@ Purpose: Flow-level verification for Markdown-LD Knowledge Bank.
 ## Entry Points
 
 - `Integration/*` for Markdown -> graph -> SPARQL/search/serialization flows
-- `Parsing/*`, `Extraction/*`, `Rdf/*`, `Query/*`, and `Ai/*` for focused contract tests
+- `Ai/*`, `Parsing/*`, `Pipeline/*`, `Query/*`, and `Rdf/*` for focused contract tests
 - `Fixtures/*` for realistic Markdown test data
 - `Support/TestChatClient.cs` for the only allowed non-network `IChatClient` test implementation
 

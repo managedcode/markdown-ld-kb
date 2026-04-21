@@ -74,6 +74,27 @@ For local repository development:
 dotnet add reference ./src/MarkdownLd.Kb/MarkdownLd.Kb.csproj
 ```
 
+## Project Structure
+
+The production source tree now follows feature-oriented slices instead of a mostly flat technical grouping:
+
+- `src/MarkdownLd.Kb/Documents`
+  `Models`, `Parsing`, and `Chunking`
+- `src/MarkdownLd.Kb/Extraction`
+  `Chat`, `Cache`, and `Processing`
+- `src/MarkdownLd.Kb/Pipeline`
+  orchestration-only files such as `MarkdownKnowledgePipeline`
+- `src/MarkdownLd.Kb/Graph`
+  `Build` and `Runtime`
+- `src/MarkdownLd.Kb/Tokenization`
+  local Tiktoken graph extraction
+- `src/MarkdownLd.Kb/Query`
+  `Search`, `Sparql`, and `NaturalLanguage`
+- `src/MarkdownLd.Kb/Rdf`
+  low-level RDF helpers and serialization
+
+This layout mirrors [docs/Architecture.md](docs/Architecture.md) and keeps orchestration separate from parsing, extraction, graph runtime, and query capabilities.
+
 ## Minimal Example
 
 ```csharp
@@ -209,6 +230,8 @@ Entities with the same `schema:sameAs` target are merged before assertions are e
 
 AI extraction builds graph facts from entities and assertions returned by an injected `Microsoft.Extensions.AI.IChatClient`. The package stays provider-neutral: it does not reference OpenAI, Azure OpenAI, Anthropic, or any other model-specific SDK. If no chat client is provided, `Auto` mode extracts no facts and reports a diagnostic; choose `Tiktoken` mode explicitly for local token-distance extraction.
 
+Chat extraction is chunk-based. The pipeline parses Markdown into deterministic chunks, sends each chunk through the structured extractor in order, and merges the resulting facts into one canonical graph. Optional cache reuse can be enabled through `MarkdownKnowledgePipelineOptions.ExtractionCache`.
+
 ```csharp
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 using Microsoft.Extensions.AI;
@@ -250,7 +273,7 @@ ASK WHERE {
 }
 ```
 
-The built-in chat extractor requests structured output through `GetResponseAsync<T>()`, normalizes the returned entity/assertion payload, and then builds the same in-memory RDF graph used by search and SPARQL. Tests use one local non-network `IChatClient` implementation so the full extraction-to-graph flow is covered without a live model.
+The built-in chat extractor requests structured output through `GetResponseAsync<T>()`, normalizes the returned entity/assertion payload, and then builds the same in-memory RDF graph used by search and SPARQL. Tests use one local non-network `IChatClient` implementation so the full extraction-to-graph flow is covered without a live model. When cache reuse is enabled, the cache key includes document identity, chunk fingerprints, chunker profile, prompt version, and model identity so stale reuse stays explicit and controllable.
 
 ## Local Tiktoken Extraction
 
@@ -495,8 +518,38 @@ Recognized front matter keys:
 | `author` | `schema:author` | string or list |
 | `tags` / `keywords` | `schema:keywords` | list |
 | `about` | `schema:about` | list |
+| `entryType` / `entry_type` | compatibility metadata plus optional additional `schema.org` article subtype typing | string or list |
+| `sourceProject` / `source_project` | `kb:sourceProject` | string or list |
 | `canonicalUrl` / `canonical_url` | low-level Markdown parser document identity; use `KnowledgeDocumentConversionOptions.CanonicalUri` for pipeline identity | string (URL) |
 | `entity_hints` / `entityHints` | explicit graph entities in `Tiktoken` mode; parsed as front matter metadata otherwise | list of `{label, type, sameAs}` |
+
+Generic RDF front matter mapping is also supported for richer document metadata beyond article-only defaults:
+
+| Key | Purpose | Type |
+|---|---|---|
+| `rdf_prefixes` / `rdfPrefixes` | additional vocabulary prefixes | object |
+| `rdf_types` / `rdfTypes` | additional RDF types for the document node | string or list |
+| `rdf_properties` / `rdfProperties` | arbitrary predicate/value mappings for the document node | object |
+
+Example:
+
+```yaml
+rdf_prefixes:
+  dcterms: http://purl.org/dc/terms/
+  skos: http://www.w3.org/2004/02/skos/core#
+rdf_types:
+  - schema:HowTo
+  - skos:ConceptScheme
+rdf_properties:
+  schema:isPartOf:
+    id: https://example.com/projects/ai-memex
+  dcterms:issued:
+    value: 2026-04-21
+    datatype: xsd:date
+  skos:prefLabel: Flexible Graph Spec
+```
+
+Scalar values become literals by default. Object values may use `id` to emit a URI node or `value` plus optional `datatype` to emit a typed literal. Unknown prefixes fail explicitly instead of being silently guessed.
 
 Predicate normalization for explicit chat/token facts:
 
@@ -518,6 +571,7 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 - `dotNetRDF` builds the RDF graph, runs local SPARQL, and serializes Turtle/JSON-LD.
 - `dotNetRdf.Shacl` validates built graphs with default or caller-supplied SHACL shapes.
 - `Microsoft.Extensions.AI.IChatClient` is the only AI boundary in the core pipeline.
+- The production source tree is organized by feature slices: Documents, Extraction, Pipeline, Graph, Tokenization, Query, and Rdf.
 - `Microsoft.ML.Tokenizers` powers the explicit Tiktoken token-distance mode.
 - Subword TF-IDF is the default local token weighting because it downweights corpus-common tokens without adding language-specific preprocessing or model runtime dependencies.
 - Local topic graph construction uses Unicode word n-gram keyphrases and RDF `schema:DefinedTerm`, `schema:hasPart`, and `schema:about` edges.
@@ -552,8 +606,8 @@ Coverage is collected through `Microsoft.Testing.Extensions.CodeCoverage`. Cober
 
 Current verification:
 
-- tests: 87 passed, 0 failed
-- line coverage: 96.76%
-- branch coverage: 87.12%
+- tests: 109 passed, 0 failed
+- line coverage: 95.97%
+- branch coverage: 84.01%
 - target framework: .NET 10
 - package version: 0.0.1

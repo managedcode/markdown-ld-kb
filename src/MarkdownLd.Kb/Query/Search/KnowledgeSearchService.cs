@@ -37,7 +37,7 @@ SELECT DISTINCT ?entity ?label ?type ?sameAs WHERE {
   ?entity a ?type ;
           schema:name ?label .
   OPTIONAL { ?entity schema:sameAs ?sameAs }
-  FILTER(?type != schema:Article)
+  FILTER NOT EXISTS { ?entity a schema:Article }
   FILTER(CONTAINS(LCASE(STR(?label)), LCASE("{TERM}")))
 }
 LIMIT {LIMIT}

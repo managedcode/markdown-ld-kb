@@ -5,9 +5,10 @@ using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
+public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappingOptions? documentRdfMappingOptions = null)
 {
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
+    private readonly DocumentRdfFrontMatterMapper _documentRdfMapper = new(documentRdfMappingOptions);
 
     public KnowledgeGraph Build(
         IReadOnlyList<MarkdownDocument> documents,
@@ -51,6 +52,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
             return;
         }
 
+        var prefixes = _documentRdfMapper.RegisterPrefixes(graph, document.FrontMatter);
         var article = graph.CreateUriNode(document.DocumentUri);
         var schemaArticle = graph.CreateUriNode(SchemaArticleUri);
         var schemaName = graph.CreateUriNode(SchemaNameUri);
@@ -60,18 +62,59 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
         var schemaKeywords = graph.CreateUriNode(SchemaKeywordsUri);
         var schemaAbout = graph.CreateUriNode(SchemaAboutUri);
         var schemaAuthor = graph.CreateUriNode(SchemaAuthorUri);
+        var kbEntryType = graph.CreateUriNode(KbEntryTypeUri);
+        var kbSourceProject = graph.CreateUriNode(KbSourceProjectUri);
         var provWasDerivedFrom = graph.CreateUriNode(ProvWasDerivedFromUri);
+        var rdfType = graph.CreateUriNode(RdfTypeUri);
 
-        graph.Assert(new Triple(article, graph.CreateUriNode(RdfTypeUri), schemaArticle));
+        graph.Assert(new Triple(article, rdfType, schemaArticle));
         graph.Assert(new Triple(article, schemaName, graph.CreateLiteralNode(document.Title)));
         graph.Assert(new Triple(article, provWasDerivedFrom, graph.CreateUriNode(document.DocumentUri)));
 
+        AddDocumentAdditionalTypes(graph, article, rdfType, document.FrontMatter);
+        AddDocumentEntryMetadata(graph, article, kbEntryType, document.FrontMatter, EntryTypeKey, EntryTypeCamelKey);
+        AddDocumentEntryMetadata(graph, article, kbSourceProject, document.FrontMatter, SourceProjectKey, SourceProjectCamelKey);
         AddDocumentDescription(graph, article, schemaDescription, document.FrontMatter);
         AddDocumentDate(graph, article, schemaDatePublished, document.FrontMatter, DatePublishedKey, DatePublishedCamelKey);
         AddDocumentDate(graph, article, schemaDateModified, document.FrontMatter, DateModifiedKey, DateModifiedCamelKey);
         AddDocumentKeywords(graph, article, schemaKeywords, document.FrontMatter);
         AddDocumentAbout(graph, article, schemaAbout, document.FrontMatter, _baseUri);
         AddDocumentAuthors(graph, article, schemaAuthor, document.FrontMatter, _baseUri);
+        _documentRdfMapper.Apply(graph, article, document.FrontMatter, prefixes);
+    }
+
+    private static void AddDocumentAdditionalTypes(
+        Graph graph,
+        INode article,
+        INode rdfType,
+        IReadOnlyDictionary<string, object?> frontMatter)
+    {
+        foreach (var entryType in ReadStrings(frontMatter, EntryTypeKey)
+                     .Concat(ReadStrings(frontMatter, EntryTypeCamelKey))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var typeUri = ResolveArticleType(entryType);
+            if (typeUri is not null)
+            {
+                graph.Assert(new Triple(article, rdfType, graph.CreateUriNode(typeUri)));
+            }
+        }
+    }
+
+    private static void AddDocumentEntryMetadata(
+        Graph graph,
+        INode article,
+        INode predicate,
+        IReadOnlyDictionary<string, object?> frontMatter,
+        string snakeCaseKey,
+        string camelCaseKey)
+    {
+        foreach (var value in ReadStrings(frontMatter, snakeCaseKey)
+                     .Concat(ReadStrings(frontMatter, camelCaseKey))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            graph.Assert(new Triple(article, predicate, graph.CreateLiteralNode(value)));
+        }
     }
 
     private static void AddDocumentDescription(
@@ -279,6 +322,65 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null)
     private static Uri SchemaThingTypeUri()
     {
         return new Uri(SchemaNamespaceText + KnowledgeNaming.Slugify(SchemaThingTypeText));
+    }
+
+    private static Uri? ResolveArticleType(string entryType)
+    {
+        if (string.IsNullOrWhiteSpace(entryType))
+        {
+            return null;
+        }
+
+        var trimmed = entryType.Trim();
+        if (string.Equals(trimmed, SchemaTechArticleTypeText, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, SchemaTechArticleText, StringComparison.OrdinalIgnoreCase))
+        {
+            return SchemaTechArticleUri;
+        }
+
+        if (string.Equals(trimmed, SchemaScholarlyArticleTypeText, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, SchemaScholarlyArticleText, StringComparison.OrdinalIgnoreCase))
+        {
+            return SchemaScholarlyArticleUri;
+        }
+
+        if (string.Equals(trimmed, SchemaBlogPostingTypeText, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, SchemaBlogPostingText, StringComparison.OrdinalIgnoreCase))
+        {
+            return SchemaBlogPostingUri;
+        }
+
+        var normalized = NormalizeArticleTypeToken(trimmed);
+        if (normalized == KnowledgeNaming.Slugify(SchemaTechArticleUri.Segments[^1]))
+        {
+            return SchemaTechArticleUri;
+        }
+
+        if (normalized == KnowledgeNaming.Slugify(SchemaScholarlyArticleUri.Segments[^1]))
+        {
+            return SchemaScholarlyArticleUri;
+        }
+
+        return normalized == KnowledgeNaming.Slugify(SchemaBlogPostingUri.Segments[^1])
+            ? SchemaBlogPostingUri
+            : null;
+    }
+
+    private static string NormalizeArticleTypeToken(string entryType)
+    {
+        var normalized = entryType.Trim();
+        if (normalized.StartsWith(SchemaPrefix + Colon, StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized[(SchemaPrefix.Length + Colon.Length)..];
+        }
+
+        if (Uri.TryCreate(normalized, UriKind.Absolute, out var absolute) &&
+            absolute.AbsoluteUri.StartsWith(SchemaNamespaceText, StringComparison.Ordinal))
+        {
+            normalized = absolute.Segments[^1];
+        }
+
+        return KnowledgeNaming.Slugify(normalized);
     }
 
     private static ILiteralNode CreateDateLiteral(Graph graph, string? value)

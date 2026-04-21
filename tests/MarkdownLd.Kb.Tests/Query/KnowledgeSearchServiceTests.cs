@@ -23,9 +23,15 @@ public sealed class KnowledgeSearchServiceTests
     private const string DuplicateArticleSummary = "A duplicate-row article summary.";
     private const string DuplicateArticleKeyword = "duplicate";
     private const string DuplicateArticleSecondKeyword = "merge";
+    private const string TypedArticleTerm = "typed article";
+    private const string TypedArticleUriText = "https://example.com/articles/typed-article/";
+    private const string TypedArticleTitle = "Typed Article";
+    private const string TechArticleTypeUriText = "https://schema.org/TechArticle";
     private static readonly Uri RdfEntityUri = new(RdfEntityUriText);
     private static readonly Uri KnowledgeGraphArticleUri = new(KnowledgeGraphArticleUriText);
     private static readonly Uri DuplicateArticleUri = new(DuplicateArticleUriText);
+    private static readonly Uri TypedArticleUri = new(TypedArticleUriText);
+    private static readonly Uri TechArticleTypeUri = new(TechArticleTypeUriText);
 
     [Test]
     public void SearchEntitiesFindsMatchingEntity()
@@ -109,6 +115,16 @@ public sealed class KnowledgeSearchServiceTests
         results.ShouldBeEmpty();
     }
 
+    [Test]
+    public void SearchEntitiesExcludesArticlesThatHaveAdditionalArticleSubtypes()
+    {
+        var service = new KnowledgeSearchService(BuildGraphWithTypedArticle());
+
+        var results = service.SearchEntities(TypedArticleTerm);
+
+        results.ShouldBeEmpty();
+    }
+
     private static Graph BuildGraphWithRepeatedArticleOptionals()
     {
         var graph = new Graph();
@@ -120,6 +136,19 @@ public sealed class KnowledgeSearchServiceTests
         graph.Assert(article, graph.CreateUriNode(KbNamespaces.SchemaDescription), graph.CreateLiteralNode(DuplicateArticleSummary));
         graph.Assert(article, graph.CreateUriNode(KbNamespaces.SchemaKeywords), graph.CreateLiteralNode(DuplicateArticleKeyword));
         graph.Assert(article, graph.CreateUriNode(KbNamespaces.SchemaKeywords), graph.CreateLiteralNode(DuplicateArticleSecondKeyword));
+
+        return graph;
+    }
+
+    private static Graph BuildGraphWithTypedArticle()
+    {
+        var graph = new Graph();
+        KbNamespaces.Register(graph);
+
+        var article = graph.CreateUriNode(TypedArticleUri);
+        graph.Assert(article, graph.CreateUriNode(KbNamespaces.RdfType), graph.CreateUriNode(KbNamespaces.SchemaArticle));
+        graph.Assert(article, graph.CreateUriNode(KbNamespaces.RdfType), graph.CreateUriNode(TechArticleTypeUri));
+        graph.Assert(article, graph.CreateUriNode(KbNamespaces.SchemaName), graph.CreateLiteralNode(TypedArticleTitle));
 
         return graph;
     }

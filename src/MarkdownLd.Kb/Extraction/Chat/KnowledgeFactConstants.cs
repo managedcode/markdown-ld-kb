@@ -3,6 +3,7 @@ namespace ManagedCode.MarkdownLd.Kb;
 internal static class KnowledgeFactConstants
 {
     internal const string DefaultGraphBaseUrl = MarkdownKnowledgeDefaults.BaseUriText;
+    internal const string PromptVersion = "extract-rdf-v1";
     internal const string EntityPathSegment = "/id/";
     internal const string SchemaPerson = "schema:Person";
     internal const string SchemaOrganization = "schema:Organization";

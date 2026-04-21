@@ -8,6 +8,8 @@ internal static class PipelineConstants
     internal const string KbMemberOf = "kb:memberOf";
     internal const string KbNextStep = "kb:nextStep";
     internal const string KbConfidenceSuffix = "confidence";
+    internal const string KbEntryTypeSuffix = "entryType";
+    internal const string KbSourceProjectSuffix = "sourceProject";
     internal const string TiktokenModelName = "gpt-5";
     internal const string TokenSegmentTypeText = "schema:CreativeWork";
     internal const string TokenTopicTypeText = "schema:DefinedTerm";
@@ -16,6 +18,14 @@ internal static class PipelineConstants
     internal const string TokenDistanceSearchUnavailableMessage = "Token distance search requires a graph built with Tiktoken extraction mode.";
     internal const string SemanticSearchRequiresIndexMessage = "Semantic search requires a semantic index built from an embedding generator.";
     internal const string SemanticSearchEmbeddingCountMismatchMessage = "Embedding generation returned an unexpected result count.";
+    internal const string CacheEntryMissingMessage = "Extraction cache entry could not be deserialized.";
+    internal const string InvalidRdfPrefixesMessage = "rdf_prefixes must be a mapping.";
+    internal const string InvalidRdfPropertiesMessage = "rdf_properties must be a mapping.";
+    internal const string InvalidRdfPropertyValueMessage = "RDF property object values must define 'id' or 'value'.";
+    internal const string RdfPrefixMessagePrefix = "RDF prefix '";
+    internal const string InvalidRdfPrefixNamespaceMessageSuffix = "' must map to an absolute namespace URI.";
+    internal const string ConflictingRdfPrefixMessageSuffix = "' is already registered with a different namespace.";
+    internal const string UnknownRdfPrefixMessageSuffix = "' could not be resolved.";
     internal const string GraphRuleDiagnosticPrefix = "Graph rule skipped: ";
     internal const string GraphRuleConfiguredEntityRule = "options.Entities";
     internal const string GraphRuleConfiguredEdgeRule = "options.Edges";
@@ -55,6 +65,7 @@ internal static class PipelineConstants
     internal const string PathSeparator = " / ";
     internal const string Slash = "/";
     internal const string Colon = ":";
+    internal const string DotSeparator = ".";
     internal const string Hyphen = "-";
     internal const string OpenBracketText = "[";
     internal const string CloseBracketText = "]";
@@ -75,6 +86,9 @@ internal static class PipelineConstants
     internal const string RdfNamespaceText = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
     internal const string XsdNamespaceText = "http://www.w3.org/2001/XMLSchema#";
     internal const string SchemaArticleText = "https://schema.org/Article";
+    internal const string SchemaTechArticleText = "https://schema.org/TechArticle";
+    internal const string SchemaScholarlyArticleText = "https://schema.org/ScholarlyArticle";
+    internal const string SchemaBlogPostingText = "https://schema.org/BlogPosting";
     internal const string SchemaNameText = "https://schema.org/name";
     internal const string SchemaDescriptionText = "https://schema.org/description";
     internal const string SchemaDatePublishedText = "https://schema.org/datePublished";
@@ -87,6 +101,9 @@ internal static class PipelineConstants
     internal const string SchemaCreatorText = "https://schema.org/creator";
     internal const string SchemaHasPartText = "https://schema.org/hasPart";
     internal const string SchemaArticleTypeText = "schema:Article";
+    internal const string SchemaTechArticleTypeText = "schema:TechArticle";
+    internal const string SchemaScholarlyArticleTypeText = "schema:ScholarlyArticle";
+    internal const string SchemaBlogPostingTypeText = "schema:BlogPosting";
     internal const string SchemaPersonTypeText = "schema:Person";
     internal const string SchemaOrganizationTypeText = "schema:Organization";
     internal const string SchemaSoftwareApplicationTypeText = "schema:SoftwareApplication";
@@ -110,6 +127,10 @@ internal static class PipelineConstants
     internal const string TagsKey = "tags";
     internal const string KeywordsKey = "keywords";
     internal const string AboutKey = "about";
+    internal const string EntryTypeKey = "entry_type";
+    internal const string EntryTypeCamelKey = "entryType";
+    internal const string SourceProjectKey = "source_project";
+    internal const string SourceProjectCamelKey = "sourceProject";
     internal const string AuthorKey = "author";
     internal const string EntityHintsKey = "entity_hints";
     internal const string EntityHintsCamelKey = "entityHints";
@@ -117,8 +138,16 @@ internal static class PipelineConstants
     internal const string NameKey = "name";
     internal const string ValueKey = "value";
     internal const string TypeKey = "type";
+    internal const string DatatypeKey = "datatype";
+    internal const string DatatypeCamelKey = "dataType";
     internal const string SameAsKey = "sameAs";
     internal const string SameAsSnakeKey = "same_as";
+    internal const string RdfTypesKey = "rdf_types";
+    internal const string RdfTypesCamelKey = "rdfTypes";
+    internal const string RdfPropertiesKey = "rdf_properties";
+    internal const string RdfPropertiesCamelKey = "rdfProperties";
+    internal const string RdfPrefixesKey = "rdf_prefixes";
+    internal const string RdfPrefixesCamelKey = "rdfPrefixes";
     internal const string GraphEntitiesKey = "graph_entities";
     internal const string GraphEntitiesCamelKey = "graphEntities";
     internal const string GraphEdgesKey = "graph_edges";
@@ -154,6 +183,7 @@ internal static class PipelineConstants
     internal const string MemberOfPredicateKey = "memberof";
     internal const string NextStepPredicateKey = "nextstep";
     internal const string UriSchemePrefix = "urn:";
+    internal const string UriAuthoritySeparator = "://";
     internal const string BlankNodePrefix = "_:";
     internal const string AssertionKeySeparator = "||";
     internal const string SearchTermToken = "{TERM}";
@@ -216,6 +246,9 @@ LIMIT 100
     internal const string ArrowPattern = @"^(?<subject>.+?)\s*--(?<predicate>[^-]+?)-->\s*(?<object>.+?)\s*$";
     internal const string TopicWordPattern = @"[\p{L}\p{M}\p{Nd}]+(?:[-'][\p{L}\p{M}\p{Nd}]+)*";
     internal const string FrontMatterMarker = "---";
+    internal const string CacheFileVersion = "v1";
+    internal const string CacheFileExtension = ".json";
+    internal const string UnknownChatModelId = "unspecified-chat-model";
     internal const string NewLineDelimiter = "\n";
     internal const string DoubleNewLineDelimiter = "\n\n";
     internal const string ListItemPrefix = "- ";
@@ -227,6 +260,8 @@ LIMIT 100
     internal const string MatchObjectGroup = "object";
     internal const string ProvWasDerivedFromSuffix = "wasDerivedFrom";
     internal const string KbConfidenceText = KbNamespaceText + KbConfidenceSuffix;
+    internal const string KbEntryTypeText = KbNamespaceText + KbEntryTypeSuffix;
+    internal const string KbSourceProjectText = KbNamespaceText + KbSourceProjectSuffix;
     internal const string MarkdownMediaType = "text/markdown";
     internal const string MdxMediaType = "text/mdx";
     internal const string PlainTextMediaType = "text/plain";
@@ -266,6 +301,9 @@ LIMIT 100
     internal static readonly Uri RdfNamespaceUri = new(RdfNamespaceText);
     internal static readonly Uri XsdNamespaceUri = new(XsdNamespaceText);
     internal static readonly Uri SchemaArticleUri = new(SchemaArticleText);
+    internal static readonly Uri SchemaTechArticleUri = new(SchemaTechArticleText);
+    internal static readonly Uri SchemaScholarlyArticleUri = new(SchemaScholarlyArticleText);
+    internal static readonly Uri SchemaBlogPostingUri = new(SchemaBlogPostingText);
     internal static readonly Uri SchemaNameUri = new(SchemaNameText);
     internal static readonly Uri SchemaDescriptionUri = new(SchemaDescriptionText);
     internal static readonly Uri SchemaDatePublishedUri = new(SchemaDatePublishedText);
@@ -286,6 +324,8 @@ LIMIT 100
     internal static readonly Uri XsdDecimalUri = new(XsdDecimalText);
     internal static readonly Uri ProvWasDerivedFromUri = new(ProvNamespaceText + ProvWasDerivedFromSuffix);
     internal static readonly Uri KbConfidenceUri = new(KbConfidenceText);
+    internal static readonly Uri KbEntryTypeUri = new(KbEntryTypeText);
+    internal static readonly Uri KbSourceProjectUri = new(KbSourceProjectText);
     internal static readonly double MaximumNormalizedTokenDistance = Math.Sqrt(OrthogonalSparseVectorDimensionCount);
     internal const TokenVectorWeighting DefaultTokenVectorWeighting = TokenVectorWeighting.SubwordTfIdf;
     internal static readonly char[] ArrowOperandTrimChars = [DoubleQuoteCharacter, SingleQuoteCharacter, CommaCharacter, SemicolonCharacter];

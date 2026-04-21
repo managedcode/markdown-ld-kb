@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using ManagedCode.MarkdownLd.Kb.Query;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
+using RootMarkdownChunk = ManagedCode.MarkdownLd.Kb.MarkdownChunk;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
@@ -34,7 +35,8 @@ public sealed record MarkdownDocument(
     string Title,
     IReadOnlyDictionary<string, object?> FrontMatter,
     string Body,
-    IReadOnlyList<MarkdownSection> Sections);
+    IReadOnlyList<MarkdownSection> Sections,
+    IReadOnlyList<RootMarkdownChunk> Chunks);
 
 public sealed record KnowledgeEntityFact
 {

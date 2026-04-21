@@ -28,12 +28,15 @@ public sealed class ChatClientKnowledgePipelineFlowTests
     private const string SchemaMentionsPredicate = "schema:mentions";
     private const string SchemaAboutPredicate = "schema:about";
     private const string KbRelatedToPredicate = "kb:relatedTo";
-    private const string FirstChunkSource = "urn:kb:chunk:https://kb.example/01-zero-cost-graph/:01-zero-cost-graphmd";
-    private const string SecondChunkSource = "urn:kb:chunk:https://kb.example/02-federated-query/:02-federated-querymd";
     private const string SearchTermFederated = "federated";
     private const string SearchTermDeleteLiteral = "DELETE";
     private const string SearchSubjectKey = "subject";
     private const string ArticleTitleKey = "articleTitle";
+    private const string SourcePlaceholder = "__SOURCE__";
+    private const string ChunkSourceLabel = "CHUNK_SOURCE: ";
+    private const string UserPromptLabel = "MARKDOWN:";
+    private const string ChunkSourcePrefix = "urn:kb:chunk:";
+    private const string ChunkSourceSeparator = ":";
     private const int ExpectedDocumentCount = 2;
     private const int ExpectedChatCallCount = 2;
     private const int ExpectedPendingResponseCount = 0;
@@ -83,14 +86,14 @@ The note explains federated graph lookup through remote endpoints.
       "p": "schema:mentions",
       "o": "https://kb.example/id/entity-extraction-pipeline",
       "confidence": 0.98,
-      "source": "urn:kb:chunk:https://kb.example/01-zero-cost-graph/:01-zero-cost-graphmd"
+      "source": "__SOURCE__"
     },
     {
       "s": "https://kb.example/id/markdown-ld-knowledge-bank",
       "p": "kb:relatedTo",
       "o": "https://kb.example/id/entity-extraction-pipeline",
       "confidence": 0.87,
-      "source": "urn:kb:chunk:https://kb.example/01-zero-cost-graph/:01-zero-cost-graphmd"
+      "source": "__SOURCE__"
     }
   ]
 }
@@ -118,14 +121,14 @@ The note explains federated graph lookup through remote endpoints.
       "p": "schema:mentions",
       "o": "https://kb.example/id/sparql-federated-query",
       "confidence": 0.96,
-      "source": "urn:kb:chunk:https://kb.example/02-federated-query/:02-federated-querymd"
+      "source": "__SOURCE__"
     },
     {
       "s": "https://kb.example/id/sparql-federated-query",
       "p": "schema:about",
       "o": "https://kb.example/id/remote-endpoint",
       "confidence": 0.9,
-      "source": "urn:kb:chunk:https://kb.example/02-federated-query/:02-federated-querymd"
+      "source": "__SOURCE__"
     }
   ]
 }
@@ -180,10 +183,13 @@ SELECT ?subject WHERE {
             await File.WriteAllTextAsync(Path.Combine(root, SecondFileName), SecondMarkdown);
 
             var responses = new Queue<string>(Payloads);
-            var chatClient = new TestChatClient((_, _) => responses.Dequeue());
+            var chatClient = new TestChatClient((messages, _) =>
+                responses.Dequeue().Replace(SourcePlaceholder, ExtractChunkSource(messages), StringComparison.Ordinal));
             var pipeline = new MarkdownKnowledgePipeline(new Uri(BaseUriText), chatClient);
 
             var result = await pipeline.BuildFromDirectoryAsync(root);
+            var firstChunkSource = CreateChunkSource(result.Documents[0], 0);
+            var secondChunkSource = CreateChunkSource(result.Documents[1], 0);
 
             result.Documents.Count.ShouldBe(ExpectedDocumentCount);
             result.Documents.Select(document => document.DocumentUri.AbsoluteUri).ShouldBe([FirstDocumentUri, SecondDocumentUri]);
@@ -207,12 +213,12 @@ SELECT ?subject WHERE {
                 assertion.SubjectId == FirstDocumentUri &&
                 assertion.Predicate == SchemaMentionsPredicate &&
                 assertion.ObjectId == EntityExtractionPipelineId &&
-                assertion.Source == FirstChunkSource).ShouldBeTrue();
+                assertion.Source == firstChunkSource).ShouldBeTrue();
             result.Facts.Assertions.Any(assertion =>
                 assertion.SubjectId == FederatedQueryId &&
                 assertion.Predicate == SchemaAboutPredicate &&
                 assertion.ObjectId == RemoteEndpointId &&
-                assertion.Source == SecondChunkSource).ShouldBeTrue();
+                assertion.Source == secondChunkSource).ShouldBeTrue();
             result.Facts.Assertions.Any(assertion =>
                 assertion.SubjectId == MarkdownLdKnowledgeBankId &&
                 assertion.Predicate == KbRelatedToPredicate &&
@@ -244,5 +250,24 @@ SELECT ?subject WHERE {
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    private static string CreateChunkSource(ManagedCode.MarkdownLd.Kb.Pipeline.MarkdownDocument document, int chunkIndex)
+    {
+        return string.Concat(
+            ChunkSourcePrefix,
+            document.DocumentUri.AbsoluteUri,
+            ChunkSourceSeparator,
+            document.Chunks[chunkIndex].ChunkId);
+    }
+
+    private static string ExtractChunkSource(IReadOnlyList<Microsoft.Extensions.AI.ChatMessage> messages)
+    {
+        var userPrompt = messages.Single(message => message.Role == Microsoft.Extensions.AI.ChatRole.User).Text;
+        var sourceLine = userPrompt
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .First(line => line.StartsWith(ChunkSourceLabel, StringComparison.Ordinal));
+
+        return sourceLine[ChunkSourceLabel.Length..].Trim();
     }
 }

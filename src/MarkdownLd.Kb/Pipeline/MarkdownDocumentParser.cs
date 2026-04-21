@@ -1,249 +1,115 @@
-using System.Globalization;
-using System.Text.RegularExpressions;
-using Markdig;
-using Markdig.Syntax;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
+using RootMarkdownChunker = ManagedCode.MarkdownLd.Kb.IMarkdownChunker;
+using RootMarkdownChunkingOptions = ManagedCode.MarkdownLd.Kb.MarkdownChunkingOptions;
+using RootMarkdownDocument = ManagedCode.MarkdownLd.Kb.MarkdownDocument;
+using RootMarkdownDocumentParser = ManagedCode.MarkdownLd.Kb.Parsing.MarkdownDocumentParser;
+using RootMarkdownDocumentSource = ManagedCode.MarkdownLd.Kb.MarkdownDocumentSource;
+using RootMarkdownParsingOptions = ManagedCode.MarkdownLd.Kb.MarkdownParsingOptions;
+using RootMarkdownSection = ManagedCode.MarkdownLd.Kb.MarkdownSection;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed class MarkdownDocumentParser(Uri? baseUri = null)
+public sealed class MarkdownDocumentParser
 {
-    private static readonly Regex HeadingRegex = new(HeadingPattern, RegexOptions.Compiled | RegexOptions.Multiline);
-    private static readonly MarkdownPipeline MarkdigPipeline = new MarkdownPipelineBuilder()
-        .UsePreciseSourceLocation()
-        .UseYamlFrontMatter()
-        .UseDefinitionLists()
-        .UsePipeTables()
-        .UseGridTables()
-        .UseTaskLists()
-        .UseEmphasisExtras()
-        .UseGenericAttributes()
-        .Build();
+    private readonly Uri _baseUri;
+    private readonly RootMarkdownDocumentParser _parser;
+    private readonly RootMarkdownParsingOptions _parsingOptions;
 
-    private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
-    private readonly IDeserializer _yamlDeserializer = new DeserializerBuilder()
-            .WithNamingConvention(CamelCaseNamingConvention.Instance)
-            .IgnoreUnmatchedProperties()
-            .Build();
-
-    public MarkdownDocument Parse(MarkdownSourceDocument source)
+    public MarkdownDocumentParser(
+        Uri? baseUri = null,
+        RootMarkdownChunker? chunker = null,
+        RootMarkdownChunkingOptions? chunkingOptions = null)
     {
-        var content = source.Content.TrimStart('\uFEFF');
-        var (frontMatter, body) = ParseFrontMatter(content);
-        var documentUri = source.CanonicalUri ?? DeriveDocumentUri(source.Path);
-        var title = ResolveTitle(frontMatter, body, source.Path);
-        var sections = ParseSections(body);
-
-        return new MarkdownDocument(
-            documentUri,
-            source.Path,
-            title,
-            frontMatter,
-            body,
-            sections);
-    }
-
-    private Uri DeriveDocumentUri(string sourcePath)
-    {
-        return KnowledgeNaming.CreateDocumentUri(_baseUri, sourcePath);
-    }
-
-    private static string ResolveTitle(IReadOnlyDictionary<string, object?> frontMatter, string body, string sourcePath)
-    {
-        if (TryGetString(frontMatter, TitleKey, out var title) && !string.IsNullOrWhiteSpace(title))
+        _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
+        _parser = new RootMarkdownDocumentParser(chunker);
+        _parsingOptions = new RootMarkdownParsingOptions
         {
-            return title.Trim();
-        }
-
-        var firstHeading = HeadingRegex.Match(body);
-        if (firstHeading.Success)
-        {
-            return firstHeading.Groups[2].Value.Trim();
-        }
-
-        return Path.GetFileNameWithoutExtension(sourcePath).Replace('-', ' ').Replace('_', ' ');
-    }
-
-    private (IReadOnlyDictionary<string, object?> FrontMatter, string Body) ParseFrontMatter(string content)
-    {
-        if (!content.StartsWith(FrontMatterMarker, StringComparison.Ordinal))
-        {
-            return (new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase), content);
-        }
-
-        var lines = content.Split('\n');
-        if (lines.Length < 3)
-        {
-            throw new InvalidDataException(MissingFrontMatterTerminatorMessage);
-        }
-
-        var endIndex = -1;
-        for (var i = 1; i < lines.Length; i++)
-        {
-            if (lines[i].Trim() == FrontMatterMarker)
-            {
-                endIndex = i;
-                break;
-            }
-        }
-
-        if (endIndex < 0)
-        {
-            throw new InvalidDataException(MissingFrontMatterTerminatorMessage);
-        }
-
-        var yaml = string.Join(NewLineDelimiter, lines.Skip(1).Take(endIndex - 1));
-        var parsed = _yamlDeserializer.Deserialize<object>(yaml);
-        var frontMatter = NormalizeYamlObject(parsed)
-            ?? throw new InvalidDataException(FrontMatterMappingExpectedMessage);
-
-        var body = string.Join(NewLineDelimiter, lines.Skip(endIndex + 1));
-        return (frontMatter, body.TrimStart('\r', '\n'));
-    }
-
-    private static Dictionary<string, object?>? NormalizeYamlObject(object? node)
-    {
-        var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        if (node is null)
-        {
-            return result;
-        }
-
-        if (node is not IDictionary<object, object> dictionary)
-        {
-            return null;
-        }
-
-        foreach (var entry in dictionary)
-        {
-            result[entry.Key.ToString() ?? string.Empty] = NormalizeYamlValue(entry.Value);
-        }
-
-        return result;
-    }
-
-    private static object? NormalizeYamlValue(object? value)
-    {
-        if (value is null)
-        {
-            return null;
-        }
-
-        if (value is IDictionary<object, object> dictionary)
-        {
-            var converted = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-            foreach (var entry in dictionary)
-            {
-                converted[entry.Key.ToString() ?? string.Empty] = NormalizeYamlValue(entry.Value);
-            }
-
-            return converted;
-        }
-
-        if (value is IEnumerable<object> sequence && value is not string)
-        {
-            return sequence.Select(NormalizeYamlValue).ToList();
-        }
-
-        return value switch
-        {
-            DateTime dateTime => dateTime.ToString(DotNetDateFormat, CultureInfo.InvariantCulture),
-            DateOnly dateOnly => dateOnly.ToString(DotNetDateFormat, CultureInfo.InvariantCulture),
-            _ => value,
+            DefaultBaseUrl = _baseUri.AbsoluteUri,
+            Chunking = chunkingOptions ?? RootMarkdownChunkingOptions.Default,
         };
     }
 
-    private static bool TryGetString(IReadOnlyDictionary<string, object?> frontMatter, string key, out string? value)
+    public MarkdownDocument Parse(MarkdownSourceDocument source)
     {
-        if (frontMatter.TryGetValue(key, out var raw) && raw is string text)
-        {
-            value = text;
-            return true;
-        }
+        ArgumentNullException.ThrowIfNull(source);
 
-        value = null;
-        return false;
+        var parsed = _parser.Parse(
+            new RootMarkdownDocumentSource(
+                source.Content,
+                source.Path,
+                _baseUri.AbsoluteUri,
+                source.CanonicalUri?.AbsoluteUri),
+            _parsingOptions);
+
+        return new MarkdownDocument(
+            ResolveDocumentUri(parsed, source),
+            source.Path,
+            ResolveTitle(parsed, source.Path),
+            ToFrontMatterDictionary(parsed),
+            parsed.BodyMarkdown,
+            parsed.Sections.Select(MapSection).ToArray(),
+            parsed.Chunks);
     }
 
-    private static IReadOnlyList<MarkdownSection> ParseSections(string body)
+    private Uri ResolveDocumentUri(RootMarkdownDocument parsed, MarkdownSourceDocument source)
     {
-        if (string.IsNullOrWhiteSpace(body))
+        if (Uri.TryCreate(parsed.DocumentId, UriKind.Absolute, out var parsedUri))
         {
-            return [];
+            return parsedUri;
         }
 
-        var sections = new List<MarkdownSection>();
-        var headingPath = new List<string>();
-        var headings = Markdown.Parse(body, MarkdigPipeline)
-            .Descendants<HeadingBlock>()
-            .Where(static heading => heading.Span.Start >= 0)
-            .OrderBy(static heading => heading.Span.Start)
-            .ToArray();
-
-        if (headings.Length == 0)
-        {
-            return string.IsNullOrWhiteSpace(body)
-                ? []
-                : [new MarkdownSection(0, string.Empty, [], body.Trim(), 0, body.Length)];
-        }
-
-        var currentStart = 0;
-        for (var i = 0; i < headings.Length; i++)
-        {
-            var heading = headings[i];
-            var headingStart = Math.Clamp(heading.Span.Start, 0, body.Length);
-            var text = body.Substring(currentStart, headingStart - currentStart);
-            AddSectionIfNeeded(sections, headingPath, text, currentStart, headingStart);
-
-            var level = heading.Level;
-            var headingText = ExtractHeadingText(body, heading);
-
-            while (headingPath.Count >= level)
-            {
-                headingPath.RemoveAt(headingPath.Count - 1);
-            }
-
-            headingPath.Add(headingText);
-            currentStart = Math.Clamp(heading.Span.End + 1, 0, body.Length);
-        }
-
-        AddSectionIfNeeded(sections, headingPath, body.Substring(currentStart), currentStart, body.Length);
-        return sections;
+        return source.CanonicalUri ?? KnowledgeNaming.CreateDocumentUri(_baseUri, source.Path);
     }
 
-    private static void AddSectionIfNeeded(
-        ICollection<MarkdownSection> sections,
-        IReadOnlyList<string> headingPath,
-        string text,
-        int startOffset,
-        int endOffset)
+    private static string ResolveTitle(RootMarkdownDocument parsed, string sourcePath)
     {
-        var trimmed = text.Trim();
-        if (trimmed.Length == 0)
+        if (!string.IsNullOrWhiteSpace(parsed.FrontMatter.Title))
         {
-            return;
+            return parsed.FrontMatter.Title.Trim();
         }
 
-        sections.Add(new MarkdownSection(
-            headingPath.Count,
-            headingPath.Count == 0 ? string.Empty : string.Join(PathSeparator, headingPath),
-            headingPath.ToArray(),
-            trimmed,
-            startOffset,
-            endOffset));
+        var firstHeading = parsed.Sections.FirstOrDefault(static section => !string.IsNullOrWhiteSpace(section.HeadingText));
+        if (firstHeading is not null && !string.IsNullOrWhiteSpace(firstHeading.HeadingText))
+        {
+            return firstHeading.HeadingText;
+        }
+
+        return Path.GetFileNameWithoutExtension(sourcePath).Replace(Hyphen, SpaceText).Replace('_', ' ');
     }
 
-    private static string ExtractHeadingText(string body, HeadingBlock heading)
+    private static IReadOnlyDictionary<string, object?> ToFrontMatterDictionary(RootMarkdownDocument parsed)
     {
-        var start = Math.Clamp(heading.Span.Start, 0, body.Length);
-        var end = Math.Clamp(heading.Span.End + 1, start, body.Length);
-        var markdown = body[start..end].Trim();
-        var firstLine = markdown.Split('\n', 2)[0].Trim();
-        var atxMatch = HeadingRegex.Match(firstLine);
-        return atxMatch.Success
-            ? atxMatch.Groups[2].Value.Trim()
-            : firstLine;
+        return parsed.FrontMatter.Values.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static MarkdownSection MapSection(RootMarkdownSection section)
+    {
+        return new MarkdownSection(
+            section.HeadingLevel,
+            section.HeadingPath.Count == 0 ? string.Empty : string.Join(PathSeparator, section.HeadingPath),
+            section.HeadingPath.ToArray(),
+            ExtractSectionText(section),
+            0,
+            0);
+    }
+
+    private static string ExtractSectionText(RootMarkdownSection section)
+    {
+        if (section.HeadingLevel == 0 || string.IsNullOrWhiteSpace(section.HeadingMarkdown))
+        {
+            return section.Markdown.Trim();
+        }
+
+        var headingIndex = section.Markdown.IndexOf(section.HeadingMarkdown, StringComparison.Ordinal);
+        if (headingIndex < 0)
+        {
+            return section.Markdown.Trim();
+        }
+
+        var body = section.Markdown[(headingIndex + section.HeadingMarkdown.Length)..];
+        return body.TrimStart('\n').Trim();
     }
 }

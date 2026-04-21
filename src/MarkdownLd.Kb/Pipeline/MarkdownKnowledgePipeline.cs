@@ -14,35 +14,48 @@ public sealed class MarkdownKnowledgePipeline
     private readonly TiktokenKnowledgeGraphExtractor? _tiktokenExtractor;
     private readonly MarkdownKnowledgeExtractionMode _configuredExtractionMode;
     private readonly KnowledgeGraphBuildOptions _buildOptions;
+    private readonly IMarkdownChunker _chunker;
+    private readonly IKnowledgeExtractionCache? _extractionCache;
 
     public MarkdownKnowledgePipeline(
         Uri? baseUri = null,
         IChatClient? chatClient = null,
         MarkdownKnowledgeExtractionMode extractionMode = MarkdownKnowledgeExtractionMode.Auto,
         TiktokenKnowledgeGraphOptions? tiktokenOptions = null)
-        : this(baseUri, chatClient, extractionMode, tiktokenOptions, null)
+        : this(new MarkdownKnowledgePipelineOptions
+        {
+            BaseUri = baseUri,
+            ChatClient = chatClient,
+            ExtractionMode = extractionMode,
+            TiktokenOptions = tiktokenOptions,
+        })
     {
     }
 
-    private MarkdownKnowledgePipeline(
-        Uri? baseUri,
-        IChatClient? chatClient,
-        MarkdownKnowledgeExtractionMode extractionMode,
-        TiktokenKnowledgeGraphOptions? tiktokenOptions,
-        KnowledgeGraphBuildOptions? buildOptions)
+    public MarkdownKnowledgePipeline(MarkdownKnowledgePipelineOptions options)
     {
-        var effectiveBaseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
-        _parser = new MarkdownDocumentParser(effectiveBaseUri);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var effectiveBaseUri = KnowledgeNaming.NormalizeBaseUri(options.BaseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
+        _chunker = options.MarkdownChunker ?? DeterministicSectionMarkdownChunker.Default;
+        _parser = new MarkdownDocumentParser(effectiveBaseUri, _chunker, options.ChunkingOptions);
         _factMerger = new KnowledgeFactMerger(effectiveBaseUri);
-        _graphBuilder = new KnowledgeGraphBuilder(effectiveBaseUri);
+        _graphBuilder = new KnowledgeGraphBuilder(effectiveBaseUri, options.DocumentRdfMapping);
         _ruleExtractor = new KnowledgeGraphRuleExtractor(effectiveBaseUri);
         _documentConverter = new KnowledgeSourceDocumentConverter();
-        _chatExtractor = chatClient is null ? null : new ChatClientKnowledgeFactExtractor(chatClient, effectiveBaseUri);
-        _tiktokenExtractor = extractionMode == MarkdownKnowledgeExtractionMode.Tiktoken
-            ? new TiktokenKnowledgeGraphExtractor(effectiveBaseUri, tiktokenOptions)
+        _chatExtractor = options.ChatClient is null
+            ? null
+            : new ChatClientKnowledgeFactExtractor(
+                options.ChatClient,
+                effectiveBaseUri,
+                options.ChatOptions,
+                options.ChatModelId);
+        _tiktokenExtractor = options.ExtractionMode == MarkdownKnowledgeExtractionMode.Tiktoken
+            ? new TiktokenKnowledgeGraphExtractor(effectiveBaseUri, options.TiktokenOptions)
             : null;
-        _configuredExtractionMode = extractionMode;
-        _buildOptions = buildOptions ?? KnowledgeGraphBuildOptions.Default;
+        _configuredExtractionMode = options.ExtractionMode;
+        _buildOptions = options.BuildOptions;
+        _extractionCache = options.ExtractionCache;
     }
 
     public Task<MarkdownKnowledgeBuildResult> BuildAsync(IEnumerable<KnowledgeSourceDocument> sources, CancellationToken cancellationToken = default)
@@ -134,7 +147,9 @@ public sealed class MarkdownKnowledgePipeline
             foreach (var document in documents)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                extractionResults.Add(await _chatExtractor!.ExtractAsync(document, cancellationToken).ConfigureAwait(false));
+                extractionResults.Add(await _chatExtractor!
+                    .ExtractAsync(document, _chunker.ProfileId, _extractionCache, cancellationToken)
+                    .ConfigureAwait(false));
             }
         }
 

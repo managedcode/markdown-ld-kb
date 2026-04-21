@@ -437,7 +437,10 @@ ASK WHERE {
         var parser = new RootMarkdownDocumentParser();
         var document = parser.Parse(
             new RootMarkdownDocumentSource(markdown, RootParserIgnoredPath, DefaultBaseUri),
-            new RootMarkdownParsingOptions { ChunkTokenTarget = 2 });
+            new RootMarkdownParsingOptions
+            {
+                Chunking = new MarkdownChunkingOptions { ChunkTokenTarget = 2 },
+            });
 
         document.DocumentId.ShouldBe(RootParserCanonicalUrl);
         document.BaseUri!.AbsoluteUri.ShouldBe(RootParserExpectedBaseUri);
@@ -478,7 +481,10 @@ ASK WHERE {
         var rootParser = new RootMarkdownDocumentParser();
         var parsed = rootParser.Parse(
             new RootMarkdownDocumentSource(markdown, LargeMarkdownPath, LargeMarkdownBaseUri),
-            new RootMarkdownParsingOptions { ChunkTokenTarget = LargeMarkdownRootParserChunkTarget });
+            new RootMarkdownParsingOptions
+            {
+                Chunking = new MarkdownChunkingOptions { ChunkTokenTarget = LargeMarkdownRootParserChunkTarget },
+            });
 
         parsed.DocumentId.ShouldBe(LargeMarkdownDocumentId);
         parsed.FrontMatter.Summary.ShouldBe(LargeMarkdownSummary);

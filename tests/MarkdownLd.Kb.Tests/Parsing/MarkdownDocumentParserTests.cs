@@ -202,7 +202,10 @@ public sealed class MarkdownDocumentParserTests
         var parser = new MarkdownDocumentParser();
         var document = parser.Parse(
             new MarkdownDocumentSource(MarkdownWithFrontMatter, ContentPath, BaseUri),
-            new MarkdownParsingOptions { ChunkTokenTarget = 20 });
+            new MarkdownParsingOptions
+            {
+                Chunking = new MarkdownChunkingOptions { ChunkTokenTarget = 20 },
+            });
 
         document.DocumentId.ShouldBe(DocumentId);
         document.ContentPath.ShouldBe(ContentPath);
@@ -255,9 +258,24 @@ public sealed class MarkdownDocumentParserTests
     public async Task Parse_stable_chunk_ids_follow_document_identity_and_path()
     {
         var parser = new MarkdownDocumentParser();
-        var first = parser.Parse(new MarkdownDocumentSource(MarkdownStableChunkIds, SourcePathInput, BaseUri), new MarkdownParsingOptions { ChunkTokenTarget = 1 });
-        var second = parser.Parse(new MarkdownDocumentSource(MarkdownStableChunkIds, SourcePathInput, BaseUri), new MarkdownParsingOptions { ChunkTokenTarget = 1 });
-        var moved = parser.Parse(new MarkdownDocumentSource(MarkdownStableChunkIds, OtherContentPath, BaseUri), new MarkdownParsingOptions { ChunkTokenTarget = 1 });
+        var first = parser.Parse(
+            new MarkdownDocumentSource(MarkdownStableChunkIds, SourcePathInput, BaseUri),
+            new MarkdownParsingOptions
+            {
+                Chunking = new MarkdownChunkingOptions { ChunkTokenTarget = 1 },
+            });
+        var second = parser.Parse(
+            new MarkdownDocumentSource(MarkdownStableChunkIds, SourcePathInput, BaseUri),
+            new MarkdownParsingOptions
+            {
+                Chunking = new MarkdownChunkingOptions { ChunkTokenTarget = 1 },
+            });
+        var moved = parser.Parse(
+            new MarkdownDocumentSource(MarkdownStableChunkIds, OtherContentPath, BaseUri),
+            new MarkdownParsingOptions
+            {
+                Chunking = new MarkdownChunkingOptions { ChunkTokenTarget = 1 },
+            });
 
         first.DocumentId.ShouldBe(second.DocumentId);
         first.Chunks.Select(chunk => chunk.ChunkId).ShouldBe(second.Chunks.Select(chunk => chunk.ChunkId));
@@ -266,6 +284,33 @@ public sealed class MarkdownDocumentParserTests
         first.Chunks[0].ChunkId.ShouldBe(MarkdownDocumentParser.ComputeChunkId(first.DocumentId, first.Chunks[0].Markdown));
         moved.DocumentId.ShouldNotBe(first.DocumentId);
         moved.Chunks[0].ChunkId.ShouldNotBe(first.Chunks[0].ChunkId);
+
+        await Task.CompletedTask;
+    }
+
+    [Test]
+    public async Task Parse_supports_swap_in_chunker_strategies()
+    {
+        var defaultParser = new MarkdownDocumentParser();
+        var wholeSectionParser = new MarkdownDocumentParser(new WholeSectionMarkdownChunker());
+
+        var defaultDocument = defaultParser.Parse(
+            new MarkdownDocumentSource(MarkdownStableChunkIds, SourcePathInput, BaseUri),
+            new MarkdownParsingOptions
+            {
+                Chunking = new MarkdownChunkingOptions { ChunkTokenTarget = 1 },
+            });
+        var wholeSectionDocument = wholeSectionParser.Parse(
+            new MarkdownDocumentSource(MarkdownStableChunkIds, SourcePathInput, BaseUri),
+            new MarkdownParsingOptions
+            {
+                Chunking = new MarkdownChunkingOptions { ChunkTokenTarget = 1 },
+            });
+
+        defaultDocument.Chunks.Count.ShouldBe(2);
+        wholeSectionDocument.Chunks.Count.ShouldBe(1);
+        wholeSectionDocument.Chunks.Single().Markdown.ShouldContain("First paragraph.");
+        wholeSectionDocument.Chunks.Single().Markdown.ShouldContain("reference");
 
         await Task.CompletedTask;
     }

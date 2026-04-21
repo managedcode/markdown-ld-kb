@@ -6,8 +6,6 @@ namespace ManagedCode.MarkdownLd.Kb.Parsing;
 
 public sealed partial class MarkdownDocumentParser
 {
-    private static int EstimateTokens(string text) => Math.Max(1, text.Length / 4);
-
     private static string ComputeHash(string text)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(text));
@@ -29,15 +27,6 @@ public sealed partial class MarkdownDocumentParser
 
     [GeneratedRegex(MarkdownTextConstants.HeadingPattern, RegexOptions.Multiline | RegexOptions.CultureInvariant)]
     private static partial Regex HeadingRegex();
-
-    [GeneratedRegex(MarkdownTextConstants.WikiLinkPattern, RegexOptions.CultureInvariant)]
-    private static partial Regex WikiLinkRegex();
-
-    [GeneratedRegex(MarkdownTextConstants.MarkdownImageLinkPattern, RegexOptions.CultureInvariant)]
-    private static partial Regex MarkdownImageLinkRegex();
-
-    [GeneratedRegex(MarkdownTextConstants.MarkdownLinkPattern, RegexOptions.CultureInvariant)]
-    private static partial Regex MarkdownLinkRegex();
 
     [GeneratedRegex(MarkdownTextConstants.WhitespacePattern, RegexOptions.CultureInvariant)]
     private static partial Regex WhitespaceRegex();

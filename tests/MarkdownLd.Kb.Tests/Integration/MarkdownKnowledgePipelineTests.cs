@@ -175,7 +175,7 @@ SELECT ?mention WHERE {
         jsonLd.ShouldContain(MarkdownLiterals[0]);
         jsonLd.ShouldContain(MarkdownLiterals[3]);
 
-        chatClient.CallCount.ShouldBe(1);
+        chatClient.CallCount.ShouldBe(result.Documents.Single().Chunks.Count);
     }
 
     [Test]
