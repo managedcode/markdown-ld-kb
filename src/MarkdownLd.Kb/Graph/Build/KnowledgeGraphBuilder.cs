@@ -9,10 +9,12 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
 {
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
     private readonly DocumentRdfFrontMatterMapper _documentRdfMapper = new(documentRdfMappingOptions);
+    private readonly KnowledgeGraphSemanticLayerBuilder _semanticLayerBuilder = new(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
 
     public KnowledgeGraph Build(
         IReadOnlyList<MarkdownDocument> documents,
         KnowledgeExtractionResult facts,
+        KnowledgeGraphBuildOptions buildOptions,
         TokenizedKnowledgeIndex? tokenIndex = null)
     {
         var graph = new Graph();
@@ -33,16 +35,13 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
             AddAssertion(graph, assertion);
         }
 
+        _semanticLayerBuilder.Apply(graph, documents, buildOptions);
         return new KnowledgeGraph(graph, tokenIndex);
     }
 
     private static void RegisterNamespaces(IGraph graph)
     {
-        graph.NamespaceMap.AddNamespace(SchemaPrefix, SchemaNamespaceUri);
-        graph.NamespaceMap.AddNamespace(KbPrefix, KbNamespaceUri);
-        graph.NamespaceMap.AddNamespace(ProvPrefix, ProvNamespaceUri);
-        graph.NamespaceMap.AddNamespace(RdfPrefix, RdfNamespaceUri);
-        graph.NamespaceMap.AddNamespace(XsdPrefix, XsdNamespaceUri);
+        KnowledgeGraphNamespaces.Register(graph);
     }
 
     private void AddDocument(Graph graph, MarkdownDocument document)
@@ -285,6 +284,9 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
                 KbPrefix => new Uri(KbNamespaceText + local),
                 ProvPrefix => new Uri(ProvNamespaceText + local),
                 RdfPrefix => new Uri(RdfNamespaceText + local),
+                RdfsPrefix => new Uri(RdfsNamespaceText + local),
+                OwlPrefix => new Uri(OwlNamespaceText + local),
+                SkosPrefix => new Uri(SkosNamespaceText + local),
                 XsdPrefix => new Uri(XsdNamespaceText + local),
                 _ => Uri.TryCreate(predicate, UriKind.Absolute, out var prefixedAbsolute)
                     ? prefixedAbsolute

@@ -6,9 +6,24 @@ public sealed record KnowledgeGraphBuildOptions
 
     public bool IncludeFrontMatterRules { get; init; } = true;
 
+    public KnowledgeGraphSemanticLayerOptions SemanticLayers { get; init; } = KnowledgeGraphSemanticLayerOptions.Default;
+
     public IReadOnlyList<KnowledgeGraphEntityRule> Entities { get; init; } = [];
 
     public IReadOnlyList<KnowledgeGraphEdgeRule> Edges { get; init; } = [];
+}
+
+public sealed record KnowledgeGraphSemanticLayerOptions
+{
+    public static KnowledgeGraphSemanticLayerOptions Default { get; } = new();
+
+    public bool IncludeOntologyLayer { get; init; } = true;
+
+    public bool IncludeSkosLayer { get; init; } = true;
+
+    public string? ConceptSchemeId { get; init; }
+
+    public string ConceptSchemeLabel { get; init; } = PipelineConstants.DefaultConceptSchemeLabel;
 }
 
 public sealed record KnowledgeGraphEntityRule

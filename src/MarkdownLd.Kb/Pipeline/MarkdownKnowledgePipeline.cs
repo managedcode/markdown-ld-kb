@@ -166,7 +166,7 @@ public sealed class MarkdownKnowledgePipeline
         var tokenIndex = effectiveMode == MarkdownKnowledgeExtractionMode.Tiktoken
             ? _tiktokenExtractor!.CreateIndex(tokenResult!.Segments, tokenResult.VectorSpace)
             : null;
-        var graph = _graphBuilder.Build(documents, mergedFacts, tokenIndex);
+        var graph = _graphBuilder.Build(documents, mergedFacts, buildOptions, tokenIndex);
         return new MarkdownKnowledgeBuildResult(documents, mergedFacts, graph)
         {
             ExtractionMode = effectiveMode,

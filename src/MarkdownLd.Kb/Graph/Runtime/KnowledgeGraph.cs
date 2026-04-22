@@ -213,7 +213,10 @@ public sealed partial class KnowledgeGraph
         }
     }
 
-    private object ProcessQuery(SparqlQuery query, CancellationToken cancellationToken)
+    private object ProcessQuery(
+        SparqlQuery query,
+        CancellationToken cancellationToken,
+        int? queryExecutionTimeoutMilliseconds = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         _graphLock.EnterReadLock();
@@ -221,7 +224,12 @@ public sealed partial class KnowledgeGraph
         {
             cancellationToken.ThrowIfCancellationRequested();
             var dataset = new InMemoryDataset(_graph);
-            var processor = new LeviathanQueryProcessor(dataset);
+            var processor = queryExecutionTimeoutMilliseconds is null
+                ? new LeviathanQueryProcessor(dataset)
+                : new LeviathanQueryProcessor(dataset, options =>
+                {
+                    options.QueryExecutionTimeout = queryExecutionTimeoutMilliseconds.Value;
+                });
             return processor.ProcessQuery(query);
         }
         finally

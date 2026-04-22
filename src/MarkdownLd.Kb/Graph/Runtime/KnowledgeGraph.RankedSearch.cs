@@ -191,7 +191,7 @@ public sealed partial class KnowledgeGraph
                 continue;
             }
 
-            var label = ResolvePrimaryText(edges, nodesById, SchemaNameText) ?? nodesById[nodeId].Label;
+            var label = ResolvePrimaryText(edges, nodesById, SchemaNameText);
             var description = ResolvePrimaryText(edges, nodesById, SchemaDescriptionText);
             var relatedLabels = ResolveSearchContextLabels(edges, nodesById);
             if (string.IsNullOrWhiteSpace(label) && string.IsNullOrWhiteSpace(description) && relatedLabels.Count == 0)
@@ -201,10 +201,10 @@ public sealed partial class KnowledgeGraph
 
             candidates.Add(new KnowledgeGraphSearchCandidate(
                 nodeId,
-                label,
+                label ?? nodesById[nodeId].Label,
                 description,
                 relatedLabels,
-                ComposeSearchText(label, description, relatedLabels)));
+                ComposeSearchText(label ?? nodesById[nodeId].Label, description, relatedLabels)));
         }
 
         return candidates;

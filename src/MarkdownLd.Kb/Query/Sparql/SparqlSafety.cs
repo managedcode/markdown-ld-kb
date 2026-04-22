@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using VDS.RDF.Parsing;
 using VDS.RDF.Query;
+using VDS.RDF.Query.Patterns;
 
 namespace ManagedCode.MarkdownLd.Kb.Query;
 
@@ -10,6 +11,7 @@ public static class SparqlSafety
 {
     private const string SparqlQueryRequiredMessage = "SPARQL query is required";
     private const string OnlySelectAndAskQueriesAllowedMessage = "Only SELECT and ASK queries are allowed";
+    private const string ServiceClauseRequiresExplicitFederationMessage = "SERVICE clauses require explicit federated SPARQL execution.";
     private const string LimitClausePrefix = "LIMIT ";
     private const string MutatingKeywordPattern = @"\b(INSERT|DELETE|LOAD|CLEAR|DROP|CREATE)\b";
     private const char SemicolonCharacter = ';';
@@ -26,7 +28,7 @@ public static class SparqlSafety
     private static readonly SparqlQueryParser Parser = new();
     private static readonly Regex MutatingKeywordRegex = new(MutatingKeywordPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
-    public static SparqlSafetyResult EnforceReadOnly(string query, int defaultLimit = 100)
+    public static SparqlSafetyResult EnforceReadOnly(string query, int defaultLimit = 100, bool allowFederatedService = false)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -53,6 +55,11 @@ public static class SparqlSafety
         if (!IsReadOnlyQuery(parsed.QueryType))
         {
             return new(false, query, OnlySelectAndAskQueriesAllowedMessage);
+        }
+
+        if (!allowFederatedService && GetLocalServiceClauses(parsed).Count > 0)
+        {
+            return new(false, query, ServiceClauseRequiresExplicitFederationMessage);
         }
 
         if (IsSelectQuery(parsed.QueryType) && parsed.Limit < 0)
@@ -95,6 +102,67 @@ public static class SparqlSafety
         var match = MutatingKeywordRegex.Match(new string(masked));
         keyword = match.Success ? match.Value : null;
         return match.Success;
+    }
+
+    internal static IReadOnlyList<SparqlServiceClause> GetLocalServiceClauses(SparqlQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var clauses = new List<SparqlServiceClause>();
+        CollectLocalServiceClauses(query.RootGraphPattern, clauses, false);
+        return clauses;
+    }
+
+    private static void CollectLocalServiceClauses(
+        GraphPattern? pattern,
+        ICollection<SparqlServiceClause> clauses,
+        bool insideServiceClause)
+    {
+        if (pattern is null)
+        {
+            return;
+        }
+
+        var isCurrentServiceClause = pattern.IsService;
+        if (isCurrentServiceClause && !insideServiceClause)
+        {
+            clauses.Add(CreateServiceClause(pattern));
+        }
+
+        foreach (var childPattern in pattern.ChildGraphPatterns)
+        {
+            CollectLocalServiceClauses(childPattern, clauses, insideServiceClause || isCurrentServiceClause);
+        }
+    }
+
+    private static SparqlServiceClause CreateServiceClause(GraphPattern pattern)
+    {
+        var specifierText = NormalizeServiceSpecifier(pattern.GraphSpecifier?.ToString());
+        var isVariableSpecifier = specifierText.StartsWith("?", StringComparison.Ordinal) || specifierText.StartsWith("$", StringComparison.Ordinal);
+        var endpointUri = Uri.TryCreate(specifierText, UriKind.Absolute, out var absoluteUri)
+            ? absoluteUri
+            : null;
+        return new SparqlServiceClause(specifierText, endpointUri, isVariableSpecifier, pattern.IsSilent);
+    }
+
+    private static string NormalizeServiceSpecifier(string? specifierText)
+    {
+        var normalized = specifierText?.Trim() ?? string.Empty;
+        if (normalized.StartsWith("VDS.RDF.Parsing.Tokens.", StringComparison.Ordinal))
+        {
+            var separatorIndex = normalized.LastIndexOf(' ');
+            if (separatorIndex >= 0 && separatorIndex + 1 < normalized.Length)
+            {
+                normalized = normalized[(separatorIndex + 1)..];
+            }
+        }
+
+        if (normalized.Length >= 2 && normalized[0] == IriStartCharacter && normalized[^1] == IriEndCharacter)
+        {
+            return normalized[1..^1];
+        }
+
+        return normalized;
     }
 
     private static bool TryMaskCurrentCharacter(
@@ -194,3 +262,9 @@ public static class SparqlSafety
         Iri,
     }
 }
+
+internal sealed record SparqlServiceClause(
+    string SpecifierText,
+    Uri? ServiceEndpointUri,
+    bool IsVariableSpecifier,
+    bool IsSilent);

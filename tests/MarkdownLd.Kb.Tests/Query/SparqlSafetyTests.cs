@@ -47,6 +47,13 @@ public sealed class SparqlSafetyTests
           ?s ?p ?o
         }
         """;
+    private const string FederatedServiceQuery = """
+        SELECT ?s WHERE {
+          SERVICE <https://query.wikidata.org/sparql> {
+            ?s ?p ?o
+          }
+        }
+        """;
     [Test]
     [Arguments(InsertQuery)]
     [Arguments(DeleteQuery)]
@@ -146,6 +153,25 @@ public sealed class SparqlSafetyTests
     public void AllowsCommentsContainingMutatingKeywords()
     {
         var result = SparqlSafety.EnforceReadOnly(CommentContainsMutatingKeywordQuery);
+
+        result.IsAllowed.ShouldBeTrue();
+        result.Query.ShouldContain(DefaultLimit);
+    }
+
+    [Test]
+    public void RejectsServiceClausesByDefault()
+    {
+        var result = SparqlSafety.EnforceReadOnly(FederatedServiceQuery);
+
+        result.IsAllowed.ShouldBeFalse();
+        result.ErrorMessage.ShouldNotBeNull();
+        result.ErrorMessage.ShouldContain("SERVICE");
+    }
+
+    [Test]
+    public void AllowsServiceClausesWhenFederationIsExplicitlyEnabled()
+    {
+        var result = SparqlSafety.EnforceReadOnly(FederatedServiceQuery, allowFederatedService: true);
 
         result.IsAllowed.ShouldBeTrue();
         result.Query.ShouldContain(DefaultLimit);

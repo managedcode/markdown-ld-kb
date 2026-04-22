@@ -28,7 +28,7 @@ flowchart LR
     None --> Merge["KnowledgeFactMerger\n→ merged KnowledgeExtractionResult"]
     Chat --> Merge
     Token --> Merge
-    Merge --> Builder["KnowledgeGraphBuilder\n→ dotNetRDF in-memory graph"]
+    Merge --> Builder["KnowledgeGraphBuilder\n→ RDF + ontology + SKOS graph"]
     Builder --> Search["SearchAsync"]
     Builder --> Sparql["ExecuteSelectAsync\nExecuteAskAsync"]
     Builder --> Shacl["ValidateShacl\nSHACL report"]
@@ -55,6 +55,8 @@ Tiktoken mode is deterministic and network-free. It uses lexical token-distance 
 - `SerializeJsonLd()` — JSON-LD serialization
 - `ExecuteSelectAsync(sparql)` — read-only SPARQL SELECT returning `SparqlQueryResult`
 - `ExecuteAskAsync(sparql)` — read-only SPARQL ASK returning `bool`
+- `ExecuteFederatedSelectAsync(sparql, options)` — explicit federated read-only SPARQL SELECT with endpoint diagnostics
+- `ExecuteFederatedAskAsync(sparql, options)` — explicit federated read-only SPARQL ASK with endpoint diagnostics
 - `ValidateShacl()` — SHACL validation against the built-in Markdown-LD Knowledge Bank shapes
 - `ValidateShacl(shapesTurtle)` — SHACL validation against caller-supplied Turtle shapes
 - `SearchAsync(term)` — case-insensitive search across `schema:name`, `schema:description`, and `schema:keywords`, returning matching graph subjects as `SparqlQueryResult`
@@ -226,6 +228,34 @@ Use `BuildAsync(documents, KnowledgeGraphBuildOptions)` when graph rules are ass
 
 Entities with the same `schema:sameAs` target are merged before assertions are emitted, and assertion endpoints are rewritten to the chosen canonical entity IRI. This keeps the graph sparse and avoids duplicated workflow edges when callers provide multiple labels or IDs for the same outside resource.
 
+## Ontology And SKOS Layers
+
+`KnowledgeGraphBuilder` now builds one additive graph, not a flat triple dump:
+
+- document and entity instance triples
+- a SKOS concept scheme / concept layer for graph concepts
+- repository-owned ontology declarations for `kb:` classes and properties
+
+The implementation uses `dotNetRdf`, `dotNetRdf.Ontology`, and `dotNetRdf.Skos` as the semantic building blocks. Markdown remains the source of truth; the library owns the mapping from Markdown/front matter/rules into the RDF graph.
+
+By default, semantic layers are enabled through `KnowledgeGraphBuildOptions.SemanticLayers`.
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+
+var result = await pipeline.BuildAsync(
+    documents,
+    new KnowledgeGraphBuildOptions
+    {
+        SemanticLayers = new KnowledgeGraphSemanticLayerOptions
+        {
+            IncludeOntologyLayer = true,
+            IncludeSkosLayer = true,
+            ConceptSchemeLabel = "Operations Capability Scheme",
+        },
+    });
+```
+
 ## Optional AI Extraction
 
 AI extraction builds graph facts from entities and assertions returned by an injected `Microsoft.Extensions.AI.IChatClient`. The package stays provider-neutral: it does not reference OpenAI, Azure OpenAI, Anthropic, or any other model-specific SDK. If no chat client is provided, `Auto` mode extracts no facts and reports a diagnostic; choose `Tiktoken` mode explicitly for local token-distance extraction.
@@ -355,6 +385,24 @@ LIMIT 100
 ```
 
 SPARQL execution is intentionally read-only. `SELECT` and `ASK` are allowed; mutation forms such as `INSERT`, `DELETE`, `LOAD`, `CLEAR`, `DROP`, and `CREATE` are rejected before execution.
+
+The default public SPARQL contract remains local and in-memory. Local `ExecuteSelectAsync` / `ExecuteAskAsync` reject top-level `SERVICE` clauses. Federated queries are explicit through `ExecuteFederatedSelectAsync` / `ExecuteFederatedAskAsync`, require an allowlist or named profile, and currently ship caller-visible endpoint diagnostics through `FederatedSparqlSelectResult` / `FederatedSparqlAskResult`.
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+
+var federated = await result.Graph.ExecuteFederatedSelectAsync(
+    """
+    SELECT ?item WHERE {
+      SERVICE <https://query.wikidata.org/sparql> {
+        ?item ?p ?o
+      }
+    }
+    """,
+    FederatedSparqlProfiles.WikidataMain);
+
+Console.WriteLine(federated.ServiceEndpointSpecifiers[0]);
+```
 
 ## Validate With SHACL
 
@@ -578,7 +626,7 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 - Embeddings are not required for the current graph/search flow; Tiktoken mode uses token IDs, not embedding vectors.
 - Microsoft Agent Framework is treated as host-level orchestration, not a core package dependency.
 
-See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md), and [Graph SHACL Validation](docs/Features/GraphShaclValidation.md).
+See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md), [ADR-0006](docs/ADR/ADR-0006-federated-sparql-adapter.md), [Graph SHACL Validation](docs/Features/GraphShaclValidation.md), and [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md).
 
 ## Inspiration And Attribution
 

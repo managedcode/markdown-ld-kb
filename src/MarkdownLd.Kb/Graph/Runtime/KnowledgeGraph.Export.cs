@@ -235,6 +235,21 @@ public sealed partial class KnowledgeGraph
             return RdfPrefix + Colon + text[RdfNamespaceText.Length..];
         }
 
+        if (text.StartsWith(RdfsNamespaceText, StringComparison.Ordinal))
+        {
+            return RdfsPrefix + Colon + text[RdfsNamespaceText.Length..];
+        }
+
+        if (text.StartsWith(OwlNamespaceText, StringComparison.Ordinal))
+        {
+            return OwlPrefix + Colon + text[OwlNamespaceText.Length..];
+        }
+
+        if (text.StartsWith(SkosNamespaceText, StringComparison.Ordinal))
+        {
+            return SkosPrefix + Colon + text[SkosNamespaceText.Length..];
+        }
+
         if (text.StartsWith(XsdNamespaceText, StringComparison.Ordinal))
         {
             return XsdPrefix + Colon + text[XsdNamespaceText.Length..];

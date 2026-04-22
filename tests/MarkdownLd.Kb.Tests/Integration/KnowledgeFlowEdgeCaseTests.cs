@@ -830,7 +830,8 @@ ASK WHERE {
                         ObjectId = MergeDirectIgnoredObjectValue,
                     },
                 ],
-            });
+            },
+            KnowledgeGraphBuildOptions.Default);
 
         var ask = await graph.ExecuteAskAsync(FactMergerAskQuery);
         ask.ShouldBeTrue();

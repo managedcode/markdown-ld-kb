@@ -1,6 +1,6 @@
 # Markdown-LD Knowledge Bank Architecture
 
-Date: 2026-04-21
+Date: 2026-04-22
 
 ## Purpose
 
@@ -10,7 +10,7 @@ The upstream reference repository is kept as a read-only submodule at `external/
 
 The core runtime has no localhost, HTTP server, background service, database server, or hosted API dependency. Callers pass files, directories, or in-memory document content into the library, and the library returns in-memory graph/search/query results.
 
-The graph/search model does not require semantic embeddings. The AI boundary in the core pipeline is `Microsoft.Extensions.AI.IChatClient` for entity/assertion extraction. The library also exposes an explicit experimental Tiktoken mode that creates lexical sparse vectors from `Microsoft.ML.Tokenizers` token IDs and builds a local corpus graph. Its default weighting is corpus-fitted subword TF-IDF, with raw term frequency and binary presence kept as experimental baselines. Tiktoken mode also creates section/segment structure, local TF-IDF keyphrase topics, and explicit front matter entity hint nodes, but it is not a semantic embedding model. Capability graph rules add deterministic caller-authored entities and edges for groups, related nodes, and next-step nodes so applications can build workflow/capability graphs without relying on a flat document-topic graph. Cross-language retrieval can now use an optional semantic ranked-search adapter over `Microsoft.Extensions.AI.IEmbeddingGenerator<,>` that builds an in-memory semantic index from graph-native labels, descriptions, and related labels. The graph remains canonical; semantic hits are fallback or merge inputs rather than the source of truth. Chat-based fact extraction is chunk-oriented and may optionally reuse caller-selected cache storage, but cache and natural-language query translation remain adapters around the in-memory graph rather than hosted services. Document metadata mapping keeps article-friendly defaults, but it also supports generic front matter-driven RDF prefixes, types, and predicate/value mappings so callers are not locked to a fixed `schema:Article` subtype list.
+The graph/search model does not require semantic embeddings. The AI boundary in the core pipeline is `Microsoft.Extensions.AI.IChatClient` for entity/assertion extraction. The library also exposes an explicit experimental Tiktoken mode that creates lexical sparse vectors from `Microsoft.ML.Tokenizers` token IDs and builds a local corpus graph. Its default weighting is corpus-fitted subword TF-IDF, with raw term frequency and binary presence kept as experimental baselines. Tiktoken mode also creates section/segment structure, local TF-IDF keyphrase topics, and explicit front matter entity hint nodes, but it is not a semantic embedding model. Capability graph rules add deterministic caller-authored entities and edges for groups, related nodes, and next-step nodes so applications can build workflow/capability graphs without relying on a flat document-topic graph. `KnowledgeGraphBuilder` now materializes three additive semantic layers in one graph: instance/document triples, a SKOS concept layer, and repository-owned ontology declarations over `kb:` terms using `dotNetRdf.Ontology` and `dotNetRdf.Skos`. Cross-language retrieval can now use an optional semantic ranked-search adapter over `Microsoft.Extensions.AI.IEmbeddingGenerator<,>` that builds an in-memory semantic index from graph-native labels, descriptions, and related labels. The graph remains canonical; semantic hits are fallback or merge inputs rather than the source of truth. Chat-based fact extraction is chunk-oriented and may optionally reuse caller-selected cache storage, but cache and natural-language query translation remain adapters around the in-memory graph rather than hosted services. Document metadata mapping keeps article-friendly defaults, but it also supports generic front matter-driven RDF prefixes, types, and predicate/value mappings so callers are not locked to a fixed `schema:Article` subtype list.
 
 ## System Boundaries
 
@@ -31,11 +31,12 @@ flowchart LR
     Cache --> Router
     Rules --> Builder
     Metadata --> Builder
-    ChatExtractor --> Builder["RDF graph builder"]
+    ChatExtractor --> Builder["RDF / ontology / SKOS graph builder"]
     TokenExtractor --> Builder
     NoExtractor --> Builder
     Builder --> Graph["In-memory knowledge graph"]
     Graph --> Sparql["In-memory SPARQL executor API"]
+    Graph --> Federated["Explicit federated SPARQL adapter"]
     Graph --> Search["In-memory graph search API"]
     Graph --> Ranked["Graph / semantic / hybrid ranked search API"]
     Graph --> Focused["Focused graph search API"]
@@ -43,6 +44,7 @@ flowchart LR
     Graph --> Serializers["Turtle and JSON-LD serializers"]
     Graph --> NlToSparql["NL-to-SPARQL adapter"]
     Graph --> Merge["Thread-safe graph merge API"]
+    Federated --> RemoteSparql["Allowlisted remote SPARQL endpoints"]
     Embedder["Optional IEmbeddingGenerator semantic index"] --> Ranked
     IChatClient["Microsoft.Extensions.AI IChatClient"] --> ChatExtractor
     IChatClient --> NlToSparql
@@ -66,6 +68,8 @@ sequenceDiagram
     participant BuiltGraph as KnowledgeGraph
     participant Query as InMemorySparqlExecutor
     participant Translator as INaturalLanguageSparqlTranslator
+    participant Federation as Optional federated SPARQL adapter
+    participant Remote as Remote SPARQL endpoint
     participant Embedder as Optional IEmbeddingGenerator
 
     Caller->>Pipeline: BuildAsync(documents, options)
@@ -94,6 +98,7 @@ sequenceDiagram
     end
     Router-->>Pipeline: Entities, assertions, optional token index
     Pipeline->>Graph: Add facts as RDF triples
+    Graph->>Graph: Add ontology declarations and SKOS concepts
     Graph-->>Pipeline: In-memory KnowledgeGraph
     Pipeline-->>Caller: MarkdownKnowledgeBuildResult
     Caller->>BuiltGraph: BuildSemanticIndexAsync(embedder)
@@ -110,6 +115,10 @@ sequenceDiagram
     Translator-->>Caller: Translation result with executed query
     Caller->>Query: ExecuteSelect(graph, sparql)
     Query-->>Caller: SPARQL bindings
+    Caller->>Federation: ExecuteFederatedSelectAsync(query, options)
+    Federation->>Remote: SERVICE-based read-only request
+    Remote-->>Federation: Remote bindings
+    Federation-->>Caller: Federated result + diagnostics
 ```
 
 ## Module Responsibilities
@@ -234,13 +243,14 @@ flowchart LR
 | `tools/llm_client.py` | `ChatClientKnowledgeFactExtractor` | structured LLM extraction through `Microsoft.Extensions.AI.IChatClient` |
 | Tokenizer fallback | `TiktokenKnowledgeGraphExtractor`, `TokenKeyphraseExtractor`, `TokenizedEntityHintExtractor`, `TokenizedKnowledgeIndex` | explicit local graph from Tiktoken sparse vectors, section/segment structure, TF-IDF keyphrase topics, and front matter entity hints |
 | `api/nl_to_sparql.py` | `INaturalLanguageSparqlTranslator` | schema-injected NL-to-SPARQL through `IChatClient`; Microsoft Agent Framework may orchestrate this later |
-| `ontology/*.ttl`, `ontology/context.jsonld` | `KnowledgeGraphNamespaces` | schema.org, kb, prov, rdf, xsd namespaces |
+| `ontology/*.ttl`, `ontology/context.jsonld` | `KnowledgeGraphNamespaces`, `KnowledgeGraphSemanticLayerBuilder` | schema / kb / prov / rdf / rdfs / owl / skos namespaces plus repository-owned ontology and SKOS layers |
 
 ## Dependency Direction
 
 - Parsing depends on Markdig and YamlDotNet.
 - Chunking depends on parsed document models and stays deterministic.
 - RDF graph building and SPARQL execution depend on dotNetRDF.
+- Optional federated SPARQL depends on dotNetRDF `SERVICE` processing plus library-owned allowlist, timeout, and endpoint-diagnostics policy; it must remain explicit and opt-in.
 - SHACL validation depends on `dotNetRdf.Shacl` and runs against the in-memory graph through `VDS.RDF.Shacl.ShapesGraph`.
 - LLM extraction depends on `Microsoft.Extensions.AI.Abstractions` and accepts `IChatClient`.
 - Optional extraction cache depends on small library-owned contracts; file-backed cache adapters may live in the core library as local file-system helpers because they do not introduce hosted infrastructure.
@@ -266,7 +276,9 @@ Required first-slice scenarios:
 - English, Ukrainian, French, and German queries over same-language token graphs produce a higher hit rate than cross-language translated-topic queries.
 - Term frequency, binary presence, and subword TF-IDF token weighting modes are covered by focused and flow tests.
 - SPARQL mutating queries are rejected before execution.
+- Local SPARQL remains the default public contract; `ExecuteFederatedSelectAsync` and `ExecuteFederatedAskAsync` are the explicit opt-in boundary and local query methods reject top-level `SERVICE`.
 - Shared graph merge can run concurrently with search and read-only SPARQL without corrupting dotNetRDF graph state.
+- Federated SPARQL, when implemented, must be verified with deterministic policy tests and controlled endpoint fixtures; unsupported local executors must not issue remote requests.
 - `IChatClient` extractor accepts structured extraction output without depending on a provider-specific SDK.
 - Chunk-based `IChatClient` extraction is deterministic in chunk ordering, can reuse optional cache entries, and merges chunk results into a single canonical graph.
 - Default no-chat mode emits no extracted facts and reports a diagnostic telling callers to connect `IChatClient` or choose Tiktoken mode.
@@ -284,6 +296,11 @@ Coverage requirement: 95%+ line coverage for changed production code.
 - NL-to-SPARQL pattern: `external/lqdev-markdown-ld-kb/.ai-memex/pattern-nl-to-sparql-schema-injected-few-shot.md`
 - dotNetRDF upstream repository: `https://github.com/dotnetrdf/dotnetrdf`
 - dotNetRDF user guide: `https://dotnetrdf.org/docs/stable/user_guide/index.html`
+- W3C SPARQL 1.1 Federated Query: `https://www.w3.org/TR/2013/REC-sparql11-federated-query-20130321/`
+- W3C SPARQL 1.2 Federated Query Working Draft: `https://www.w3.org/TR/sparql12-federated-query/`
+- Wikidata federated queries guide: `https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/Federated_queries`
+- Wikidata Query Service user manual: `https://www.mediawiki.org/wiki/Wikidata_Query_Service/User_Manual/en`
+- WDQS graph split: `https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/WDQS_graph_split`
 - Microsoft.ML.Tokenizers guide: `https://learn.microsoft.com/dotnet/ai/how-to/use-tokenizers`
 - Multilingual Search with Subword TF-IDF: `https://arxiv.org/abs/2209.14281`
 - SPLADE v2: `https://arxiv.org/abs/2109.10086`
@@ -297,3 +314,5 @@ Coverage requirement: 95%+ line coverage for changed production code.
 - Capability graph rules feature: `docs/Features/CapabilityGraphRules.md`
 - Hybrid ranked search feature: `docs/Features/HybridGraphSearch.md`
 - SHACL validation feature: `docs/Features/GraphShaclValidation.md`
+- Federated SPARQL feature: `docs/Features/FederatedSparqlExecution.md`
+- Federated SPARQL decision: `docs/ADR/ADR-0006-federated-sparql-adapter.md`

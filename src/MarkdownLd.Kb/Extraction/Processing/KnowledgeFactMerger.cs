@@ -14,6 +14,13 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
         [SchemaBlogPostingTypeText] = 4,
         [SchemaCreativeWorkTypeText] = 4,
         [SchemaArticleTypeText] = 4,
+        [SkosConceptTypeText] = 4,
+        [SkosConceptSchemeTypeText] = 4,
+        [KbKnowledgeConceptTypeText] = 4,
+        [KbKnowledgeConceptSchemeTypeText] = 4,
+        [KbMarkdownDocumentTypeText] = 4,
+        [KbKnowledgeAssertionTypeText] = 4,
+        [SchemaDefinedTermTypeText] = 3,
         [SchemaThingTypeText] = 1,
     };
 
