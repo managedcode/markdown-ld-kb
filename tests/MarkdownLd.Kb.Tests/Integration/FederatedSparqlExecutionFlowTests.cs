@@ -36,12 +36,29 @@ SELECT ?s WHERE {
 }
 """;
 
+    private const string NestedServiceQuery = """
+SELECT ?s WHERE {
+  SERVICE <https://query.wikidata.org/sparql> {
+    SERVICE <https://example.com/sparql> {
+      ?s ?p ?o
+    }
+  }
+}
+""";
+
     private const string LocalSelectQuery = """
 PREFIX schema: <https://schema.org/>
 SELECT ?subject WHERE {
   ?subject a schema:Article .
 }
 ORDER BY ?subject
+""";
+
+    private const string LocalAskQuery = """
+PREFIX schema: <https://schema.org/>
+ASK WHERE {
+  ?subject a schema:Article .
+}
 """;
 
     [Test]
@@ -82,6 +99,23 @@ ORDER BY ?subject
     }
 
     [Test]
+    public async Task Federated_query_execution_rejects_nested_unallowlisted_service_endpoints_before_execution()
+    {
+        var result = await BuildGraphAsync();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var exception = await Should.ThrowAsync<FederatedSparqlQueryException>(async () =>
+            await result.Graph.ExecuteFederatedSelectAsync(
+                NestedServiceQuery,
+                FederatedSparqlProfiles.WikidataMain,
+                cancellation.Token));
+
+        exception.ServiceEndpointSpecifiers.ShouldContain("https://example.com/sparql");
+        exception.Message.ShouldContain("allowlisted");
+    }
+
+    [Test]
     public async Task Federated_query_execution_can_run_local_read_only_queries_and_reports_empty_service_diagnostics()
     {
         var result = await BuildGraphAsync();
@@ -92,6 +126,50 @@ ORDER BY ?subject
 
         selectResult.ServiceEndpointSpecifiers.ShouldBeEmpty();
         selectResult.Result.Rows.Count.ShouldBeGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Local_ask_execution_rejects_select_queries()
+    {
+        var result = await BuildGraphAsync();
+
+        var exception = await Should.ThrowAsync<ReadOnlySparqlQueryException>(async () =>
+            await result.Graph.ExecuteAskAsync(LocalSelectQuery));
+
+        exception.Message.ShouldContain("ExecuteAskAsync");
+    }
+
+    [Test]
+    public async Task Local_select_execution_rejects_ask_queries()
+    {
+        var result = await BuildGraphAsync();
+
+        var exception = await Should.ThrowAsync<ReadOnlySparqlQueryException>(async () =>
+            await result.Graph.ExecuteSelectAsync(LocalAskQuery));
+
+        exception.Message.ShouldContain("ExecuteSelectAsync");
+    }
+
+    [Test]
+    public async Task Federated_ask_execution_rejects_select_queries()
+    {
+        var result = await BuildGraphAsync();
+
+        var exception = await Should.ThrowAsync<ReadOnlySparqlQueryException>(async () =>
+            await result.Graph.ExecuteFederatedAskAsync(LocalSelectQuery, FederatedSparqlProfiles.WikidataMainAndScholarly));
+
+        exception.Message.ShouldContain("ExecuteFederatedAskAsync");
+    }
+
+    [Test]
+    public async Task Federated_select_execution_rejects_ask_queries()
+    {
+        var result = await BuildGraphAsync();
+
+        var exception = await Should.ThrowAsync<ReadOnlySparqlQueryException>(async () =>
+            await result.Graph.ExecuteFederatedSelectAsync(LocalAskQuery, FederatedSparqlProfiles.WikidataMainAndScholarly));
+
+        exception.Message.ShouldContain("ExecuteFederatedSelectAsync");
     }
 
     private static Task<MarkdownKnowledgeBuildResult> BuildGraphAsync()

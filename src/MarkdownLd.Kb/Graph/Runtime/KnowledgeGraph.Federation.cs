@@ -1,6 +1,7 @@
 using ManagedCode.MarkdownLd.Kb.Query;
 using VDS.RDF.Parsing;
 using VDS.RDF.Query;
+using VDS.RDF.Query.Datasets;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
@@ -15,9 +16,16 @@ public sealed partial class KnowledgeGraph
         FederatedSparqlExecutionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var prepared = PrepareFederatedQuery(sparql, options);
+        var prepared = PrepareFederatedQuery(
+            sparql,
+            options,
+            SparqlSafety.IsSelectQuery,
+            ExecuteFederatedSelectRequiresSelectQueryMessage);
+        var localServices = KnowledgeGraphFederatedLocalServiceRegistry.Create(
+            prepared.Options.LocalServiceBindings,
+            prepared.Options.QueryExecutionTimeoutMilliseconds);
         var result = await Task.Run(
-                () => ProcessQuery(prepared.Query, cancellationToken, prepared.Options.QueryExecutionTimeoutMilliseconds),
+                () => ProcessFederatedQuery(prepared.Query, localServices, cancellationToken, prepared.Options.QueryExecutionTimeoutMilliseconds),
                 cancellationToken)
             .ConfigureAwait(false);
         if (result is not SparqlResultSet resultSet)
@@ -33,9 +41,16 @@ public sealed partial class KnowledgeGraph
         FederatedSparqlExecutionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var prepared = PrepareFederatedQuery(sparql, options);
+        var prepared = PrepareFederatedQuery(
+            sparql,
+            options,
+            static queryType => queryType == SparqlQueryType.Ask,
+            ExecuteFederatedAskRequiresAskQueryMessage);
+        var localServices = KnowledgeGraphFederatedLocalServiceRegistry.Create(
+            prepared.Options.LocalServiceBindings,
+            prepared.Options.QueryExecutionTimeoutMilliseconds);
         var result = await Task.Run(
-                () => ProcessQuery(prepared.Query, cancellationToken, prepared.Options.QueryExecutionTimeoutMilliseconds),
+                () => ProcessFederatedQuery(prepared.Query, localServices, cancellationToken, prepared.Options.QueryExecutionTimeoutMilliseconds),
                 cancellationToken)
             .ConfigureAwait(false);
         if (result is not SparqlResultSet resultSet)
@@ -48,7 +63,9 @@ public sealed partial class KnowledgeGraph
 
     private static FederatedPreparedQuery PrepareFederatedQuery(
         string sparql,
-        FederatedSparqlExecutionOptions? options)
+        FederatedSparqlExecutionOptions? options,
+        Func<SparqlQueryType, bool>? expectedQueryType,
+        string? expectedQueryTypeMessage)
     {
         var effectiveOptions = options ?? FederatedSparqlExecutionOptions.Default;
         var safety = SparqlSafety.EnforceReadOnly(sparql, allowFederatedService: true);
@@ -59,7 +76,8 @@ public sealed partial class KnowledgeGraph
 
         var parser = new SparqlQueryParser();
         var query = parser.ParseFromString(safety.Query);
-        var serviceClauses = SparqlSafety.GetLocalServiceClauses(query);
+        EnsureExpectedQueryType(query.QueryType, expectedQueryType, expectedQueryTypeMessage);
+        var serviceClauses = SparqlSafety.GetAllServiceClauses(query);
 
         EnsureSupportedServiceSpecifiers(serviceClauses);
         EnsureAllowlistedEndpoints(serviceClauses, effectiveOptions);
@@ -110,6 +128,27 @@ public sealed partial class KnowledgeGraph
         throw new FederatedSparqlQueryException(
             UnallowlistedServiceEndpointMessagePrefix + string.Join(SupportedExtensionsSeparator, unallowlistedEndpoints),
             unallowlistedEndpoints);
+    }
+
+    private object ProcessFederatedQuery(
+        SparqlQuery query,
+        KnowledgeGraphFederatedLocalServiceRegistry? localServices,
+        CancellationToken cancellationToken,
+        int queryExecutionTimeoutMilliseconds)
+    {
+        if (localServices is null)
+        {
+            return ProcessQuery(query, cancellationToken, queryExecutionTimeoutMilliseconds);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var snapshot = CreateSnapshot();
+        var dataset = new InMemoryDataset(snapshot);
+        var processor = new KnowledgeGraphFederatedQueryProcessor(
+            dataset,
+            localServices,
+            options => options.QueryExecutionTimeout = queryExecutionTimeoutMilliseconds);
+        return processor.ProcessQuery(query);
     }
 
     private sealed record FederatedPreparedQuery(

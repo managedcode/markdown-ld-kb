@@ -12,9 +12,16 @@
 
   <ItemGroup>
     <PackageReference Include="dotNetRdf" />
+    <PackageReference Include="dotNetRdf.Dynamic" />
+    <PackageReference Include="dotNetRdf.Inferencing" />
+    <PackageReference Include="dotNetRdf.Ldf" />
     <PackageReference Include="dotNetRdf.Ontology" />
+    <PackageReference Include="dotNetRdf.Query.FullText" />
     <PackageReference Include="dotNetRdf.Skos" />
     <PackageReference Include="dotNetRdf.Shacl" />
+    <PackageReference Include="ManagedCode.Storage.Core" />
+    <PackageReference Include="ManagedCode.Storage.FileSystem" />
+    <PackageReference Include="ManagedCode.Storage.VirtualFileSystem" />
     <PackageReference Include="Markdig" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />

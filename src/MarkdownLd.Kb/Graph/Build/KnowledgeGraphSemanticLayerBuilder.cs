@@ -102,6 +102,11 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
     {
         foreach (var document in documents)
         {
+            if (!KnowledgeGraphDocumentMaterialization.ShouldMaterialize(document))
+            {
+                continue;
+            }
+
             graph.Assert(new Triple(graph.CreateUriNode(document.DocumentUri), graph.CreateUriNode(RdfTypeUri), graph.CreateUriNode(KbMarkdownDocumentUri)));
         }
 

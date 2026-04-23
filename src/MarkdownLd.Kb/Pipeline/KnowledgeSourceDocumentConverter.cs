@@ -30,9 +30,6 @@ public sealed class KnowledgeSourceDocumentConverter
             [YmlExtension] = YamlMediaType,
         };
 
-    private static readonly IReadOnlyList<string> SupportedExtensions =
-        SupportedMediaTypes.Keys.OrderBy(extension => extension, StringComparer.OrdinalIgnoreCase).ToArray();
-
     public KnowledgeSourceDocument ConvertContent(
         string? content,
         string? path = null,
@@ -52,7 +49,6 @@ public sealed class KnowledgeSourceDocumentConverter
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        EnsureSupportedFile(filePath);
         return await ConvertFileCoreAsync(filePath, null, options, cancellationToken).ConfigureAwait(false);
     }
 
@@ -77,18 +73,11 @@ public sealed class KnowledgeSourceDocumentConverter
                      .OrderBy(filePath => filePath, StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            if (!IsSupportedTextFile(filePath))
+            var document = await TryConvertDirectoryEntryAsync(filePath, directoryPath, options, cancellationToken).ConfigureAwait(false);
+            if (document is not null)
             {
-                if (options?.SkipUnsupportedFiles ?? true)
-                {
-                    continue;
-                }
-
-                throw new NotSupportedException(BuildUnsupportedFileMessage(filePath));
+                yield return document;
             }
-
-            yield return await ConvertFileCoreAsync(filePath, directoryPath, options, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -104,8 +93,9 @@ public sealed class KnowledgeSourceDocumentConverter
         KnowledgeDocumentConversionOptions? options,
         CancellationToken cancellationToken)
     {
-        var encoding = options?.Encoding ?? Encoding.UTF8;
-        var content = await File.ReadAllTextAsync(filePath, encoding, cancellationToken).ConfigureAwait(false);
+        var content = await KnowledgeSourceDocumentTextLoader
+            .ReadTextAsync(filePath, options?.Encoding, cancellationToken)
+            .ConfigureAwait(false);
         var sourcePath = NormalizeSourcePath(filePath, rootDirectory);
 
         return new KnowledgeSourceDocument(
@@ -115,11 +105,19 @@ public sealed class KnowledgeSourceDocumentConverter
             ResolveMediaType(filePath, options?.MediaType));
     }
 
-    private static void EnsureSupportedFile(string filePath)
+    private static async Task<KnowledgeSourceDocument?> TryConvertDirectoryEntryAsync(
+        string filePath,
+        string directoryPath,
+        KnowledgeDocumentConversionOptions? options,
+        CancellationToken cancellationToken)
     {
-        if (!IsSupportedTextFile(filePath))
+        try
         {
-            throw new NotSupportedException(BuildUnsupportedFileMessage(filePath));
+            return await ConvertFileCoreAsync(filePath, directoryPath, options, cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidDataException) when (options?.SkipUnsupportedFiles ?? true)
+        {
+            return null;
         }
     }
 
@@ -143,14 +141,5 @@ public sealed class KnowledgeSourceDocumentConverter
         return !string.IsNullOrWhiteSpace(extension) && SupportedMediaTypes.TryGetValue(extension, out var mediaType)
             ? mediaType
             : PlainTextMediaType;
-    }
-
-    private static string BuildUnsupportedFileMessage(string filePath)
-    {
-        return string.Concat(
-            UnsupportedFileMessagePrefix,
-            Path.GetExtension(filePath),
-            UnsupportedFileMessageSuffix,
-            string.Join(SupportedExtensionsSeparator, SupportedExtensions));
     }
 }

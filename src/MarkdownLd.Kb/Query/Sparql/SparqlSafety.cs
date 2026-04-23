@@ -25,7 +25,6 @@ public static class SparqlSafety
     private const char LineFeedCharacter = '\n';
     private const char CarriageReturnCharacter = '\r';
 
-    private static readonly SparqlQueryParser Parser = new();
     private static readonly Regex MutatingKeywordRegex = new(MutatingKeywordPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     public static SparqlSafetyResult EnforceReadOnly(string query, int defaultLimit = 100, bool allowFederatedService = false)
@@ -40,7 +39,7 @@ public static class SparqlSafety
         SparqlQuery parsed;
         try
         {
-            parsed = Parser.ParseFromString(trimmed);
+            parsed = new SparqlQueryParser().ParseFromString(trimmed);
         }
         catch (Exception ex)
         {
@@ -109,13 +108,23 @@ public static class SparqlSafety
         ArgumentNullException.ThrowIfNull(query);
 
         var clauses = new List<SparqlServiceClause>();
-        CollectLocalServiceClauses(query.RootGraphPattern, clauses, false);
+        CollectServiceClauses(query.RootGraphPattern, clauses, includeNestedServiceClauses: false, insideServiceClause: false);
         return clauses;
     }
 
-    private static void CollectLocalServiceClauses(
+    internal static IReadOnlyList<SparqlServiceClause> GetAllServiceClauses(SparqlQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var clauses = new List<SparqlServiceClause>();
+        CollectServiceClauses(query.RootGraphPattern, clauses, includeNestedServiceClauses: true, insideServiceClause: false);
+        return clauses;
+    }
+
+    private static void CollectServiceClauses(
         GraphPattern? pattern,
         ICollection<SparqlServiceClause> clauses,
+        bool includeNestedServiceClauses,
         bool insideServiceClause)
     {
         if (pattern is null)
@@ -124,14 +133,14 @@ public static class SparqlSafety
         }
 
         var isCurrentServiceClause = pattern.IsService;
-        if (isCurrentServiceClause && !insideServiceClause)
+        if (isCurrentServiceClause && (includeNestedServiceClauses || !insideServiceClause))
         {
             clauses.Add(CreateServiceClause(pattern));
         }
 
         foreach (var childPattern in pattern.ChildGraphPatterns)
         {
-            CollectLocalServiceClauses(childPattern, clauses, insideServiceClause || isCurrentServiceClause);
+            CollectServiceClauses(childPattern, clauses, includeNestedServiceClauses, insideServiceClause || isCurrentServiceClause);
         }
     }
 

@@ -673,7 +673,7 @@ ASK WHERE {
             await Should.ThrowAsync<Exception>(async () => await pipeline.BuildFromDirectoryAsync(root));
 
             var converter = new KnowledgeSourceDocumentConverter();
-            await Should.ThrowAsync<NotSupportedException>(async () =>
+            await Should.ThrowAsync<InvalidDataException>(async () =>
             {
                 await foreach (var _ in converter.ConvertDirectoryAsync(
                                    root,

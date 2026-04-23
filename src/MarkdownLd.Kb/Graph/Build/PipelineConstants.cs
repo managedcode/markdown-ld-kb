@@ -1,6 +1,6 @@
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-internal static class PipelineConstants
+internal static partial class PipelineConstants
 {
     internal const string DefaultBaseUriText = MarkdownKnowledgeDefaults.BaseUriText;
     internal const string DefaultSchemaThing = "schema:Thing";
@@ -69,12 +69,6 @@ internal static class PipelineConstants
     internal const string Hyphen = "-";
     internal const string OpenBracketText = "[";
     internal const string CloseBracketText = "]";
-    internal const string EmptySparqlQueryMessage = "SPARQL query is empty";
-    internal const string ReadOnlySparqlQueryMessage = "SPARQL query is not read-only.";
-    internal const string ExpectedResultSetMessage = "Expected a SPARQL result set.";
-    internal const string MutatingKeywordMessagePrefix = "Mutating keyword '";
-    internal const string MutatingKeywordMessageSuffix = "' is not allowed";
-    internal const string SelectAskOnlyMessagePrefix = "Only ASK and SELECT queries are allowed, not ";
     internal const string SchemaPrefix = "schema";
     internal const string KbPrefix = "kb";
     internal const string ProvPrefix = "prov";
@@ -157,9 +151,6 @@ internal static class PipelineConstants
     internal const string DefaultConceptSchemeLabel = "Markdown-LD Knowledge Bank Concepts";
     internal const string DefaultOntologyLabel = "Markdown-LD Knowledge Bank Ontology";
     internal const string DefaultOntologyComment = "Repository-owned ontology terms for Markdown-derived knowledge graphs.";
-    internal const int DefaultFederatedSparqlTimeoutMilliseconds = 30000;
-    internal const string WikidataMainSparqlEndpointText = "https://query.wikidata.org/sparql";
-    internal const string WikidataScholarlySparqlEndpointText = "https://query-scholarly.wikidata.org/sparql";
     internal const string TitleKey = "title";
     internal const string SummaryKey = "summary";
     internal const string DescriptionKey = "description";
@@ -325,10 +316,10 @@ LIMIT 100
     internal const string YmlExtension = ".yml";
     internal const string AllFilesSearchPattern = "*";
     internal const string ConverterDefaultPath = "document.md";
-    internal const string UnsupportedFileMessagePrefix = "Unsupported text document extension: ";
-    internal const string UnsupportedFileMessageSuffix = ". Supported extensions: ";
-    internal const string SupportedExtensionsSeparator = ", ";
     internal const string DirectoryNotFoundMessagePrefix = "Source directory was not found: ";
+    internal const string UndecodableTextFileMessagePrefix = "Source file could not be decoded as text: ";
+    internal const string UndecodableTextFileMessageSuffix = ". Use an explicit Encoding for non-UTF text or skip unreadable files.";
+    internal const string SupportedExtensionsSeparator = ", ";
     internal const string InvalidFrontMatterMessage = "Markdown front matter is invalid.";
     internal const string MissingFrontMatterTerminatorMessage = "Markdown front matter closing fence is missing.";
     internal const string FrontMatterMappingExpectedMessage = "Markdown front matter must be a YAML mapping.";
@@ -338,6 +329,14 @@ LIMIT 100
     internal const char GreaterThanCharacter = '>';
     internal const char CommaCharacter = ',';
     internal const char SemicolonCharacter = ';';
+    internal const char NullByteCharacter = '\0';
+    internal const char UnicodeByteOrderMarkCharacter = '\uFEFF';
+    internal const byte HorizontalTabByte = 0x09;
+    internal const byte LineFeedByte = 0x0A;
+    internal const byte FormFeedByte = 0x0C;
+    internal const byte CarriageReturnByte = 0x0D;
+    internal const byte SpaceByte = 0x20;
+    internal const byte DeleteControlByte = 0x7F;
 
     internal static readonly Uri SchemaNamespaceUri = new(SchemaNamespaceText);
     internal static readonly Uri KbNamespaceUri = new(KbNamespaceText);

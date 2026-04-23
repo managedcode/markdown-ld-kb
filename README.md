@@ -53,6 +53,12 @@ Tiktoken mode is deterministic and network-free. It uses lexical token-distance 
 - `SerializeDotGraph()` — Graphviz DOT diagram
 - `SerializeTurtle()` — Turtle RDF serialization
 - `SerializeJsonLd()` — JSON-LD serialization
+- `SaveToStoreAsync(store, location, options)` — persist the graph through a graph-store abstraction
+- `SaveToFileAsync(path, options)` — persist the graph as RDF
+- `LoadFromStoreAsync(store, location, options)` — load a graph from a graph-store abstraction
+- `LoadFromFileAsync(path, options)` — load a graph from one RDF file
+- `LoadFromDirectoryAsync(path, options)` — load and merge RDF files from a directory
+- `LoadFromLinkedDataFragmentsAsync(endpoint, options)` — materialize a Linked Data Fragments source into a local graph
 - `ExecuteSelectAsync(sparql)` — read-only SPARQL SELECT returning `SparqlQueryResult`
 - `ExecuteAskAsync(sparql)` — read-only SPARQL ASK returning `bool`
 - `ExecuteFederatedSelectAsync(sparql, options)` — explicit federated read-only SPARQL SELECT with endpoint diagnostics
@@ -61,6 +67,9 @@ Tiktoken mode is deterministic and network-free. It uses lexical token-distance 
 - `ValidateShacl(shapesTurtle)` — SHACL validation against caller-supplied Turtle shapes
 - `SearchAsync(term)` — case-insensitive search across `schema:name`, `schema:description`, and `schema:keywords`, returning matching graph subjects as `SparqlQueryResult`
 - `SearchFocusedAsync(term)` — sparse graph search that returns primary, related, and next-step matches plus a bounded focused graph snapshot
+- `MaterializeInferenceAsync(options)` — explicit RDFS / SKOS / N3-rule materialization
+- `BuildFullTextIndexAsync(options)` — optional Lucene-backed graph full-text index
+- `ToDynamicSnapshot()` — optional dynamic graph access over dotNetRDF dynamic types
 
 All async methods accept an optional `CancellationToken`.
 
@@ -161,7 +170,7 @@ internal static class FileGraphDemo
 }
 ```
 
-`KnowledgeSourceDocumentConverter` supports Markdown and other text-like knowledge inputs: `.md`, `.markdown`, `.mdx`, `.txt`, `.text`, `.log`, `.csv`, `.json`, `.jsonl`, `.yaml`, and `.yml`. Non-Markdown files are accepted as text sources and run through the same parsing, extraction, and graph build pipeline.
+`KnowledgeSourceDocumentConverter` supports Markdown and other text-like knowledge inputs: `.md`, `.markdown`, `.mdx`, `.txt`, `.text`, `.log`, `.csv`, `.json`, `.jsonl`, `.yaml`, and `.yml`. Files with unknown or missing extensions are still accepted when their bytes decode as text, and they are treated as `text/plain`. Truly unreadable binary files are either skipped during directory loads or fail explicitly with `InvalidDataException` when the caller disables skipping.
 
 You do not need to pass a base URI for normal use. Document identity is resolved in this order:
 
@@ -255,6 +264,99 @@ var result = await pipeline.BuildAsync(
         },
     });
 ```
+
+## Graph Runtime Lifecycle
+
+Once a Markdown file or directory has been built into a `KnowledgeGraph`, the same public runtime can persist it through a graph-store abstraction, reload it, materialize inference, expose a full-text index, expose a dynamic snapshot, or materialize a Linked Data Fragments source into the same local graph model.
+
+The runtime now uses `dotNetRdf`, `dotNetRdf.Ontology`, `dotNetRdf.Skos`, `dotNetRdf.Inferencing`, `dotNetRdf.Dynamic`, `dotNetRdf.Query.FullText`, and `dotNetRdf.Ldf` through repository-owned adapters instead of a hand-rolled RDF stack. RDF serialization remains repository-owned; filesystem/blob access is delegated to `ManagedCode.Storage`.
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+
+internal static class GraphRuntimeLifecycleDemo
+{
+    private const string FilePath = "/absolute/path/to/content/query-federation-runbook.md";
+    private const string TurtlePath = "/absolute/path/to/output/runtime-graph.ttl";
+    private const string StorageLocation = "graphs/runtime/runtime-graph.ttl";
+    private const string SchemaPath = "/absolute/path/to/runtime-schema.ttl";
+    private const string RulesPath = "/absolute/path/to/runtime-rules.n3";
+
+    public static async Task RunAsync()
+    {
+        var pipeline = new MarkdownKnowledgePipeline(new Uri("https://kb.example/"));
+        var built = await pipeline.BuildFromFileAsync(FilePath);
+        var memoryStore = new InMemoryKnowledgeGraphStore();
+
+        await built.Graph.SaveToStoreAsync(memoryStore, StorageLocation);
+        var fromMemory = await KnowledgeGraph.LoadFromStoreAsync(memoryStore, StorageLocation);
+        await built.Graph.SaveToFileAsync(TurtlePath);
+        var reloaded = await KnowledgeGraph.LoadFromFileAsync(TurtlePath);
+
+        var inference = await fromMemory.MaterializeInferenceAsync(new KnowledgeGraphInferenceOptions
+        {
+            AdditionalSchemaFilePaths = [SchemaPath],
+            AdditionalN3RuleFilePaths = [RulesPath],
+        });
+
+        using var fullText = await inference.Graph.BuildFullTextIndexAsync();
+        var matches = await fullText.SearchAsync("federated wikidata workflow");
+
+        dynamic dynamicGraph = inference.Graph.ToDynamicSnapshot();
+        dynamic dynamicDocument = dynamicGraph["https://kb.example/query-federation-runbook/"];
+
+        Console.WriteLine(inference.InferredTripleCount);
+        Console.WriteLine(matches.Count);
+        Console.WriteLine(dynamicDocument["https://schema.org/name"].Count);
+        Console.WriteLine(reloaded.TripleCount);
+    }
+}
+```
+
+The built-in graph-store implementations are:
+
+- `FileSystemKnowledgeGraphStore` — local file paths, internally backed by `ManagedCode.Storage.FileSystem`
+- `StorageKnowledgeGraphStore` — any configured `ManagedCode.Storage.Core.IStorage` backend, including blob/object providers
+- `InMemoryKnowledgeGraphStore` — process-local graph persistence without files
+
+DI helpers are available for hosts that want one or more configured stores:
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+using ManagedCode.Storage.FileSystem;
+using ManagedCode.Storage.FileSystem.Extensions;
+using Microsoft.Extensions.DependencyInjection;
+
+var services = new ServiceCollection();
+
+services.AddFileSystemKnowledgeGraphStoreAsDefault(options =>
+{
+    options.BaseFolder = "/absolute/path/to/storage-root";
+    options.CreateContainerIfNotExists = true;
+});
+
+services.AddFileSystemStorage("archive", options =>
+{
+    options.BaseFolder = "/absolute/path/to/archive-root";
+    options.CreateContainerIfNotExists = true;
+});
+services.AddKeyedStorageBackedKnowledgeGraphStore<IFileSystemStorage>("archive");
+```
+
+Use `new InMemoryKnowledgeGraphStore()` for process-local persistence, or `AddVirtualFileSystemKnowledgeGraphStore()` after `AddVirtualFileSystem(...)` when the host already standardizes on a VFS overlay.
+
+The same runtime can also materialize a read-only Triple Pattern Fragments source into a local graph:
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+
+var ldfGraph = await KnowledgeGraph.LoadFromLinkedDataFragmentsAsync(
+    new Uri("https://example.org/tpf"));
+```
+
+If the host needs custom transport settings, pass a caller-owned `HttpClient` through `KnowledgeGraphLinkedDataFragmentsOptions`. Host apps may source that client from `IHttpClientFactory`; the core library intentionally accepts the configured client instance instead of depending on `IHttpClientFactory`.
+
+After materialization, callers use the normal local `ExecuteSelectAsync`, `ExecuteAskAsync`, `SearchAsync`, `ValidateShacl`, persistence, and inference APIs.
 
 ## Optional AI Extraction
 
@@ -386,7 +488,19 @@ LIMIT 100
 
 SPARQL execution is intentionally read-only. `SELECT` and `ASK` are allowed; mutation forms such as `INSERT`, `DELETE`, `LOAD`, `CLEAR`, `DROP`, and `CREATE` are rejected before execution.
 
+The supported query surface is intentionally narrow:
+
+- local read-only queries: `ExecuteSelectAsync` for `SELECT` and `ExecuteAskAsync` for `ASK`
+- explicit federated read-only queries: `ExecuteFederatedSelectAsync` for `SELECT` and `ExecuteFederatedAskAsync` for `ASK`
+- unsupported query types: `CONSTRUCT`, `DESCRIBE`, and all mutation/update forms
+
 The default public SPARQL contract remains local and in-memory. Local `ExecuteSelectAsync` / `ExecuteAskAsync` reject top-level `SERVICE` clauses. Federated queries are explicit through `ExecuteFederatedSelectAsync` / `ExecuteFederatedAskAsync`, require an allowlist or named profile, and currently ship caller-visible endpoint diagnostics through `FederatedSparqlSelectResult` / `FederatedSparqlAskResult`.
+
+This follows the official Wikidata Query Service federation model, where cross-endpoint access is expressed with SPARQL `SERVICE` clauses and endpoint policy stays explicit at the caller boundary. The library ships ready-made profiles for the WDQS main/scholarly split introduced on 9 May 2025:
+
+- `FederatedSparqlProfiles.WikidataMain` allowlists `https://query.wikidata.org/sparql`
+- `FederatedSparqlProfiles.WikidataScholarly` allowlists `https://query-scholarly.wikidata.org/sparql`
+- `FederatedSparqlProfiles.WikidataMainAndScholarly` allowlists both endpoints for multi-endpoint federated queries
 
 ```csharp
 using ManagedCode.MarkdownLd.Kb.Pipeline;
@@ -403,6 +517,50 @@ var federated = await result.Graph.ExecuteFederatedSelectAsync(
 
 Console.WriteLine(federated.ServiceEndpointSpecifiers[0]);
 ```
+
+Use `ExecuteFederatedAskAsync` the same way when the caller needs a read-only federated `ASK` query instead of a result set.
+
+For deterministic multi-graph federation inside the same process, bind allowlisted endpoint URIs to other in-memory `KnowledgeGraph` instances:
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+
+var localOptions = new FederatedSparqlExecutionOptions
+{
+    AllowedServiceEndpoints =
+    [
+        new Uri("https://kb.example/services/policy"),
+        new Uri("https://kb.example/services/runbook"),
+    ],
+    LocalServiceBindings =
+    [
+        new FederatedSparqlLocalServiceBinding(
+            new Uri("https://kb.example/services/policy"),
+            policyGraph),
+        new FederatedSparqlLocalServiceBinding(
+            new Uri("https://kb.example/services/runbook"),
+            runbookGraph),
+    ],
+};
+
+var result = await rootGraph.ExecuteFederatedSelectAsync(
+    """
+    PREFIX schema: <https://schema.org/>
+    SELECT ?policyTitle ?runbookTitle WHERE {
+      SERVICE <https://kb.example/services/policy> {
+        ?policy schema:name ?policyTitle .
+      }
+      SERVICE <https://kb.example/services/runbook> {
+        ?runbook schema:name ?runbookTitle .
+      }
+    }
+    """,
+    localOptions);
+```
+
+This path still uses SPARQL `SERVICE` and the same allowlist checks, but it stays fully in-memory and network-free for test fixtures or host-managed multi-graph workflows.
+
+For the external federation model and current WDQS endpoint split, see the official [Wikidata federated queries guide](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/Federated_queries), the [WDQS graph split note](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/WDQS_graph_split), and the [Wikidata Query Service user manual](https://www.mediawiki.org/wiki/Wikidata_Query_Service/User_Manual/en).
 
 ## Validate With SHACL
 
@@ -626,7 +784,7 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 - Embeddings are not required for the current graph/search flow; Tiktoken mode uses token IDs, not embedding vectors.
 - Microsoft Agent Framework is treated as host-level orchestration, not a core package dependency.
 
-See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md), [ADR-0006](docs/ADR/ADR-0006-federated-sparql-adapter.md), [Graph SHACL Validation](docs/Features/GraphShaclValidation.md), and [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md).
+See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md), [ADR-0006](docs/ADR/ADR-0006-federated-sparql-adapter.md), [Graph Runtime Lifecycle](docs/Features/GraphRuntimeLifecycle.md), [Graph SHACL Validation](docs/Features/GraphShaclValidation.md), and [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md).
 
 ## Inspiration And Attribution
 
@@ -636,6 +794,9 @@ This project is inspired by Luis Quintanilla's Markdown-LD / AI Memex work:
 - [Zero-Cost Knowledge Graph from Markdown](https://lqdev.me/resources/ai-memex/blog-post-zero-cost-knowledge-graph-from-markdown/) - core idea for using Markdown, YAML front matter, LLM extraction, RDF, JSON-LD, Turtle, and SPARQL
 - [Project Report: Entity Extraction & RDF Pipeline](https://lqdev.me/resources/ai-memex/project-report-entity-extraction-rdf-pipeline/) - extraction and RDF pipeline context
 - [W3C SPARQL Federated Query](https://github.com/w3c/sparql-federated-query) - SPARQL federation reference material
+- [Wikidata Federated Queries](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/Federated_queries) - official WDQS `SERVICE` federation guide and examples
+- [Wikidata Query Service User Manual](https://www.mediawiki.org/wiki/Wikidata_Query_Service/User_Manual/en) - official WDQS operational and usage guidance
+- [WDQS Graph Split](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/WDQS_graph_split) - official main/scholarly endpoint split and migration guidance
 - [dotNetRDF](https://github.com/dotnetrdf/dotnetrdf) - RDF/SPARQL/SHACL engine used by this C# implementation
 
 The upstream reference repository is kept as a read-only submodule under `external/lqdev-markdown-ld-kb`.

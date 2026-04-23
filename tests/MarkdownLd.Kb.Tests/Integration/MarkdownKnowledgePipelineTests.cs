@@ -42,6 +42,32 @@ public sealed class MarkdownKnowledgePipelineTests
     private const string ArticleBindingKey = "article";
     private const string EntityBindingKey = "entity";
     private const string NameBindingKey = "name";
+    private const string RepositoryReadmeFileName = "README.md";
+    private const string RepositoryReadmeTitle = "Markdown-LD Knowledge Bank";
+    private const string RepositoryReadmeDocumentUri = "https://example.com/README/";
+    private const string RepositoryReadmeTokenQuery = "RDF SPARQL Markdown graph";
+    private const string RepositoryReadmeTitleBindingKey = "name";
+    private const string RepositoryReadmeInferenceTypeBindingKey = "type";
+    private const string RepositoryReadmeInferenceSchemaText = """
+@prefix ex: <https://example.com/vocab/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <https://schema.org/> .
+
+ex:QueryableKnowledgeAsset a rdfs:Class ;
+  rdfs:subClassOf schema:CreativeWork .
+
+ex:RepositoryReadme a rdfs:Class ;
+  rdfs:subClassOf ex:QueryableKnowledgeAsset .
+""";
+    private const string RepositoryReadmeInferenceRulesText = """
+@prefix ex: <https://example.com/vocab/> .
+@prefix schema: <https://schema.org/> .
+
+{ ?doc a schema:Article ; schema:name "Markdown-LD Knowledge Bank" . } =>
+{ ?doc a ex:RepositoryReadme ;
+       a ex:QueryableKnowledgeAsset ;
+       ex:hasIndexedTitle "Markdown-LD Knowledge Bank" } .
+""";
     private const string InlineMarkdown = """
 ---
 title: Inline Markdown Knowledge
@@ -72,6 +98,36 @@ SELECT ?mention WHERE {
   <https://example.com/2026/04/markdown-ld-knowledge-bank/> schema:mentions ?mention
 }
 ORDER BY ?mention
+""";
+    private const string RepositoryReadmeAskQuery = """
+PREFIX schema: <https://schema.org/>
+ASK WHERE {
+  <https://example.com/README/> a schema:Article ;
+                               schema:name "Markdown-LD Knowledge Bank" .
+}
+""";
+    private const string RepositoryReadmeSelectQuery = """
+PREFIX schema: <https://schema.org/>
+SELECT ?name WHERE {
+  <https://example.com/README/> a schema:Article ;
+                               schema:name ?name .
+}
+""";
+    private const string RepositoryReadmeInferenceAskQuery = """
+PREFIX ex: <https://example.com/vocab/>
+ASK WHERE {
+  <https://example.com/README/> a ex:RepositoryReadme ;
+                               a ex:QueryableKnowledgeAsset ;
+                               ex:hasIndexedTitle "Markdown-LD Knowledge Bank" .
+}
+""";
+    private const string RepositoryReadmeInferenceSelectQuery = """
+PREFIX ex: <https://example.com/vocab/>
+SELECT ?type WHERE {
+  <https://example.com/README/> a ?type .
+  FILTER(?type IN (ex:QueryableKnowledgeAsset, ex:RepositoryReadme))
+}
+ORDER BY ?type
 """;
     private const string SelectDuplicateMentionsQuery = """
 PREFIX schema: <https://schema.org/>
@@ -194,5 +250,101 @@ SELECT ?mention WHERE {
 
         await Should.ThrowAsync<ReadOnlySparqlQueryException>(async () =>
             await result.Graph.ExecuteAskAsync(MutatingInsertDataQuery));
+    }
+
+    [Test]
+    public async Task BuildAsync_does_not_materialize_empty_documents_when_other_documents_exist()
+    {
+        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+        var result = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(ContentPathKnowledgeGraph, FixtureLoader.Read(FixtureKnowledgeGraph)),
+            new MarkdownSourceDocument(ContentPathEmpty, string.Empty),
+        ]);
+
+        var emptyDocumentUri = result.Documents.Single(document => document.SourcePath == ContentPathEmpty).DocumentUri.AbsoluteUri;
+        var emptyDocumentExists = await result.Graph.ExecuteAskAsync(
+            $@"ASK WHERE {{
+  <{emptyDocumentUri}> ?predicate ?object .
+}}");
+
+        emptyDocumentExists.ShouldBeFalse();
+    }
+
+    [Test]
+    public async Task BuildFromFileAsync_builds_the_repository_readme_into_a_queryable_rdf_graph()
+    {
+        var pipeline = new MarkdownKnowledgePipeline(
+            BaseUri,
+            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
+        var readmePath = GetRepositoryRootFilePath(RepositoryReadmeFileName);
+
+        var result = await pipeline.BuildFromFileAsync(readmePath);
+
+        result.Documents.Count.ShouldBe(1);
+        result.Documents[0].SourcePath.ShouldBe(RepositoryReadmeFileName);
+        result.Documents[0].Title.ShouldBe(RepositoryReadmeTitle);
+        result.Documents[0].DocumentUri.AbsoluteUri.ShouldBe(RepositoryReadmeDocumentUri);
+        result.ExtractionMode.ShouldBe(MarkdownKnowledgeExtractionMode.Tiktoken);
+        result.Graph.CanSearchByTokenDistance.ShouldBeTrue();
+
+        (await result.Graph.ExecuteAskAsync(RepositoryReadmeAskQuery)).ShouldBeTrue();
+        var titleRows = await result.Graph.ExecuteSelectAsync(RepositoryReadmeSelectQuery);
+        titleRows.Rows.Count.ShouldBe(1);
+        titleRows.Rows[0].Values[RepositoryReadmeTitleBindingKey].ShouldBe(RepositoryReadmeTitle);
+
+        var tokenMatches = await result.Graph.SearchByTokenDistanceAsync(RepositoryReadmeTokenQuery, 3);
+        tokenMatches.ShouldNotBeEmpty();
+        tokenMatches.Any(match =>
+                match.Text.Contains("RDF", StringComparison.OrdinalIgnoreCase) &&
+                match.Text.Contains("SPARQL", StringComparison.OrdinalIgnoreCase))
+            .ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task BuildFromFileAsync_materializes_inference_over_the_repository_readme_graph()
+    {
+        var pipeline = new MarkdownKnowledgePipeline(
+            BaseUri,
+            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
+        var readmePath = GetRepositoryRootFilePath(RepositoryReadmeFileName);
+
+        var result = await pipeline.BuildFromFileAsync(readmePath);
+        var inference = await result.Graph.MaterializeInferenceAsync(new KnowledgeGraphInferenceOptions
+        {
+            AdditionalSchemaTexts = [RepositoryReadmeInferenceSchemaText],
+            AdditionalN3RuleTexts = [RepositoryReadmeInferenceRulesText],
+        });
+
+        inference.InferredTripleCount.ShouldBeGreaterThan(0);
+        inference.AppliedReasoners.ShouldContain("RDFS");
+        inference.AppliedReasoners.ShouldContain("SKOS");
+        inference.AppliedReasoners.ShouldContain("N3Rules");
+        (await inference.Graph.ExecuteAskAsync(RepositoryReadmeInferenceAskQuery)).ShouldBeTrue();
+
+        var inferredTypes = await inference.Graph.ExecuteSelectAsync(RepositoryReadmeInferenceSelectQuery);
+        inferredTypes.Rows.Count.ShouldBe(2);
+        inferredTypes.Rows.Select(row => row.Values[RepositoryReadmeInferenceTypeBindingKey]).ShouldBe([
+            "https://example.com/vocab/QueryableKnowledgeAsset",
+            "https://example.com/vocab/RepositoryReadme",
+        ]);
+    }
+
+    private static string GetRepositoryRootFilePath(string fileName)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var solutionPath = Path.Combine(directory.FullName, "MarkdownLd.Kb.slnx");
+            if (File.Exists(solutionPath))
+            {
+                var filePath = Path.Combine(directory.FullName, fileName);
+                File.Exists(filePath).ShouldBeTrue();
+                return filePath;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Repository root could not be located from the test base directory.");
     }
 }

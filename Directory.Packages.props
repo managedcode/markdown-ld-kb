@@ -4,11 +4,18 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="dotNetRdf" Version="3.5.1" />
+    <PackageVersion Include="dotNetRdf.Dynamic" Version="3.5.1" />
+    <PackageVersion Include="dotNetRdf.Inferencing" Version="3.5.1" />
+    <PackageVersion Include="dotNetRdf.Ldf" Version="3.5.1" />
     <PackageVersion Include="dotNetRdf.Ontology" Version="3.5.1" />
+    <PackageVersion Include="dotNetRdf.Query.FullText" Version="3.5.1" />
     <PackageVersion Include="dotNetRdf.Skos" Version="3.5.1" />
     <PackageVersion Include="dotNetRdf.Shacl" Version="3.5.1" />
     <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.2" />
     <PackageVersion Include="Markdig" Version="1.1.3" />
+    <PackageVersion Include="ManagedCode.Storage.Core" Version="10.0.5" />
+    <PackageVersion Include="ManagedCode.Storage.FileSystem" Version="10.0.5" />
+    <PackageVersion Include="ManagedCode.Storage.VirtualFileSystem" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.5.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.0" />
     <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.6" />

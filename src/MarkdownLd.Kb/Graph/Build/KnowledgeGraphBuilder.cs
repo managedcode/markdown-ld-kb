@@ -46,7 +46,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
 
     private void AddDocument(Graph graph, MarkdownDocument document)
     {
-        if (document.Sections.Count == 0 && document.FrontMatter.Count == 0 && string.IsNullOrWhiteSpace(document.Body))
+        if (!KnowledgeGraphDocumentMaterialization.ShouldMaterialize(document))
         {
             return;
         }

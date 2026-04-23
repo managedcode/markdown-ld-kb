@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Federated SPARQL execution adds an explicit adapter boundary for read-only `SERVICE` queries against remote SPARQL endpoints such as Wikidata Query Service.
+Federated SPARQL execution adds an explicit adapter boundary for read-only `SERVICE` queries against remote SPARQL endpoints such as Wikidata Query Service and against caller-bound local in-memory graphs.
 
 The canonical graph remains the local in-memory `KnowledgeGraph`. Federation is an opt-in query adapter for cases where the caller knowingly needs remote RDF data or a cross-endpoint join.
 
@@ -12,6 +12,7 @@ In scope:
 
 - explicit read-only federated query execution through `ExecuteFederatedSelectAsync` and `ExecuteFederatedAskAsync`
 - endpoint allowlists and endpoint profiles
+- deterministic local service bindings for multi-graph in-memory federation
 - caller-visible endpoint diagnostics
 - timeout and cancellation-aware behavior
 - Wikidata-specific profiles for main and scholarly endpoints
@@ -44,10 +45,12 @@ flowchart LR
     Local --> Graph["In-memory RDF graph"]
     Fed --> Policy["Allowlist + timeout + diagnostics policy"]
     Policy --> Engine["dotNetRDF SERVICE execution"]
+    Engine --> LocalBindings["Allowlisted local service bindings"]
     Engine --> WdqsMain["WDQS main endpoint"]
     Engine --> WdqsScholarly["WDQS scholarly endpoint"]
     Engine --> Other["Other allowlisted SPARQL endpoints"]
     Graph --> LocalResult["Local query result"]
+    LocalBindings --> FedResult["Federated query result"]
     WdqsMain --> FedResult["Federated query result"]
     WdqsScholarly --> FedResult
     Other --> FedResult
@@ -59,13 +62,14 @@ flowchart LR
 2. Federated execution must remain read-only. Only `SELECT` and `ASK` are allowed.
 3. The adapter must reject mutating verbs and unsafe SPARQL forms before execution.
 4. The adapter must reject remote endpoints that are not explicitly allowlisted by the caller or by a named profile.
-5. The adapter must expose caller-visible diagnostics that name each locally executed remote endpoint.
-6. The adapter must support cancellation and bounded timeout budgets.
-7. Local query methods must reject top-level `SERVICE` clauses.
-8. The adapter must reject variable or non-absolute local `SERVICE` specifiers.
-9. Remote failures must fail closed by default.
-10. The adapter must not automatically use legacy Wikidata full-graph endpoints as the default strategy.
-11. The adapter must not change Markdown ingestion, graph build determinism, or local SPARQL execution semantics.
+5. Local service bindings must also stay behind the same allowlist boundary; a bound in-memory graph must not bypass endpoint policy.
+6. The adapter must expose caller-visible diagnostics that name each locally executed service endpoint.
+7. The adapter must support cancellation and bounded timeout budgets.
+8. Local query methods must reject top-level `SERVICE` clauses.
+9. The adapter must reject variable or non-absolute local `SERVICE` specifiers.
+10. Remote failures must fail closed by default.
+11. The adapter must not automatically use legacy Wikidata full-graph endpoints as the default strategy.
+12. The adapter must not change Markdown ingestion, graph build determinism, or local SPARQL execution semantics.
 
 ## Endpoint Profiles
 
@@ -94,14 +98,20 @@ sequenceDiagram
     participant Adapter as Federated SPARQL adapter
     participant Policy as Allowlist and diagnostics policy
     participant Engine as dotNetRDF SERVICE execution
+    participant Local as Allowlisted local KnowledgeGraph binding
     participant Remote as WDQS / allowlisted endpoint
 
     Caller->>Adapter: ExecuteFederatedSelectAsync(query, options)
     Adapter->>Policy: Validate query shape and endpoints
     Policy-->>Adapter: Approved query plan
     Adapter->>Engine: Execute read-only query
-    Engine->>Remote: Issue SERVICE request(s)
-    Remote-->>Engine: SPARQL results
+    alt local binding
+        Engine->>Local: Issue SERVICE subquery
+        Local-->>Engine: SPARQL results
+    else remote endpoint
+        Engine->>Remote: Issue SERVICE request(s)
+        Remote-->>Engine: SPARQL results
+    end
     Engine-->>Adapter: Result set
     Adapter-->>Caller: Rows + endpoint diagnostics
 ```
@@ -136,6 +146,7 @@ sequenceDiagram
 
 - The local graph remains authoritative for Markdown-derived knowledge.
 - Federation supplements query-time access; it does not mutate the local graph automatically.
+- Local service bindings give hosts and tests a deterministic way to federate across multiple in-memory graphs without network access.
 - The adapter may expose endpoint profiles, but it does not own remote dataset semantics.
 - Wikidata federation often needs explicit graph-shape knowledge and endpoint selection because WDQS split the main and scholarly graphs in 2025.
 
@@ -151,6 +162,9 @@ Current verification focus:
 - deterministic tests for endpoint allowlist enforcement
 - deterministic tests for unsupported variable `SERVICE` specifiers
 - deterministic tests for Wikidata profile selection
+- deterministic tests for one-query multi-graph federation across five local graphs
+- deterministic tests for federated `ASK` across multiple local graphs
+- deterministic tests that local service bindings do not bypass the allowlist
 
 ## Definition Of Done
 
@@ -159,4 +173,5 @@ Current verification focus:
 - Endpoint allowlist/profile behavior is explicit and testable.
 - Endpoint diagnostics are caller-visible.
 - Wikidata main/scholarly profile behavior is documented and testable.
+- Deterministic local multi-graph federation is documented and testable.
 - Local graph build determinism and local SPARQL semantics remain unchanged.

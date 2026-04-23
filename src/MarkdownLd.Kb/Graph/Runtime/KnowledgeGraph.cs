@@ -9,7 +9,7 @@ using StringWriter = System.IO.StringWriter;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed partial class KnowledgeGraph
+public sealed partial class KnowledgeGraph : IDisposable
 {
     private readonly Graph _graph;
     private readonly ReaderWriterLockSlim _graphLock = new();
@@ -50,7 +50,12 @@ public sealed partial class KnowledgeGraph
 
     public async Task<SparqlQueryResult> ExecuteSelectAsync(string sparql, CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteQueryAsync(sparql, cancellationToken).ConfigureAwait(false);
+        var result = await ExecuteQueryAsync(
+                sparql,
+                cancellationToken,
+                SparqlSafety.IsSelectQuery,
+                ExecuteSelectRequiresSelectQueryMessage)
+            .ConfigureAwait(false);
         if (result is not SparqlResultSet resultSet)
         {
             throw new InvalidOperationException(ExpectedResultSetMessage);
@@ -61,7 +66,12 @@ public sealed partial class KnowledgeGraph
 
     public async Task<bool> ExecuteAskAsync(string sparql, CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteQueryAsync(sparql, cancellationToken).ConfigureAwait(false);
+        var result = await ExecuteQueryAsync(
+                sparql,
+                cancellationToken,
+                static queryType => queryType == SparqlQueryType.Ask,
+                ExecuteAskRequiresAskQueryMessage)
+            .ConfigureAwait(false);
         if (result is not SparqlResultSet resultSet)
         {
             throw new InvalidOperationException(ExpectedResultSetMessage);
@@ -163,7 +173,11 @@ public sealed partial class KnowledgeGraph
         }
     }
 
-    private async Task<object> ExecuteQueryAsync(string sparql, CancellationToken cancellationToken)
+    private async Task<object> ExecuteQueryAsync(
+        string sparql,
+        CancellationToken cancellationToken,
+        Func<SparqlQueryType, bool>? expectedQueryType = null,
+        string? expectedQueryTypeMessage = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var safety = SparqlSafety.EnforceReadOnly(sparql);
@@ -179,7 +193,20 @@ public sealed partial class KnowledgeGraph
             throw new ReadOnlySparqlQueryException(SelectAskOnlyMessagePrefix + query.QueryType);
         }
 
+        EnsureExpectedQueryType(query.QueryType, expectedQueryType, expectedQueryTypeMessage);
+
         return await Task.Run(() => ProcessQuery(query, cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void EnsureExpectedQueryType(
+        SparqlQueryType queryType,
+        Func<SparqlQueryType, bool>? expectedQueryType,
+        string? expectedQueryTypeMessage)
+    {
+        if (expectedQueryType is not null && !expectedQueryType(queryType))
+        {
+            throw new ReadOnlySparqlQueryException(expectedQueryTypeMessage ?? ReadOnlySparqlQueryMessage);
+        }
     }
 
     private void MergeSnapshot(Graph graph, CancellationToken cancellationToken)
@@ -198,7 +225,7 @@ public sealed partial class KnowledgeGraph
         }
     }
 
-    private Graph CreateSnapshot()
+    internal Graph CreateSnapshot()
     {
         _graphLock.EnterReadLock();
         try
@@ -261,7 +288,7 @@ public sealed partial class KnowledgeGraph
         return new SparqlQueryResult(variables, rows);
     }
 
-    private static string RenderNode(INode node)
+    internal static string RenderNode(INode node)
     {
         return node switch
         {
@@ -278,5 +305,10 @@ public sealed partial class KnowledgeGraph
             .Replace(QuoteText, EscapedQuoteText, StringComparison.Ordinal)
             .Replace('\r', ' ')
             .Replace('\n', ' ');
+    }
+
+    public void Dispose()
+    {
+        _graphLock.Dispose();
     }
 }

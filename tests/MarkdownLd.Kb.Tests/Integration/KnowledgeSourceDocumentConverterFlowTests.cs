@@ -1,3 +1,4 @@
+using System.Text;
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 using Shouldly;
 
@@ -11,10 +12,16 @@ public sealed class KnowledgeSourceDocumentConverterFlowTests
     private const string NoteFileName = "note.md";
     private const string NoteRelativePath = "docs/note.md";
     private const string PlainFileName = "plain.txt";
+    private const string UnknownTextFileName = "notes.knowledge";
     private const string IgnoredBinaryFileName = "ignored.bin";
     private const string DirectFileName = "direct.md";
     private const string DefaultDocumentPath = "document.md";
     private const string NoExtensionFileName = "README";
+    private const string Utf8BomFileName = "utf8-bom.md";
+    private const string Utf16FileName = "utf16.txt";
+    private const string EmptyFileName = "empty.txt";
+    private const string Latin1FileName = "latin1.knowledge";
+    private const string InvalidUtf8FileName = "invalid.knowledge";
     private const string MissingDirectoryName = "missing";
     private const string CustomMediaType = "application/x-custom-markdown";
     private const string CustomMediaTypeWithPadding = " application/x-custom-markdown ";
@@ -24,6 +31,12 @@ public sealed class KnowledgeSourceDocumentConverterFlowTests
     private const string TextPlainMediaType = "text/plain";
     private const string FileGraphTitle = "File Graph";
     private const string PlainTitle = "plain";
+    private const string UnknownPlainTitle = "notes";
+    private const string ReadmeTitle = "README";
+    private const string Utf8BomTitle = "UTF8 BOM";
+    private const string Utf16Title = "utf16";
+    private const string EmptyTitle = "empty";
+    private const string Latin1SearchTerm = "café";
     private const string RdfSearchTerm = "rdf";
     private const string SparqlSearchTerm = "sparql";
     private const string SparqlEntityLabel = "SPARQL";
@@ -49,6 +62,25 @@ File Graph --mentions--> RDF
     private const string PlainTextFixture = """
 plain --mentions--> RDF
 """;
+    private const string UnknownPlainTextFixture = """
+plain --mentions--> RDF
+""";
+    private const string ReadmePlainTextFixture = """
+README --mentions--> RDF
+""";
+    private const string Utf8BomMarkdownFixture = """
+---
+title: UTF8 BOM
+---
+UTF8 BOM --mentions--> RDF
+""";
+    private const string Utf16PlainTextFixture = """
+utf16 --mentions--> RDF
+""";
+    private const string Latin1PlainTextFixture = """
+café --mentions--> RDF
+""";
+    private static readonly byte[] InvalidUtf8Fixture = [0xC3, 0x28];
     private const string DirectMarkdownFixture = """
 ---
 title: Direct File
@@ -136,8 +168,8 @@ ASK WHERE {
 }
 """;
 
-    private static readonly string[] ConverterExpectedPaths = [NoteRelativePath, PlainFileName];
-    private static readonly string[] ConverterExpectedMediaTypes = [TextMarkdownMediaType, TextPlainMediaType];
+    private static readonly string[] ConverterExpectedPaths = [NoteRelativePath, UnknownTextFileName, PlainFileName, NoExtensionFileName];
+    private static readonly string[] ConverterExpectedMediaTypes = [TextMarkdownMediaType, TextPlainMediaType, TextPlainMediaType, TextPlainMediaType];
     private static readonly byte[] BinaryFixture = [0, 1, 2, 3];
     private static readonly string[] ManyExpectedPaths =
     [
@@ -182,10 +214,14 @@ ASK WHERE {
 
             var markdownPath = Path.Combine(docs, NoteFileName);
             var textPath = Path.Combine(root, PlainFileName);
+            var unknownTextPath = Path.Combine(root, UnknownTextFileName);
+            var noExtensionPath = Path.Combine(root, NoExtensionFileName);
             var binaryPath = Path.Combine(root, IgnoredBinaryFileName);
 
             await File.WriteAllTextAsync(markdownPath, FileGraphMarkdown);
             await File.WriteAllTextAsync(textPath, PlainTextFixture);
+            await File.WriteAllTextAsync(unknownTextPath, UnknownPlainTextFixture);
+            await File.WriteAllTextAsync(noExtensionPath, ReadmePlainTextFixture);
             await File.WriteAllBytesAsync(binaryPath, BinaryFixture);
 
             var converter = new KnowledgeSourceDocumentConverter();
@@ -199,16 +235,18 @@ ASK WHERE {
             documents.Select(document => document.Path).ShouldBe(ConverterExpectedPaths);
             documents.Select(document => document.MediaType).ShouldBe(ConverterExpectedMediaTypes);
 
-            await Should.ThrowAsync<NotSupportedException>(async () => await converter.ConvertFileAsync(binaryPath));
+            await Should.ThrowAsync<InvalidDataException>(async () => await converter.ConvertFileAsync(binaryPath));
 
             var pipeline = new MarkdownKnowledgePipeline(
                 new Uri(BaseUriText),
                 extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
             var result = await pipeline.BuildAsync(documents);
 
-            result.Documents.Count.ShouldBe(2);
+            result.Documents.Count.ShouldBe(4);
             result.Documents.Any(document => document.Title == FileGraphTitle).ShouldBeTrue();
             result.Documents.Any(document => document.Title == PlainTitle).ShouldBeTrue();
+            result.Documents.Any(document => document.Title == UnknownPlainTitle).ShouldBeTrue();
+            result.Documents.Any(document => document.Title == ReadmeTitle).ShouldBeTrue();
 
             var rows = await result.Graph.SearchAsync(RdfSearchTerm);
             rows.Rows.Count.ShouldBeGreaterThan(0);
@@ -242,6 +280,13 @@ ASK WHERE {
             defaultDocument.MediaType.ShouldBe(CustomMediaType);
             KnowledgeSourceDocumentConverter.IsSupportedTextFile(NoExtensionFileName).ShouldBeFalse();
 
+            var noExtensionPath = Path.Combine(root, NoExtensionFileName);
+            await File.WriteAllTextAsync(noExtensionPath, ReadmePlainTextFixture);
+            var noExtensionDocument = await converter.ConvertFileAsync(noExtensionPath);
+            noExtensionDocument.Path.ShouldBe(NoExtensionFileName);
+            noExtensionDocument.MediaType.ShouldBe(TextPlainMediaType);
+            noExtensionDocument.Content.ShouldContain(ReadmeTitle);
+
             await Should.ThrowAsync<DirectoryNotFoundException>(async () =>
             {
                 await foreach (var _ in converter.ConvertDirectoryAsync(Path.Combine(root, MissingDirectoryName)))
@@ -252,7 +297,7 @@ ASK WHERE {
             var unsupportedPath = Path.Combine(root, IgnoredBinaryFileName);
             await File.WriteAllBytesAsync(unsupportedPath, BinaryFixture);
 
-            await Should.ThrowAsync<NotSupportedException>(async () =>
+            await Should.ThrowAsync<InvalidDataException>(async () =>
             {
                 await foreach (var _ in converter.ConvertDirectoryAsync(
                                    root,
@@ -276,7 +321,9 @@ ASK WHERE {
         try
         {
             var filePath = Path.Combine(root, DirectFileName);
+            var noExtensionPath = Path.Combine(root, NoExtensionFileName);
             await File.WriteAllTextAsync(filePath, DirectMarkdownFixture);
+            await File.WriteAllTextAsync(noExtensionPath, ReadmePlainTextFixture);
 
             var pipeline = new MarkdownKnowledgePipeline(
                 new Uri(BaseUriText),
@@ -285,8 +332,13 @@ ASK WHERE {
             fileResult.Documents.Single().SourcePath.ShouldBe(DirectFileName);
             fileResult.Facts.Entities.Any(entity => entity.Label.Contains(SparqlEntityLabel, StringComparison.Ordinal)).ShouldBeTrue();
 
+            var noExtensionResult = await pipeline.BuildFromFileAsync(noExtensionPath);
+            noExtensionResult.Documents.Single().SourcePath.ShouldBe(NoExtensionFileName);
+            var noExtensionQuery = await noExtensionResult.Graph.SearchAsync(RdfSearchTerm);
+            noExtensionQuery.Rows.Count.ShouldBeGreaterThan(0);
+
             var directoryResult = await pipeline.BuildFromDirectoryAsync(root);
-            directoryResult.Documents.Single().SourcePath.ShouldBe(DirectFileName);
+            directoryResult.Documents.Select(document => document.SourcePath).ShouldBe([DirectFileName, NoExtensionFileName]);
             var query = await directoryResult.Graph.SearchAsync(SparqlSearchTerm);
             query.Rows.Count.ShouldBeGreaterThan(0);
         }
@@ -323,5 +375,94 @@ ASK WHERE {
         {
             Directory.Delete(root, true);
         }
+    }
+
+    [Test]
+    public async Task Converter_reads_bom_encoded_and_empty_text_files_into_queryable_documents()
+    {
+        var root = Path.Combine(Path.GetTempPath(), string.Concat(TempDirectoryPrefix, Guid.NewGuid().ToString(GuidFormat)));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var utf8BomPath = Path.Combine(root, Utf8BomFileName);
+            var utf16Path = Path.Combine(root, Utf16FileName);
+            var emptyPath = Path.Combine(root, EmptyFileName);
+
+            await File.WriteAllBytesAsync(utf8BomPath, CreateEncodedBytes(new UTF8Encoding(true), Utf8BomMarkdownFixture));
+            await File.WriteAllBytesAsync(utf16Path, CreateEncodedBytes(new UnicodeEncoding(false, true), Utf16PlainTextFixture));
+            await File.WriteAllBytesAsync(emptyPath, []);
+
+            var converter = new KnowledgeSourceDocumentConverter();
+            var utf8BomDocument = await converter.ConvertFileAsync(utf8BomPath);
+            var utf16Document = await converter.ConvertFileAsync(utf16Path);
+            var emptyDocument = await converter.ConvertFileAsync(emptyPath);
+
+            utf8BomDocument.Content.StartsWith("\uFEFF", StringComparison.Ordinal).ShouldBeFalse();
+            utf16Document.Content.StartsWith("\uFEFF", StringComparison.Ordinal).ShouldBeFalse();
+            emptyDocument.Content.ShouldBeEmpty();
+
+            var pipeline = new MarkdownKnowledgePipeline(
+                new Uri(BaseUriText),
+                extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
+            var result = await pipeline.BuildAsync([utf8BomDocument, utf16Document, emptyDocument]);
+
+            result.Documents.Select(document => document.Title).ShouldBe([Utf8BomTitle, Utf16Title, EmptyTitle]);
+            var rows = await result.Graph.SearchAsync(RdfSearchTerm);
+            rows.Rows.Count.ShouldBeGreaterThan(0);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Test]
+    public async Task Converter_uses_explicit_encoding_for_non_utf_text_and_rejects_invalid_utf8_bytes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), string.Concat(TempDirectoryPrefix, Guid.NewGuid().ToString(GuidFormat)));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var latin1Path = Path.Combine(root, Latin1FileName);
+            var invalidUtf8Path = Path.Combine(root, InvalidUtf8FileName);
+
+            await File.WriteAllBytesAsync(latin1Path, Encoding.Latin1.GetBytes(Latin1PlainTextFixture));
+            await File.WriteAllBytesAsync(invalidUtf8Path, InvalidUtf8Fixture);
+
+            var converter = new KnowledgeSourceDocumentConverter();
+            var latin1Document = await converter.ConvertFileAsync(
+                latin1Path,
+                new KnowledgeDocumentConversionOptions
+                {
+                    Encoding = Encoding.Latin1,
+                });
+
+            latin1Document.MediaType.ShouldBe(TextPlainMediaType);
+
+            var pipeline = new MarkdownKnowledgePipeline(
+                new Uri(BaseUriText),
+                extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
+            var result = await pipeline.BuildAsync([latin1Document]);
+            var search = await result.Graph.SearchAsync(Latin1SearchTerm);
+            search.Rows.Count.ShouldBeGreaterThan(0);
+
+            await Should.ThrowAsync<InvalidDataException>(async () => await converter.ConvertFileAsync(invalidUtf8Path));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    private static byte[] CreateEncodedBytes(Encoding encoding, string content)
+    {
+        var preamble = encoding.GetPreamble();
+        var payload = encoding.GetBytes(content);
+        var bytes = new byte[preamble.Length + payload.Length];
+        Buffer.BlockCopy(preamble, 0, bytes, 0, preamble.Length);
+        Buffer.BlockCopy(payload, 0, bytes, preamble.Length, payload.Length);
+        return bytes;
     }
 }

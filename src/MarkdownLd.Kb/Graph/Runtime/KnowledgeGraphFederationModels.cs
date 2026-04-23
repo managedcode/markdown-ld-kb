@@ -8,6 +8,8 @@ public sealed record FederatedSparqlExecutionOptions
 
     public IReadOnlyList<Uri> AllowedServiceEndpoints { get; init; } = [];
 
+    public IReadOnlyList<FederatedSparqlLocalServiceBinding> LocalServiceBindings { get; init; } = [];
+
     public int QueryExecutionTimeoutMilliseconds { get; init; } = DefaultFederatedSparqlTimeoutMilliseconds;
 }
 
@@ -36,6 +38,10 @@ public sealed record FederatedSparqlSelectResult(
 public sealed record FederatedSparqlAskResult(
     bool Result,
     IReadOnlyList<string> ServiceEndpointSpecifiers);
+
+public sealed record FederatedSparqlLocalServiceBinding(
+    Uri EndpointUri,
+    KnowledgeGraph Graph);
 
 public sealed class FederatedSparqlQueryException(string message, IReadOnlyList<string> serviceEndpointSpecifiers)
     : InvalidOperationException(message)
