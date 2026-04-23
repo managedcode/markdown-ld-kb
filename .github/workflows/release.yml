@@ -32,33 +32,25 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    - name: Extract version from Directory.Build.props
+    - name: Extract evaluated package version
       id: version
       shell: bash
       run: |
         set -euo pipefail
-        VERSION="$(python3 - <<'PY'
-        import xml.etree.ElementTree as ET
-
-        root = ET.parse("Directory.Build.props").getroot()
-
-        def read(name: str) -> str:
-            for element in root.iter():
-                if element.tag.endswith(name) and element.text and element.text.strip():
-                    return element.text.strip()
-            return ""
-
-        print(read("PackageVersion") or read("Version"))
-        PY
-        )"
+        PROJECT_PATH="src/MarkdownLd.Kb/MarkdownLd.Kb.csproj"
+        VERSION="$(dotnet msbuild "${PROJECT_PATH}" -nologo -getProperty:PackageVersion | tr -d '\r')"
 
         if [ -z "${VERSION}" ]; then
-          echo "::error::Could not read <PackageVersion>/<Version> from Directory.Build.props"
+          VERSION="$(dotnet msbuild "${PROJECT_PATH}" -nologo -getProperty:Version | tr -d '\r')"
+        fi
+
+        if [ -z "${VERSION}" ]; then
+          echo "::error::Could not evaluate PackageVersion/Version from ${PROJECT_PATH}"
           exit 1
         fi
 
         echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
-        echo "Version from Directory.Build.props: ${VERSION}"
+        echo "Resolved package version: ${VERSION}"
 
     - name: Restore dependencies
       run: dotnet restore ${{ env.SOLUTION }}
