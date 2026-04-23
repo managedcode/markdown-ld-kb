@@ -587,9 +587,25 @@ internal static class ShaclValidationDemo
 }
 ```
 
-`ValidateShacl()` uses default Markdown-LD Knowledge Bank shapes backed by `dotNetRdf.Shacl`. The default shapes validate article names, entity names, `schema:sameAs` IRIs, provenance IRIs, and assertion confidence metadata.
+`ValidateShacl()` uses default Markdown-LD Knowledge Bank shapes backed by `dotNetRdf.Shacl`. The default shapes validate article names, entity names, `schema:sameAs` IRIs, provenance IRIs, and assertion confidence metadata when reified assertion metadata is present.
 
-Graph assertions remain direct RDF edges for existing SPARQL and search callers. Each assertion also gets RDF reification metadata as an `rdf:Statement` with `rdf:subject`, `rdf:predicate`, `rdf:object`, `kb:confidence`, and optional `prov:wasDerivedFrom`, so SHACL can validate assertion metadata without changing the query shape of the main graph.
+Graph assertions always remain direct RDF edges for existing SPARQL and search callers. Reified assertion metadata is now an explicit throughput trade-off:
+
+- default builds keep only the direct RDF edges, which is the fast path for large Markdown corpora and tokenized graphs
+- opt in to RDF reification when the caller needs `rdf:Statement` metadata with `rdf:subject`, `rdf:predicate`, `rdf:object`, `kb:confidence`, and optional `prov:wasDerivedFrom`
+
+Use `KnowledgeGraphBuildOptions.IncludeAssertionReification = true` when assertion-level provenance and confidence triples must be queryable:
+
+```csharp
+var pipeline = new MarkdownKnowledgePipeline(new MarkdownKnowledgePipelineOptions
+{
+    BaseUri = new Uri("https://kb.example/"),
+    BuildOptions = new KnowledgeGraphBuildOptions
+    {
+        IncludeAssertionReification = true,
+    },
+});
+```
 
 Pass custom Turtle shapes when the host application needs stricter rules:
 

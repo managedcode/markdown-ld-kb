@@ -14,10 +14,11 @@ The feature uses `dotNetRdf.Shacl` over the in-memory `KnowledgeGraph`. It does 
 flowchart LR
     Markdown["Markdown documents"] --> Pipeline["MarkdownKnowledgePipeline"]
     Pipeline --> Facts["Merged entities and assertions"]
-    Facts --> Reification["Direct RDF edges plus rdf:Statement metadata"]
-    Reification --> Graph["KnowledgeGraph"]
+    Facts --> Graph["KnowledgeGraph"]
+    Graph --> Reification["Optional rdf:Statement metadata"]
     Shapes["Default or caller SHACL shapes"] --> Validator["dotNetRDF ShapesGraph"]
     Graph --> Validator
+    Reification --> Validator
     Validator --> Report["KnowledgeGraphShaclValidationReport"]
     Report --> Caller["Caller"]
 ```
@@ -30,18 +31,18 @@ The built-in shapes graph validates:
 - common entity classes have `schema:name`.
 - `schema:sameAs` values are IRIs.
 - `prov:wasDerivedFrom` values are IRIs.
-- reified `rdf:Statement` assertion metadata has one IRI subject, predicate, object, and a decimal `kb:confidence` from 0 through 1.
+- reified `rdf:Statement` assertion metadata, when included, has one IRI subject, predicate, object, and a decimal `kb:confidence` from 0 through 1.
 
 Callers can pass custom Turtle SHACL shapes to `KnowledgeGraph.ValidateShacl(shapesTurtle)` or `MarkdownKnowledgeBuildResult.ValidateShacl(shapesTurtle)`.
 
 ## Assertion Metadata
 
-Graph assertions remain direct RDF edges for existing SPARQL/search callers. Each assertion also receives RDF reification metadata:
+Graph assertions remain direct RDF edges for existing SPARQL/search callers. RDF reification metadata is optional and controlled by `KnowledgeGraphBuildOptions.IncludeAssertionReification`.
 
 ```mermaid
 flowchart TB
     Subject["subject IRI"] -->|"direct predicate"| Object["object IRI"]
-    Statement["blank rdf:Statement"] -->|"rdf:subject"| Subject
+    Statement["optional blank rdf:Statement"] -->|"rdf:subject"| Subject
     Statement -->|"rdf:predicate"| Predicate["predicate IRI"]
     Statement -->|"rdf:object"| Object
     Statement -->|"kb:confidence"| Confidence["xsd:decimal"]

@@ -33,10 +33,9 @@ graph_entities:
 The document describes ontology-backed and SKOS-backed graph construction.
 """;
 
-    private const string SemanticAskQuery = """
+    private const string SemanticDirectEdgesAskQuery = """
 PREFIX schema: <https://schema.org/>
 PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
-PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 ASK WHERE {
@@ -65,7 +64,13 @@ ASK WHERE {
   kb:KnowledgeConcept rdfs:subClassOf skos:Concept .
   kb:memberOf rdfs:domain schema:Thing ;
     rdfs:range kb:KnowledgeConcept .
+}
+""";
 
+    private const string SemanticReifiedAssertionAskQuery = """
+PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+ASK WHERE {
   ?statement a kb:KnowledgeAssertion ;
     rdf:subject <https://kb.example/docs/semantic-graph/> ;
     rdf:predicate kb:memberOf ;
@@ -77,7 +82,6 @@ ASK WHERE {
 PREFIX schema: <https://schema.org/>
 PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
-PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 ASK WHERE {
@@ -98,7 +102,13 @@ ASK WHERE {
 
   <https://kb.example/id/federated-queries> a skos:Concept ;
     skos:exactMatch <https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/Federated_queries> .
+}
+""";
 
+    private const string SemanticFileReifiedAssertionAskQuery = """
+PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+ASK WHERE {
   ?statement a kb:KnowledgeAssertion ;
     rdf:subject <https://kb.example/semantic-graph/> ;
     rdf:predicate kb:memberOf ;
@@ -107,7 +117,7 @@ ASK WHERE {
 """;
 
     [Test]
-    public async Task Pipeline_builds_additive_ontology_and_skos_layers_from_markdown_graph_rules()
+    public async Task Default_pipeline_builds_direct_semantic_edges_without_reified_assertions()
     {
         var pipeline = new MarkdownKnowledgePipeline(BaseUri);
 
@@ -117,14 +127,28 @@ ASK WHERE {
 
         result.Documents.Single().DocumentUri.AbsoluteUri.ShouldBe(SemanticDocumentUri);
 
-        var ask = await result.Graph.ExecuteAskAsync(SemanticAskQuery);
+        var ask = await result.Graph.ExecuteAskAsync(SemanticDirectEdgesAskQuery);
 
         ask.ShouldBeTrue();
+        (await result.Graph.ExecuteAskAsync(SemanticReifiedAssertionAskQuery)).ShouldBeFalse();
 
         var turtle = result.Graph.SerializeTurtle();
         turtle.ShouldContain("skos:ConceptScheme");
         turtle.ShouldContain("kb:KnowledgeConcept");
         turtle.ShouldContain("Knowledge Graph");
+    }
+
+    [Test]
+    public async Task Pipeline_can_opt_in_to_reified_assertion_metadata_for_semantic_layers()
+    {
+        var pipeline = CreateReifiedPipeline();
+
+        var result = await pipeline.BuildAsync([
+            new MarkdownSourceDocument(SemanticPath, SemanticMarkdown),
+        ]);
+
+        (await result.Graph.ExecuteAskAsync(SemanticDirectEdgesAskQuery)).ShouldBeTrue();
+        (await result.Graph.ExecuteAskAsync(SemanticReifiedAssertionAskQuery)).ShouldBeTrue();
     }
 
     [Test]
@@ -134,17 +158,30 @@ ASK WHERE {
         var filePath = Path.Combine(temp.RootPath, SemanticFileName);
         await File.WriteAllTextAsync(filePath, SemanticMarkdown);
 
-        var pipeline = new MarkdownKnowledgePipeline(BaseUri);
+        var pipeline = CreateReifiedPipeline();
         var result = await pipeline.BuildFromFileAsync(filePath);
 
         result.Documents.Single().SourcePath.ShouldBe(SemanticFileName);
         result.Documents.Single().DocumentUri.AbsoluteUri.ShouldBe(SemanticFileDocumentUri);
         (await result.Graph.ExecuteAskAsync(SemanticFileAskQuery)).ShouldBeTrue();
+        (await result.Graph.ExecuteAskAsync(SemanticFileReifiedAssertionAskQuery)).ShouldBeTrue();
 
         var turtle = result.Graph.SerializeTurtle();
         turtle.ShouldContain("owl:Ontology");
         turtle.ShouldContain("skos:ConceptScheme");
         turtle.ShouldContain("kb:MarkdownDocument");
+    }
+
+    private static MarkdownKnowledgePipeline CreateReifiedPipeline()
+    {
+        return new MarkdownKnowledgePipeline(new MarkdownKnowledgePipelineOptions
+        {
+            BaseUri = BaseUri,
+            BuildOptions = new KnowledgeGraphBuildOptions
+            {
+                IncludeAssertionReification = true,
+            },
+        });
     }
 
     private static TempDirectory CreateTempDirectory()

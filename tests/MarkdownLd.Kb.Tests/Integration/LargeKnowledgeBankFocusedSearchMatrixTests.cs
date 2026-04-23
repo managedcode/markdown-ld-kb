@@ -102,10 +102,6 @@ public sealed class LargeKnowledgeBankFocusedSearchMatrixTests
 
     private static async Task<MarkdownKnowledgeBuildResult> BuildLargeGraphAsync()
     {
-        var pipeline = new MarkdownKnowledgePipeline(
-            LargeKnowledgeBankFixtureCatalog.BaseUri,
-            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
-
-        return await pipeline.BuildAsync(LargeKnowledgeBankFixtureCatalog.CreateGraphSources());
+        return await LargeKnowledgeBankBuildCache.GetAsync(MarkdownKnowledgeExtractionMode.Tiktoken);
     }
 }

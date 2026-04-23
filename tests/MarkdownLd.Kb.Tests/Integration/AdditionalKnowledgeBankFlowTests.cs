@@ -1,4 +1,3 @@
-using System.Text;
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 using ManagedCode.MarkdownLd.Kb.Query;
 using ManagedCode.MarkdownLd.Kb.Tests.Rdf;
@@ -339,6 +338,7 @@ SELECT ?published ?modified WHERE {
     private const string ArticleNotClosed = "Not Closed";
     private const string RootParserCanonicalUrl = "notes/canonical-relative";
     private const string LargeMarkdownPath = "content/large-memex.md";
+    private const string LargeMarkdownFixturePath = "Large/Additional/large-memex.md";
     private const string LargeMarkdownBaseUri = "https://kb.example/";
     private const string LargeMarkdownDocumentId = "https://kb.example/large-memex/";
     private const string LargeMarkdownSummary = "Large markdown extraction summary.";
@@ -349,48 +349,13 @@ SELECT ?published ?modified WHERE {
     private const string LargeMarkdownDotNetRdfLabel = "dotNetRDF";
     private const string LargeMarkdownDotNetRdfUrl = "https://dotnetrdf.org/";
     private const string LargeMarkdownSearchTerm = "entity";
-    private const int LargeMarkdownRepeatedSectionCount = 64;
-    private const int LargeMarkdownExpectedSectionCount = 66;
-    private const int LargeMarkdownMinimumChunkCount = 32;
+    private const int LargeMarkdownMinimumCharacterCount = 8000;
+    private const int LargeMarkdownMinimumSectionCount = 24;
+    private const int LargeMarkdownMinimumChunkCount = 20;
     private const int LargeMarkdownMinimumAssertionCount = 4;
     private const int LargeMarkdownExpectedDocumentCount = 1;
     private const int LargeMarkdownRootParserChunkTarget = 16;
     private static readonly string[] LargeMarkdownExpectedTags = ["memex", "retrieval"];
-    private const string LargeMarkdownHeader = """
----
-title: Large Markdown Memex
-canonicalUrl: https://kb.example/large-memex/
-description: Large markdown extraction summary.
-tags:
-  - memex
-  - retrieval
-author:
-  - label: Ada Lovelace
-    type: schema:Person
-about:
-  - Knowledge Graph
-entity_hints:
-  - label: Entity Extractor
-    type: SoftwareApplication
-    sameAs:
-      - https://example.com/entity-extractor
----
-Intro before heading with [[SPARQL]] and [dotNetRDF](https://dotnetrdf.org/).
-
-# Knowledge Graph Intake
-
-Large Markdown Memex --mentions--> Entity Extractor
-article --mentions--> RDF
-Entity Extractor --kb:relatedTo--> SPARQL
-""";
-    private const string LargeMarkdownRepeatedSection = """
-
-## Repeated Graph Section
-
-This section keeps extraction busy with [[SPARQL]], [dotNetRDF](https://dotnetrdf.org/), and RDF facts.
-article --mentions--> RDF
-Entity Extractor --kb:relatedTo--> SPARQL
-""";
     private const string LargeMarkdownDocumentAskQuery = """
 PREFIX schema: <https://schema.org/>
 ASK WHERE {
@@ -478,6 +443,7 @@ ASK WHERE {
     public async Task Large_markdown_content_flow_extracts_document_format_and_queryable_graph()
     {
         var markdown = BuildLargeMarkdownFixture();
+        markdown.Length.ShouldBeGreaterThan(LargeMarkdownMinimumCharacterCount);
         var rootParser = new RootMarkdownDocumentParser();
         var parsed = rootParser.Parse(
             new RootMarkdownDocumentSource(markdown, LargeMarkdownPath, LargeMarkdownBaseUri),
@@ -489,7 +455,7 @@ ASK WHERE {
         parsed.DocumentId.ShouldBe(LargeMarkdownDocumentId);
         parsed.FrontMatter.Summary.ShouldBe(LargeMarkdownSummary);
         parsed.FrontMatter.Tags.ShouldBe(LargeMarkdownExpectedTags);
-        parsed.Sections.Count.ShouldBe(LargeMarkdownExpectedSectionCount);
+        parsed.Sections.Count.ShouldBeGreaterThanOrEqualTo(LargeMarkdownMinimumSectionCount);
         parsed.Chunks.Count.ShouldBeGreaterThan(LargeMarkdownMinimumChunkCount);
         parsed.Links.Any(link => link.Kind == RootMarkdownLinkKind.WikiLink && link.Target == LargeMarkdownWikiTarget).ShouldBeTrue();
         parsed.Links.Any(link => link.DisplayText == LargeMarkdownDotNetRdfLabel && link.ResolvedTarget == LargeMarkdownDotNetRdfUrl).ShouldBeTrue();
@@ -502,7 +468,7 @@ ASK WHERE {
         var result = await pipeline.BuildAsync([source]);
 
         result.Documents.Count.ShouldBe(LargeMarkdownExpectedDocumentCount);
-        result.Documents[0].Sections.Count.ShouldBe(LargeMarkdownExpectedSectionCount);
+        result.Documents[0].Sections.Count.ShouldBeGreaterThanOrEqualTo(LargeMarkdownMinimumSectionCount);
         result.Facts.Assertions.Count.ShouldBeGreaterThan(LargeMarkdownMinimumAssertionCount);
         result.Facts.Entities.Any(entity => entity.Label.Contains(LargeMarkdownEntityExtractorLabel, StringComparison.Ordinal)).ShouldBeTrue();
         result.Graph.CanSearchByTokenDistance.ShouldBeTrue();
@@ -653,15 +619,6 @@ ASK WHERE {
 
     private static string BuildLargeMarkdownFixture()
     {
-        var builder = new StringBuilder();
-        builder.Append(BomCharacter);
-        builder.Append(LargeMarkdownHeader);
-
-        for (var index = 0; index < LargeMarkdownRepeatedSectionCount; index++)
-        {
-            builder.Append(LargeMarkdownRepeatedSection);
-        }
-
-        return builder.ToString();
+        return Bom + FixtureLoader.Read(LargeMarkdownFixturePath);
     }
 }

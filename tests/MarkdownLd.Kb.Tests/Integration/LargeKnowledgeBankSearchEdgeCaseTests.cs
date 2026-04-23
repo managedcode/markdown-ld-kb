@@ -230,10 +230,7 @@ public sealed class LargeKnowledgeBankSearchEdgeCaseTests
 
     private static async Task<KnowledgeGraph> BuildGraphAsync(MarkdownKnowledgeExtractionMode mode)
     {
-        var pipeline = new MarkdownKnowledgePipeline(
-            LargeKnowledgeBankFixtureCatalog.BaseUri,
-            extractionMode: mode);
-        var result = await pipeline.BuildAsync(LargeKnowledgeBankFixtureCatalog.CreateGraphSources());
+        var result = await LargeKnowledgeBankBuildCache.GetAsync(mode);
         return result.Graph;
     }
 

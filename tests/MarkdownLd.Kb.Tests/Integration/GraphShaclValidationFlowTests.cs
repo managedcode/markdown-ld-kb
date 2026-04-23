@@ -37,6 +37,7 @@ public sealed class GraphShaclValidationFlowTests
             ],
             new KnowledgeGraphBuildOptions
             {
+                IncludeAssertionReification = true,
                 Entities =
                 [
                     new KnowledgeGraphEntityRule
@@ -104,6 +105,7 @@ ASK WHERE {
             ],
             new KnowledgeGraphBuildOptions
             {
+                IncludeAssertionReification = true,
                 IncludeFrontMatterRules = false,
                 Entities =
                 [
@@ -171,6 +173,7 @@ ASK WHERE {
             ],
             new KnowledgeGraphBuildOptions
             {
+                IncludeAssertionReification = true,
                 Edges =
                 [
                     new KnowledgeGraphEdgeRule

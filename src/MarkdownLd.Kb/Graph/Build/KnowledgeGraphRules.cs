@@ -6,6 +6,8 @@ public sealed record KnowledgeGraphBuildOptions
 
     public bool IncludeFrontMatterRules { get; init; } = true;
 
+    public bool IncludeAssertionReification { get; init; }
+
     public KnowledgeGraphSemanticLayerOptions SemanticLayers { get; init; } = KnowledgeGraphSemanticLayerOptions.Default;
 
     public IReadOnlyList<KnowledgeGraphEntityRule> Entities { get; init; } = [];

@@ -156,10 +156,6 @@ ORDER BY ?name
 
     private static async Task<MarkdownKnowledgeBuildResult> BuildGraphAsync(MarkdownKnowledgeExtractionMode extractionMode)
     {
-        var pipeline = new MarkdownKnowledgePipeline(
-            LargeKnowledgeBankFixtureCatalog.BaseUri,
-            extractionMode: extractionMode);
-
-        return await pipeline.BuildAsync(LargeKnowledgeBankFixtureCatalog.CreateGraphSources());
+        return await LargeKnowledgeBankBuildCache.GetAsync(extractionMode);
     }
 }

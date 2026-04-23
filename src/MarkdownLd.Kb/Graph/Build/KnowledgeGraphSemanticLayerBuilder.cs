@@ -139,13 +139,19 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
         AssertConceptScheme(graph, schemeNode, options.ConceptSchemeLabel, includeOntologyTypes);
 
         var aboutLabels = CollectAboutLabels(documents);
-        foreach (var conceptUri in CollectConceptUris(graph))
+        var conceptUris = CollectConceptUris(graph);
+        conceptUris.Remove(conceptSchemeUri);
+        var conceptLabels = CollectConceptLabels(graph);
+        var definedTerms = CollectTypedSubjects(graph, SchemaDefinedTermUri);
+        var sameAsTargets = CollectUriTargets(graph, SchemaSameAsUri);
+
+        foreach (var conceptUri in conceptUris)
         {
             var conceptNode = graph.CreateUriNode(conceptUri);
             _ = new SkosConcept(conceptNode, graph);
-            AssertConcept(graph, conceptNode, schemeNode, includeOntologyTypes && ShouldApplyOntologyConceptType(graph, conceptNode));
-            AssertConceptLabels(graph, conceptNode, aboutLabels);
-            MirrorSchemaSameAsAsSkosExactMatch(graph, conceptNode);
+            AssertConcept(graph, conceptNode, schemeNode, includeOntologyTypes && ShouldApplyOntologyConceptType(conceptUri, definedTerms, conceptLabels));
+            AssertConceptLabels(graph, conceptNode, conceptLabels, aboutLabels);
+            MirrorSchemaSameAsAsSkosExactMatch(graph, conceptNode, sameAsTargets);
         }
     }
 
@@ -195,10 +201,12 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
         graph.Assert(new Triple(conceptNode, graph.CreateUriNode(SkosTopConceptOfUri), schemeNode));
     }
 
-    private static bool ShouldApplyOntologyConceptType(Graph graph, IUriNode conceptNode)
+    private static bool ShouldApplyOntologyConceptType(
+        Uri conceptUri,
+        IReadOnlySet<Uri> definedTerms,
+        IReadOnlyDictionary<Uri, string> labels)
     {
-        return HasType(graph, conceptNode, SchemaDefinedTermUri) ||
-               TryGetLiteral(graph, conceptNode, SchemaNameUri) is not null;
+        return definedTerms.Contains(conceptUri) || labels.ContainsKey(conceptUri);
     }
 
     private static HashSet<Uri> CollectConceptUris(Graph graph)
@@ -227,13 +235,20 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
         }
     }
 
-    private static bool HasType(Graph graph, IUriNode subject, Uri typeUri)
+    private static HashSet<Uri> CollectTypedSubjects(Graph graph, Uri typeUri)
     {
-        return graph.Triples.Any(triple => triple.Subject.Equals(subject) &&
-                                          triple.Predicate is IUriNode predicateNode &&
-                                          predicateNode.Uri == RdfTypeUri &&
-                                          triple.Object is IUriNode objectNode &&
-                                          objectNode.Uri == typeUri);
+        var subjects = new HashSet<Uri>();
+        foreach (var triple in graph.Triples.Where(static triple => triple.Predicate is IUriNode predicateNode && predicateNode.Uri == RdfTypeUri))
+        {
+            if (triple.Subject is IUriNode subjectNode &&
+                triple.Object is IUriNode objectNode &&
+                objectNode.Uri == typeUri)
+            {
+                subjects.Add(subjectNode.Uri);
+            }
+        }
+
+        return subjects;
     }
 
     private static void CollectReferencedConceptUris(Graph graph, ISet<Uri> conceptUris, Uri predicateUri)
@@ -289,11 +304,13 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
         }
     }
 
-    private static void AssertConceptLabels(Graph graph, IUriNode conceptNode, IReadOnlyDictionary<Uri, string> aboutLabels)
+    private static void AssertConceptLabels(
+        Graph graph,
+        IUriNode conceptNode,
+        IReadOnlyDictionary<Uri, string> conceptLabels,
+        IReadOnlyDictionary<Uri, string> aboutLabels)
     {
-        var existingLabel = TryGetLiteral(graph, conceptNode, SchemaNameUri)
-                            ?? TryGetLiteral(graph, conceptNode, SkosPrefLabelUri)
-                            ?? TryGetLiteral(graph, conceptNode, RdfsLabelUri);
+        var existingLabel = conceptLabels.GetValueOrDefault(conceptNode.Uri);
         if (existingLabel is not null)
         {
             graph.Assert(new Triple(conceptNode, graph.CreateUriNode(SkosPrefLabelUri), graph.CreateLiteralNode(existingLabel)));
@@ -308,25 +325,86 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
         }
     }
 
-    private static string? TryGetLiteral(Graph graph, IUriNode subject, Uri predicateUri)
+    private static Dictionary<Uri, string> CollectConceptLabels(Graph graph)
     {
-        return graph.Triples
-            .Where(triple => triple.Subject.Equals(subject) && triple.Predicate is IUriNode predicateNode && predicateNode.Uri == predicateUri && triple.Object is ILiteralNode)
-            .Select(triple => ((ILiteralNode)triple.Object).Value)
-            .FirstOrDefault();
+        var labels = new Dictionary<Uri, LabelCandidate>();
+        foreach (var triple in graph.Triples)
+        {
+            if (triple.Subject is not IUriNode subjectNode ||
+                triple.Predicate is not IUriNode predicateNode ||
+                triple.Object is not ILiteralNode literalNode)
+            {
+                continue;
+            }
+
+            var priority = GetLabelPriority(predicateNode.Uri);
+            if (priority == 0)
+            {
+                continue;
+            }
+
+            var candidate = new LabelCandidate(literalNode.Value, priority);
+            if (!labels.TryGetValue(subjectNode.Uri, out var existing) || candidate.Priority > existing.Priority)
+            {
+                labels[subjectNode.Uri] = candidate;
+            }
+        }
+
+        return labels.ToDictionary(static pair => pair.Key, static pair => pair.Value.Value);
     }
 
-    private static void MirrorSchemaSameAsAsSkosExactMatch(Graph graph, IUriNode conceptNode)
+    private static int GetLabelPriority(Uri predicateUri)
     {
-        var sameAsTriples = graph.Triples
-            .Where(triple => triple.Subject.Equals(conceptNode) &&
-                             triple.Predicate is IUriNode predicateNode &&
-                             predicateNode.Uri == SchemaSameAsUri &&
-                             triple.Object is IUriNode)
-            .ToArray();
-        foreach (var triple in sameAsTriples)
+        if (predicateUri == SchemaNameUri)
         {
-            graph.Assert(new Triple(conceptNode, graph.CreateUriNode(SkosExactMatchUri), triple.Object));
+            return 3;
+        }
+
+        if (predicateUri == SkosPrefLabelUri)
+        {
+            return 2;
+        }
+
+        return predicateUri == RdfsLabelUri ? 1 : 0;
+    }
+
+    private static Dictionary<Uri, IReadOnlyList<IUriNode>> CollectUriTargets(Graph graph, Uri predicateUri)
+    {
+        var targets = new Dictionary<Uri, List<IUriNode>>();
+        foreach (var triple in graph.Triples.Where(triple => triple.Predicate is IUriNode predicateNode && predicateNode.Uri == predicateUri))
+        {
+            if (triple.Subject is not IUriNode subjectNode || triple.Object is not IUriNode objectNode)
+            {
+                continue;
+            }
+
+            if (!targets.TryGetValue(subjectNode.Uri, out var subjectTargets))
+            {
+                subjectTargets = [];
+                targets[subjectNode.Uri] = subjectTargets;
+            }
+
+            subjectTargets.Add(objectNode);
+        }
+
+        return targets.ToDictionary(
+            static pair => pair.Key,
+            static pair => (IReadOnlyList<IUriNode>)pair.Value);
+    }
+
+    private static void MirrorSchemaSameAsAsSkosExactMatch(
+        Graph graph,
+        IUriNode conceptNode,
+        IReadOnlyDictionary<Uri, IReadOnlyList<IUriNode>> sameAsTargets)
+    {
+        if (!sameAsTargets.TryGetValue(conceptNode.Uri, out var targets))
+        {
+            return;
+        }
+
+        foreach (var target in targets)
+        {
+            graph.Assert(new Triple(conceptNode, graph.CreateUriNode(SkosExactMatchUri), target));
         }
     }
 
@@ -348,4 +426,6 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
             ? resourceUri.AbsoluteUri
             : lastSegment;
     }
+
+    private readonly record struct LabelCandidate(string Value, int Priority);
 }

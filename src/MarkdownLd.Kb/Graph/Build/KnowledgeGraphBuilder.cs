@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using VDS.RDF;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
@@ -19,20 +18,21 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
     {
         var graph = new Graph();
         RegisterNamespaces(graph);
+        var context = new KnowledgeGraphMaterializationContext(graph);
 
         foreach (var document in documents)
         {
-            AddDocument(graph, document);
+            AddDocument(context, document);
         }
 
         foreach (var entity in facts.Entities)
         {
-            AddEntity(graph, entity);
+            AddEntity(context, entity);
         }
 
         foreach (var assertion in facts.Assertions)
         {
-            AddAssertion(graph, assertion);
+            AddAssertion(context, assertion, buildOptions.IncludeAssertionReification);
         }
 
         _semanticLayerBuilder.Apply(graph, documents, buildOptions);
@@ -44,46 +44,47 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
         KnowledgeGraphNamespaces.Register(graph);
     }
 
-    private void AddDocument(Graph graph, MarkdownDocument document)
+    private void AddDocument(KnowledgeGraphMaterializationContext context, MarkdownDocument document)
     {
         if (!KnowledgeGraphDocumentMaterialization.ShouldMaterialize(document))
         {
             return;
         }
 
+        var graph = context.Graph;
         var prefixes = _documentRdfMapper.RegisterPrefixes(graph, document.FrontMatter);
-        var article = graph.CreateUriNode(document.DocumentUri);
-        var schemaArticle = graph.CreateUriNode(SchemaArticleUri);
-        var schemaName = graph.CreateUriNode(SchemaNameUri);
-        var schemaDescription = graph.CreateUriNode(SchemaDescriptionUri);
-        var schemaDatePublished = graph.CreateUriNode(SchemaDatePublishedUri);
-        var schemaDateModified = graph.CreateUriNode(SchemaDateModifiedUri);
-        var schemaKeywords = graph.CreateUriNode(SchemaKeywordsUri);
-        var schemaAbout = graph.CreateUriNode(SchemaAboutUri);
-        var schemaAuthor = graph.CreateUriNode(SchemaAuthorUri);
-        var kbEntryType = graph.CreateUriNode(KbEntryTypeUri);
-        var kbSourceProject = graph.CreateUriNode(KbSourceProjectUri);
-        var provWasDerivedFrom = graph.CreateUriNode(ProvWasDerivedFromUri);
-        var rdfType = graph.CreateUriNode(RdfTypeUri);
+        var article = context.UriNode(document.DocumentUri);
+        var schemaArticle = context.UriNode(SchemaArticleUri);
+        var schemaName = context.UriNode(SchemaNameUri);
+        var schemaDescription = context.UriNode(SchemaDescriptionUri);
+        var schemaDatePublished = context.UriNode(SchemaDatePublishedUri);
+        var schemaDateModified = context.UriNode(SchemaDateModifiedUri);
+        var schemaKeywords = context.UriNode(SchemaKeywordsUri);
+        var schemaAbout = context.UriNode(SchemaAboutUri);
+        var schemaAuthor = context.UriNode(SchemaAuthorUri);
+        var kbEntryType = context.UriNode(KbEntryTypeUri);
+        var kbSourceProject = context.UriNode(KbSourceProjectUri);
+        var provWasDerivedFrom = context.UriNode(ProvWasDerivedFromUri);
+        var rdfType = context.UriNode(RdfTypeUri);
 
         graph.Assert(new Triple(article, rdfType, schemaArticle));
-        graph.Assert(new Triple(article, schemaName, graph.CreateLiteralNode(document.Title)));
-        graph.Assert(new Triple(article, provWasDerivedFrom, graph.CreateUriNode(document.DocumentUri)));
+        graph.Assert(new Triple(article, schemaName, context.LiteralNode(document.Title)));
+        graph.Assert(new Triple(article, provWasDerivedFrom, article));
 
-        AddDocumentAdditionalTypes(graph, article, rdfType, document.FrontMatter);
+        AddDocumentAdditionalTypes(context, article, rdfType, document.FrontMatter);
         AddDocumentEntryMetadata(graph, article, kbEntryType, document.FrontMatter, EntryTypeKey, EntryTypeCamelKey);
         AddDocumentEntryMetadata(graph, article, kbSourceProject, document.FrontMatter, SourceProjectKey, SourceProjectCamelKey);
-        AddDocumentDescription(graph, article, schemaDescription, document.FrontMatter);
-        AddDocumentDate(graph, article, schemaDatePublished, document.FrontMatter, DatePublishedKey, DatePublishedCamelKey);
-        AddDocumentDate(graph, article, schemaDateModified, document.FrontMatter, DateModifiedKey, DateModifiedCamelKey);
+        AddDocumentDescription(context, article, schemaDescription, document.FrontMatter);
+        AddDocumentDate(context, article, schemaDatePublished, document.FrontMatter, DatePublishedKey, DatePublishedCamelKey);
+        AddDocumentDate(context, article, schemaDateModified, document.FrontMatter, DateModifiedKey, DateModifiedCamelKey);
         AddDocumentKeywords(graph, article, schemaKeywords, document.FrontMatter);
-        AddDocumentAbout(graph, article, schemaAbout, document.FrontMatter, _baseUri);
-        AddDocumentAuthors(graph, article, schemaAuthor, document.FrontMatter, _baseUri);
+        AddDocumentAbout(context, article, schemaAbout, document.FrontMatter, _baseUri);
+        AddDocumentAuthors(context, article, schemaAuthor, document.FrontMatter, _baseUri);
         _documentRdfMapper.Apply(graph, article, document.FrontMatter, prefixes);
     }
 
     private static void AddDocumentAdditionalTypes(
-        Graph graph,
+        KnowledgeGraphMaterializationContext context,
         INode article,
         INode rdfType,
         IReadOnlyDictionary<string, object?> frontMatter)
@@ -95,7 +96,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
             var typeUri = ResolveArticleType(entryType);
             if (typeUri is not null)
             {
-                graph.Assert(new Triple(article, rdfType, graph.CreateUriNode(typeUri)));
+                context.Graph.Assert(new Triple(article, rdfType, context.UriNode(typeUri)));
             }
         }
     }
@@ -117,7 +118,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
     }
 
     private static void AddDocumentDescription(
-        Graph graph,
+        KnowledgeGraphMaterializationContext context,
         INode article,
         INode schemaDescription,
         IReadOnlyDictionary<string, object?> frontMatter)
@@ -125,12 +126,12 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
         if (TryGetString(frontMatter, SummaryKey, out var summary) ||
             TryGetString(frontMatter, DescriptionKey, out summary))
         {
-            graph.Assert(new Triple(article, schemaDescription, graph.CreateLiteralNode(summary)));
+            context.Graph.Assert(new Triple(article, schemaDescription, context.LiteralNode(summary)));
         }
     }
 
     private static void AddDocumentDate(
-        Graph graph,
+        KnowledgeGraphMaterializationContext context,
         INode article,
         INode schemaDate,
         IReadOnlyDictionary<string, object?> frontMatter,
@@ -140,7 +141,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
         if (TryGetString(frontMatter, snakeCaseKey, out var date) ||
             TryGetString(frontMatter, camelCaseKey, out date))
         {
-            graph.Assert(new Triple(article, schemaDate, CreateDateLiteral(graph, date)));
+            context.Graph.Assert(new Triple(article, schemaDate, context.DateLiteral(date)));
         }
     }
 
@@ -157,7 +158,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
     }
 
     private static void AddDocumentAbout(
-        Graph graph,
+        KnowledgeGraphMaterializationContext context,
         INode article,
         INode schemaAbout,
         IReadOnlyDictionary<string, object?> frontMatter,
@@ -166,12 +167,12 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
         foreach (var about in ReadStrings(frontMatter, AboutKey))
         {
             var id = KnowledgeNaming.CreateEntityId(baseUri, about);
-            graph.Assert(new Triple(article, schemaAbout, graph.CreateUriNode(new Uri(id))));
+            context.Graph.Assert(new Triple(article, schemaAbout, context.UriNode(new Uri(id))));
         }
     }
 
     private static void AddDocumentAuthors(
-        Graph graph,
+        KnowledgeGraphMaterializationContext context,
         INode article,
         INode schemaAuthor,
         IReadOnlyDictionary<string, object?> frontMatter,
@@ -180,32 +181,36 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
         foreach (var author in ReadAuthors(frontMatter))
         {
             var id = KnowledgeNaming.CreateEntityId(baseUri, author.Label);
-            graph.Assert(new Triple(article, schemaAuthor, graph.CreateUriNode(new Uri(id))));
+            context.Graph.Assert(new Triple(article, schemaAuthor, context.UriNode(new Uri(id))));
         }
     }
 
-    private void AddEntity(Graph graph, KnowledgeEntityFact entity)
+    private void AddEntity(KnowledgeGraphMaterializationContext context, KnowledgeEntityFact entity)
     {
         var entityId = entity.Id ?? KnowledgeNaming.CreateEntityId(_baseUri, entity.Label);
-        var subject = graph.CreateUriNode(new Uri(entityId));
-        var rdfType = graph.CreateUriNode(RdfTypeUri);
-        var schemaName = graph.CreateUriNode(SchemaNameUri);
-        var schemaSameAs = graph.CreateUriNode(SchemaSameAsUri);
-        var kbConfidence = graph.CreateUriNode(KbConfidenceUri);
-        var provWasDerivedFrom = graph.CreateUriNode(ProvWasDerivedFromUri);
+        var graph = context.Graph;
+        var subject = context.UriNode(new Uri(entityId));
+        var rdfType = context.UriNode(RdfTypeUri);
+        var schemaName = context.UriNode(SchemaNameUri);
+        var schemaSameAs = context.UriNode(SchemaSameAsUri);
+        var kbConfidence = context.UriNode(KbConfidenceUri);
+        var provWasDerivedFrom = context.UriNode(ProvWasDerivedFromUri);
 
-        graph.Assert(new Triple(subject, rdfType, graph.CreateUriNode(NormalizeTypeUri(entity.Type))));
-        graph.Assert(new Triple(subject, schemaName, graph.CreateLiteralNode(entity.Label)));
-        graph.Assert(new Triple(subject, kbConfidence, CreateConfidenceLiteral(graph, entity.Confidence)));
+        graph.Assert(new Triple(subject, rdfType, context.UriNode(context.ResolveTypeUri(entity.Type))));
+        graph.Assert(new Triple(subject, schemaName, context.LiteralNode(entity.Label)));
+        graph.Assert(new Triple(subject, kbConfidence, context.ConfidenceLiteral(entity.Confidence)));
         foreach (var sameAs in entity.SameAs.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            graph.Assert(new Triple(subject, schemaSameAs, CreateUriOrLiteralNode(graph, sameAs)));
+            graph.Assert(new Triple(subject, schemaSameAs, context.UriOrLiteralNode(sameAs)));
         }
 
-        AddSourceTriple(graph, subject, provWasDerivedFrom, entity.Source);
+        AddSourceTriple(context, subject, provWasDerivedFrom, entity.Source);
     }
 
-    private static void AddAssertion(Graph graph, KnowledgeAssertionFact assertion)
+    private static void AddAssertion(
+        KnowledgeGraphMaterializationContext context,
+        KnowledgeAssertionFact assertion,
+        bool includeAssertionReification)
     {
         if (!Uri.TryCreate(assertion.SubjectId, UriKind.Absolute, out var subjectUri) ||
             !Uri.TryCreate(assertion.ObjectId, UriKind.Absolute, out var objectUri) ||
@@ -214,116 +219,55 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
             return;
         }
 
-        var predicateUri = ResolvePredicate(assertion.Predicate);
+        var predicateUri = context.ResolvePredicateUri(assertion.Predicate);
         if (predicateUri is null)
         {
             return;
         }
 
+        var graph = context.Graph;
+        var subject = context.UriNode(subjectUri);
         graph.Assert(
             new Triple(
-                graph.CreateUriNode(subjectUri),
-                graph.CreateUriNode(predicateUri),
-                graph.CreateUriNode(objectUri)));
-        AddReifiedAssertion(graph, subjectUri, predicateUri, objectUri, assertion);
+                subject,
+                context.UriNode(predicateUri),
+                context.UriNode(objectUri)));
+        if (includeAssertionReification)
+        {
+            AddReifiedAssertion(context, subjectUri, predicateUri, objectUri, assertion);
+        }
 
         if (!string.IsNullOrWhiteSpace(assertion.Source))
         {
-            AddSourceTriple(graph, graph.CreateUriNode(subjectUri), graph.CreateUriNode(ProvWasDerivedFromUri), assertion.Source);
+            AddSourceTriple(context, subject, context.UriNode(ProvWasDerivedFromUri), assertion.Source);
         }
     }
 
     private static void AddReifiedAssertion(
-        Graph graph,
+        KnowledgeGraphMaterializationContext context,
         Uri subjectUri,
         Uri predicateUri,
         Uri objectUri,
         KnowledgeAssertionFact assertion)
     {
+        var graph = context.Graph;
         var statement = graph.CreateBlankNode();
-        graph.Assert(new Triple(statement, graph.CreateUriNode(RdfTypeUri), graph.CreateUriNode(RdfStatementUri)));
-        graph.Assert(new Triple(statement, graph.CreateUriNode(RdfSubjectUri), graph.CreateUriNode(subjectUri)));
-        graph.Assert(new Triple(statement, graph.CreateUriNode(RdfPredicateUri), graph.CreateUriNode(predicateUri)));
-        graph.Assert(new Triple(statement, graph.CreateUriNode(RdfObjectUri), graph.CreateUriNode(objectUri)));
-        graph.Assert(new Triple(statement, graph.CreateUriNode(KbConfidenceUri), CreateConfidenceLiteral(graph, assertion.Confidence)));
-        AddSourceTriple(graph, statement, graph.CreateUriNode(ProvWasDerivedFromUri), assertion.Source);
+        graph.Assert(new Triple(statement, context.UriNode(RdfTypeUri), context.UriNode(RdfStatementUri)));
+        graph.Assert(new Triple(statement, context.UriNode(RdfSubjectUri), context.UriNode(subjectUri)));
+        graph.Assert(new Triple(statement, context.UriNode(RdfPredicateUri), context.UriNode(predicateUri)));
+        graph.Assert(new Triple(statement, context.UriNode(RdfObjectUri), context.UriNode(objectUri)));
+        graph.Assert(new Triple(statement, context.UriNode(KbConfidenceUri), context.ConfidenceLiteral(assertion.Confidence)));
+        AddSourceTriple(context, statement, context.UriNode(ProvWasDerivedFromUri), assertion.Source);
     }
 
-    private static void AddSourceTriple(Graph graph, INode subject, INode predicate, string source)
+    private static void AddSourceTriple(KnowledgeGraphMaterializationContext context, INode subject, INode predicate, string source)
     {
         if (string.IsNullOrWhiteSpace(source))
         {
             return;
         }
 
-        graph.Assert(new Triple(subject, predicate, CreateUriOrLiteralNode(graph, source)));
-    }
-
-    private static INode CreateUriOrLiteralNode(Graph graph, string value)
-    {
-        return Uri.TryCreate(value, UriKind.Absolute, out var absolute)
-            ? graph.CreateUriNode(absolute)
-            : graph.CreateLiteralNode(value);
-    }
-
-    private static ILiteralNode CreateConfidenceLiteral(Graph graph, double confidence)
-    {
-        return graph.CreateLiteralNode(confidence.ToString(CultureInfo.InvariantCulture), XsdDecimalUri);
-    }
-
-    private static Uri? ResolvePredicate(string predicate)
-    {
-        if (predicate.Contains(':', StringComparison.Ordinal))
-        {
-            var separatorIndex = predicate.IndexOf(':');
-            var prefix = predicate[..separatorIndex];
-            var local = predicate[(separatorIndex + 1)..];
-            return prefix.ToLowerInvariant() switch
-            {
-                SchemaPrefix => new Uri(SchemaNamespaceText + local),
-                KbPrefix => new Uri(KbNamespaceText + local),
-                ProvPrefix => new Uri(ProvNamespaceText + local),
-                RdfPrefix => new Uri(RdfNamespaceText + local),
-                RdfsPrefix => new Uri(RdfsNamespaceText + local),
-                OwlPrefix => new Uri(OwlNamespaceText + local),
-                SkosPrefix => new Uri(SkosNamespaceText + local),
-                XsdPrefix => new Uri(XsdNamespaceText + local),
-                _ => Uri.TryCreate(predicate, UriKind.Absolute, out var prefixedAbsolute)
-                    ? prefixedAbsolute
-                    : null,
-            };
-        }
-
-        if (Uri.TryCreate(predicate, UriKind.Absolute, out var absolute))
-        {
-            return absolute;
-        }
-
-        return predicate.ToLowerInvariant() switch
-        {
-            MentionPredicateKey => SchemaMentionsUri,
-            AboutPredicateKey => SchemaAboutUri,
-            AuthorPredicateKey => SchemaAuthorUri,
-            CreatorPredicateKey => SchemaCreatorUri,
-            HasPartPredicateKey => SchemaHasPartUri,
-            SameAsPredicateKey => SchemaSameAsUri,
-            _ => null,
-        };
-    }
-
-    private static Uri NormalizeTypeUri(string type)
-    {
-        if (type.Contains(':', StringComparison.Ordinal))
-        {
-            return ResolvePredicate(type) ?? SchemaThingTypeUri();
-        }
-
-        return new Uri(SchemaNamespaceText + KnowledgeNaming.Slugify(type));
-    }
-
-    private static Uri SchemaThingTypeUri()
-    {
-        return new Uri(SchemaNamespaceText + KnowledgeNaming.Slugify(SchemaThingTypeText));
+        context.Graph.Assert(new Triple(subject, predicate, context.UriOrLiteralNode(source)));
     }
 
     private static Uri? ResolveArticleType(string entryType)
@@ -383,16 +327,6 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
         }
 
         return KnowledgeNaming.Slugify(normalized);
-    }
-
-    private static ILiteralNode CreateDateLiteral(Graph graph, string? value)
-    {
-        if (DateOnly.TryParse(value, out var dateOnly))
-        {
-            return graph.CreateLiteralNode(dateOnly.ToString(DotNetDateFormat, CultureInfo.InvariantCulture), XsdDateUri);
-        }
-
-        return graph.CreateLiteralNode(value ?? string.Empty);
     }
 
     private static bool TryGetString(
