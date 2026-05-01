@@ -275,8 +275,7 @@ public sealed partial class KnowledgeGraph : IDisposable
             var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var variable in resultSet.Variables)
             {
-                var node = result.Value(variable);
-                if (node is not null)
+                if (result.TryGetBoundValue(variable, out var node) && node is not null)
                 {
                     values[variable] = RenderNode(node);
                 }
@@ -299,7 +298,7 @@ public sealed partial class KnowledgeGraph : IDisposable
         };
     }
 
-    private static string EscapeSparqlLiteral(string value)
+    internal static string EscapeSparqlLiteral(string value)
     {
         return value.Replace(BackslashText, EscapedBackslashText, StringComparison.Ordinal)
             .Replace(QuoteText, EscapedQuoteText, StringComparison.Ordinal)

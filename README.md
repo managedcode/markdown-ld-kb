@@ -29,8 +29,9 @@ flowchart LR
     Chat --> Merge
     Token --> Merge
     Merge --> Builder["KnowledgeGraphBuilder\n→ RDF + ontology + SKOS graph"]
-    Builder --> Search["SearchAsync"]
+    Builder --> Search["SearchBySchemaAsync"]
     Builder --> Sparql["ExecuteSelectAsync\nExecuteAskAsync"]
+    Builder --> FederatedSearch["SearchBySchemaFederatedAsync"]
     Builder --> Shacl["ValidateShacl\nSHACL report"]
     Builder --> Snap["ToSnapshot"]
     Builder --> Diagram["SerializeMermaidFlowchart\nSerializeDotGraph"]
@@ -53,11 +54,18 @@ Tiktoken mode is deterministic and network-free. It uses lexical token-distance 
 - `SerializeDotGraph()` — Graphviz DOT diagram
 - `SerializeTurtle()` — Turtle RDF serialization
 - `SerializeJsonLd()` — JSON-LD serialization
+- `LoadJsonLd(jsonLd)` — load JSON-LD text into a searchable in-memory graph
 - `SaveToStoreAsync(store, location, options)` — persist the graph through a graph-store abstraction
 - `SaveToFileAsync(path, options)` — persist the graph as RDF
+- `SaveJsonLdToStoreAsync(store, location)` / `SaveJsonLdToFileAsync(path)` — persist JSON-LD explicitly, including opaque storage keys
 - `LoadFromStoreAsync(store, location, options)` — load a graph from a graph-store abstraction
 - `LoadFromFileAsync(path, options)` — load a graph from one RDF file
 - `LoadFromDirectoryAsync(path, options)` — load and merge RDF files from a directory
+- `LoadJsonLdFromStoreAsync(store, location)` / `LoadJsonLdFromFileAsync(path)` — load JSON-LD explicitly, including opaque storage keys
+- `MarkdownKnowledgeBuildResult.Contract` — self-describing graph contract with schema introspection and search-profile validation
+- `KnowledgeGraphContract.SerializeJson()` / `SerializeYaml()` — portable contract artifacts for preprocessing and search handoff
+- `KnowledgeGraphContract.LoadJson(json)` / `LoadYaml(yaml)` — reload contract artifacts alongside generated JSON-LD
+- `KnowledgeGraphContract.GenerateShacl()` — generate SHACL Turtle from the contract search profile
 - `LoadFromLinkedDataFragmentsAsync(endpoint, options)` — materialize a Linked Data Fragments source into a local graph
 - `ExecuteSelectAsync(sparql)` — read-only SPARQL SELECT returning `SparqlQueryResult`
 - `ExecuteAskAsync(sparql)` — read-only SPARQL ASK returning `bool`
@@ -65,18 +73,43 @@ Tiktoken mode is deterministic and network-free. It uses lexical token-distance 
 - `ExecuteFederatedAskAsync(sparql, options)` — explicit federated read-only SPARQL ASK with endpoint diagnostics
 - `ValidateShacl()` — SHACL validation against the built-in Markdown-LD Knowledge Bank shapes
 - `ValidateShacl(shapesTurtle)` — SHACL validation against caller-supplied Turtle shapes
-- `SearchAsync(term)` — case-insensitive search across `schema:name`, `schema:description`, and `schema:keywords`, returning matching graph subjects as `SparqlQueryResult`
-- `SearchFocusedAsync(term)` — sparse graph search that returns primary, related, and next-step matches plus a bounded focused graph snapshot
+- `DescribeSchema(prefixes)` — inspect actual RDF types, predicates, literal predicates, and resource predicates in a graph
+- `ValidateSchemaSearchProfile(profile)` — validate a schema-aware search profile against the actual graph shape
+- `SearchBySchemaAsync(term, profile)` — recommended schema-aware SPARQL search over caller-defined predicates, relationships, type filters, and focused graph expansion
+- `SearchBySchemaFederatedAsync(term, profile, options)` — schema-aware SPARQL search compiled into explicit `SERVICE` blocks for allowlisted federated endpoints
+- `SearchFocusedAsync(term, options)` — sparse graph search that can use a schema-aware profile and returns primary, related, and next-step matches plus a bounded focused graph snapshot
+- `SearchAsync(term)` — compatibility helper for simple `schema:name` / `schema:description` lookup; use schema-aware SPARQL search for application search
+- `KnowledgeGraph.Diff(other)` — compare graph snapshots and report added, removed, and changed literal edges
+- `BuildIncrementalAsync(...)` — rebuild deterministically while returning a source manifest, changed paths, removed paths, and optional graph diff
 - `MaterializeInferenceAsync(options)` — explicit RDFS / SKOS / N3-rule materialization
 - `BuildFullTextIndexAsync(options)` — optional Lucene-backed graph full-text index
 - `ToDynamicSnapshot()` — optional dynamic graph access over dotNetRDF dynamic types
 
 All async methods accept an optional `CancellationToken`.
 
+## What To Use When
+
+| Goal | Use | Details |
+| --- | --- | --- |
+| Build a graph from Markdown files | `MarkdownKnowledgePipeline.BuildFromDirectoryAsync(...)` | [Build From Files](#build-from-files) |
+| Generate portable graph output | `SerializeJsonLd()`, `SaveJsonLdToFileAsync(...)`, `SerializeTurtle()` | [Generate JSON-LD Files](#generate-json-ld-files), [Export The Graph](#export-the-graph) |
+| Load a preprocessed graph from another system | `KnowledgeGraph.LoadJsonLd(...)`, `LoadJsonLdFromFileAsync(...)` | [Generate JSON-LD Files](#generate-json-ld-files) |
+| Keep graph creation and search rules together | `KnowledgeGraphBuildProfile`, `MarkdownKnowledgeBuildResult.Contract` | [Schema-Aware SPARQL Search](#schema-aware-sparql-search), [Graph Production Pipeline](docs/Features/GraphProductionPipeline.md) |
+| Validate an externally generated graph | `KnowledgeGraphContract.GenerateShacl()`, `ValidateShacl(...)` | [Validate With SHACL](#validate-with-shacl) |
+| Search custom JSON-LD/RDF shapes | `SearchBySchemaAsync(term, profile)` | [Schema-Aware SPARQL Search](#schema-aware-sparql-search) |
+| Search across graph slices or endpoints | `SearchBySchemaFederatedAsync(...)`, `ExecuteFederatedSelectAsync(...)` | [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md) |
+| Explain why a result matched | `KnowledgeGraphSchemaSearchResult.Explain`, `Evidence`, `SourceContexts` | [Schema-Aware SPARQL Search](#schema-aware-sparql-search) |
+| Compare graph versions | `KnowledgeGraph.Diff(other)` | [Graph Production Pipeline](docs/Features/GraphProductionPipeline.md) |
+| Rebuild and know which source files changed | `BuildIncrementalAsync(...)`, `KnowledgeGraphSourceManifest` | [Graph Production Pipeline](docs/Features/GraphProductionPipeline.md) |
+| Add AI extraction without provider lock-in | `IChatClient`, `MarkdownKnowledgeExtractionMode.ChatClient` | [Optional AI Extraction](#optional-ai-extraction) |
+| Use deterministic local extraction | `MarkdownKnowledgeExtractionMode.Tiktoken` | [Local Tiktoken Extraction](#local-tiktoken-extraction) |
+
+The most important split is local graph search versus federated graph search. `SearchBySchemaAsync` searches one in-memory graph. `SearchBySchemaFederatedAsync` and `ExecuteFederatedSelectAsync` are explicit opt-in federation paths that require allowlisted `SERVICE` endpoints.
+
 ## Install
 
 ```bash
-dotnet add package ManagedCode.MarkdownLd.Kb --version 0.0.1
+dotnet add package ManagedCode.MarkdownLd.Kb --version 0.2.0
 ```
 
 For local repository development:
@@ -105,6 +138,8 @@ The production source tree now follows feature-oriented slices instead of a most
   low-level RDF helpers and serialization
 
 This layout mirrors [docs/Architecture.md](docs/Architecture.md) and keeps orchestration separate from parsing, extraction, graph runtime, and query capabilities.
+
+For production graph handoff, contract artifacts, generated SHACL, explainable SPARQL evidence, presets, diffing, and incremental rebuilds, see [docs/Features/GraphProductionPipeline.md](docs/Features/GraphProductionPipeline.md).
 
 ## Minimal Example
 
@@ -171,6 +206,8 @@ internal static class FileGraphDemo
 ```
 
 `KnowledgeSourceDocumentConverter` supports Markdown and other text-like knowledge inputs: `.md`, `.markdown`, `.mdx`, `.txt`, `.text`, `.log`, `.csv`, `.json`, `.jsonl`, `.yaml`, and `.yml`. Files with unknown or missing extensions are still accepted when their bytes decode as text, and they are treated as `text/plain`. Truly unreadable binary files are either skipped during directory loads or fail explicitly with `InvalidDataException` when the caller disables skipping.
+
+Graph loading and persistence support RDF files in Turtle (`.ttl`), JSON-LD (`.jsonld`, `.json`), RDF/XML (`.rdf`, `.xml`), N-Triples (`.nt`), Notation3 (`.n3`), TriG (`.trig`), and N-Quads (`.nq`). Use the explicit JSON-LD helpers when a file path or storage key has no extension or uses an opaque name.
 
 You do not need to pass a base URI for normal use. Document identity is resolved in this order:
 
@@ -356,7 +393,132 @@ var ldfGraph = await KnowledgeGraph.LoadFromLinkedDataFragmentsAsync(
 
 If the host needs custom transport settings, pass a caller-owned `HttpClient` through `KnowledgeGraphLinkedDataFragmentsOptions`. Host apps may source that client from `IHttpClientFactory`; the core library intentionally accepts the configured client instance instead of depending on `IHttpClientFactory`.
 
-After materialization, callers use the normal local `ExecuteSelectAsync`, `ExecuteAskAsync`, `SearchAsync`, `ValidateShacl`, persistence, and inference APIs.
+After materialization, callers use the normal local `ExecuteSelectAsync`, `ExecuteAskAsync`, `SearchBySchemaAsync`, `ValidateShacl`, persistence, and inference APIs.
+
+## Generate JSON-LD Files
+
+JSON-LD is the portable RDF file format for exchanging a built graph with another process. The graph can be generated from deterministic Markdown metadata, from `IChatClient` extraction, or by an external preprocessing pipeline that writes JSON-LD for this library to load later.
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+using Microsoft.Extensions.AI;
+
+internal static class JsonLdPreprocessingDemo
+{
+    private const string MarkdownRoot = "/absolute/path/to/content";
+    private const string MarkdownPattern = "*.md";
+    private const string OutputJsonLdPath = "/absolute/path/to/output/knowledge-bank.jsonld";
+    private const string OpaqueJsonLdPath = "/absolute/path/to/output/knowledge-bank.payload";
+    private const string ExternalJsonLdPath = "/absolute/path/to/external/preprocessed.jsonld";
+
+    public static async Task GenerateFromMarkdownMetadataAsync()
+    {
+        var pipeline = new MarkdownKnowledgePipeline(
+            new Uri("https://kb.example/"),
+            extractionMode: MarkdownKnowledgeExtractionMode.None);
+
+        var result = await pipeline.BuildFromDirectoryAsync(
+            MarkdownRoot,
+            searchPattern: MarkdownPattern);
+
+        await result.Graph.SaveJsonLdToFileAsync(OutputJsonLdPath);
+    }
+
+    public static async Task GenerateAfterAiExtractionAsync(IChatClient chatClient)
+    {
+        var pipeline = new MarkdownKnowledgePipeline(new MarkdownKnowledgePipelineOptions
+        {
+            BaseUri = new Uri("https://kb.example/"),
+            ChatClient = chatClient,
+            ChatModelId = "host-selected-model",
+            ExtractionMode = MarkdownKnowledgeExtractionMode.ChatClient,
+            ExtractionCache = new FileKnowledgeExtractionCache("/absolute/path/to/extraction-cache"),
+        });
+
+        var result = await pipeline.BuildFromDirectoryAsync(
+            MarkdownRoot,
+            searchPattern: MarkdownPattern);
+
+        await result.Graph.SaveJsonLdToFileAsync(OpaqueJsonLdPath);
+    }
+
+    public static async Task LoadExternalPreprocessedJsonLdAsync()
+    {
+        var graph = await KnowledgeGraph.LoadJsonLdFromFileAsync(ExternalJsonLdPath);
+        var profile = new KnowledgeGraphSchemaSearchProfile
+        {
+            Prefixes = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["ex"] = "https://kb.example/vocab/",
+            },
+            TypeFilters = ["ex:Capability"],
+            TextPredicates =
+            [
+                new KnowledgeGraphSchemaTextPredicate("schema:name", Weight: 1.2d),
+                new KnowledgeGraphSchemaTextPredicate("ex:intent", Weight: 1.5d),
+                new KnowledgeGraphSchemaTextPredicate("skos:prefLabel", Weight: 1.1d),
+            ],
+            RelationshipPredicates =
+            [
+                new KnowledgeGraphSchemaRelationshipPredicate(
+                    "ex:requires",
+                    ["ex:symptom", "skos:prefLabel"],
+                    Weight: 0.9d),
+            ],
+        };
+
+        var matches = await graph.SearchBySchemaAsync("restore cache", profile);
+
+        Console.WriteLine(matches.Matches.Count);
+        Console.WriteLine(matches.GeneratedSparql);
+    }
+}
+```
+
+When another system performs preprocessing for you, its JSON-LD must be parseable RDF. SPARQL can query any RDF shape the file contains. For application search, define a `KnowledgeGraphSchemaSearchProfile` that names the exact RDF types, literal predicates, relationship predicates, and expansion predicates your JSON-LD emits. `SearchAsync` stays available as a compatibility helper, but it is intentionally sparse and should not be the main search strategy for custom schemas.
+
+For directory imports, `LoadFromDirectoryAsync` can merge `.ttl`, `.jsonld`, `.json`, `.rdf`, `.xml`, `.nt`, `.n3`, `.trig`, and `.nq` files. For a single JSON-LD payload with an opaque file name or object-storage key, prefer `LoadJsonLdFromFileAsync` or `LoadJsonLdFromStoreAsync` so format selection does not depend on extension inference.
+
+Loaded JSON-LD graphs can also participate in federated SPARQL as local service bindings. This is useful when each preprocessing job emits one JSON-LD file and the host wants to query across them without merging first:
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+
+var policyGraph = await KnowledgeGraph.LoadJsonLdFromFileAsync("/absolute/path/to/policy.payload");
+var runbookGraph = await KnowledgeGraph.LoadJsonLdFromFileAsync("/absolute/path/to/runbook.payload");
+
+var federation = new FederatedSparqlExecutionOptions
+{
+    AllowedServiceEndpoints =
+    [
+        new Uri("https://kb.example/services/policy"),
+        new Uri("https://kb.example/services/runbook"),
+    ],
+    LocalServiceBindings =
+    [
+        new FederatedSparqlLocalServiceBinding(new Uri("https://kb.example/services/policy"), policyGraph),
+        new FederatedSparqlLocalServiceBinding(new Uri("https://kb.example/services/runbook"), runbookGraph),
+    ],
+};
+
+var rows = await policyGraph.ExecuteFederatedSelectAsync(
+    """
+    PREFIX schema: <https://schema.org/>
+    SELECT ?policy ?runbook WHERE {
+      SERVICE <https://kb.example/services/policy> {
+        ?policy schema:name ?policyTitle .
+      }
+      SERVICE <https://kb.example/services/runbook> {
+        ?runbook schema:name ?runbookTitle .
+      }
+    }
+    """,
+    federation);
+
+Console.WriteLine(rows.Result.Rows.Count);
+```
+
+This local federation path is network-free. Remote federation still uses SPARQL `SERVICE` calls and must be explicitly allowlisted through `FederatedSparqlExecutionOptions` or a named profile.
 
 ## Optional AI Extraction
 
@@ -473,7 +635,7 @@ LIMIT 100
     public static async Task RunAsync(MarkdownKnowledgeBuildResult result)
     {
         var rows = await result.Graph.ExecuteSelectAsync(SelectQuery);
-        var search = await result.Graph.SearchAsync(SearchTerm);
+        var search = await result.Graph.SearchBySchemaAsync(SearchTerm);
 
         foreach (var row in rows.Rows)
         {
@@ -481,12 +643,108 @@ LIMIT 100
             Console.WriteLine(row.Values[TitleKey]);
         }
 
-        Console.WriteLine(search.Rows.Count);
+        Console.WriteLine(search.Matches.Count);
     }
 }
 ```
 
 SPARQL execution is intentionally read-only. `SELECT` and `ASK` are allowed; mutation forms such as `INSERT`, `DELETE`, `LOAD`, `CLEAR`, `DROP`, and `CREATE` are rejected before execution.
+
+## Schema-Aware SPARQL Search
+
+Use `SearchBySchemaAsync` when search must follow a caller-defined RDF/JSON-LD schema instead of the compatibility `SearchAsync` helper. The profile is compiled into SPARQL, so custom predicates, relationship evidence, type filters, and expansion rules stay explicit.
+
+```csharp
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+
+var graph = await KnowledgeGraph.LoadJsonLdFromFileAsync("/absolute/path/to/corpus.jsonld");
+
+var profile = new KnowledgeGraphSchemaSearchProfile
+{
+    Prefixes = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["ex"] = "https://kb.example/vocab/",
+    },
+    TypeFilters = ["ex:Capability"],
+    TextPredicates =
+    [
+        new KnowledgeGraphSchemaTextPredicate("schema:name", Weight: 1.2d),
+        new KnowledgeGraphSchemaTextPredicate("ex:intent", Weight: 1.5d),
+        new KnowledgeGraphSchemaTextPredicate("skos:prefLabel", Weight: 1.1d),
+    ],
+    RelationshipPredicates =
+    [
+        new KnowledgeGraphSchemaRelationshipPredicate(
+            "ex:requires",
+            ["ex:symptom", "skos:prefLabel"],
+            Weight: 0.9d),
+    ],
+    ExpansionPredicates =
+    [
+        new KnowledgeGraphSchemaExpansionPredicate("ex:requires", KnowledgeGraphSchemaSearchRole.Related, Score: 0.8d),
+        new KnowledgeGraphSchemaExpansionPredicate("ex:next", KnowledgeGraphSchemaSearchRole.NextStep, Score: 0.7d),
+    ],
+};
+
+var result = await graph.SearchBySchemaAsync("restore cache", profile);
+
+Console.WriteLine(result.Matches[0].Label);
+Console.WriteLine(result.Matches[0].Evidence[0].PredicateId);
+Console.WriteLine(result.GeneratedSparql);
+```
+
+`RelationshipPredicates` let a source node match because a related node contains the evidence literal, for example `?capability ex:requires ?system` and `?system ex:symptom "stale shard checksum"`. `ExpansionPredicates` return related and next-step nodes with the local focused graph so the caller can show the smallest useful subgraph around the hit.
+
+For federated schema search, put endpoint URIs in `FederatedServiceEndpoints` and execute with `SearchBySchemaFederatedAsync`. The generated query uses explicit SPARQL `SERVICE` blocks and the same `FederatedSparqlExecutionOptions` allowlist used by raw federated SPARQL:
+
+```csharp
+var federatedProfile = profile with
+{
+    FederatedServiceEndpoints =
+    [
+        new Uri("https://kb.example/services/policy"),
+        new Uri("https://kb.example/services/runbook"),
+    ],
+};
+
+var federationOptions = new FederatedSparqlExecutionOptions
+{
+    AllowedServiceEndpoints = federatedProfile.FederatedServiceEndpoints,
+};
+
+var federated = await graph.SearchBySchemaFederatedAsync(
+    "restore cache",
+    federatedProfile,
+    federationOptions);
+
+Console.WriteLine(federated.GeneratedSparql);
+Console.WriteLine(federated.ServiceEndpointSpecifiers[0]);
+```
+
+Unknown prefixes and missing federated endpoints fail before query execution. See [Schema-Aware SPARQL Search](docs/Features/SchemaAwareSparqlSearch.md) for the full JSON-LD preprocessing and federation contract.
+
+Build profiles let graph creation and search travel together:
+
+```csharp
+var pipeline = new MarkdownKnowledgePipeline(new MarkdownKnowledgePipelineOptions
+{
+    ExtractionMode = MarkdownKnowledgeExtractionMode.None,
+    BuildProfile = new KnowledgeGraphBuildProfile
+    {
+        Name = "capability-workflow",
+        BuildOptions = new KnowledgeGraphBuildOptions(),
+        SearchProfile = profile,
+    },
+});
+
+var build = await pipeline.BuildFromMarkdownAsync(markdown);
+
+KnowledgeGraphContract contract = build.Contract;
+KnowledgeGraphSchemaDescription schema = build.Graph.DescribeSchema(profile.Prefixes);
+KnowledgeGraphSchemaSearchProfileValidation validation = build.Graph.ValidateSchemaSearchProfile(profile);
+```
+
+Use `contract.SearchProfile` for application search when the graph was built by the pipeline. Use `DescribeSchema` and `ValidateSchemaSearchProfile` when JSON-LD was produced by another preprocessing job and you need to verify what it contains before searching.
 
 The supported query surface is intentionally narrow:
 
@@ -559,6 +817,8 @@ var result = await rootGraph.ExecuteFederatedSelectAsync(
 ```
 
 This path still uses SPARQL `SERVICE` and the same allowlist checks, but it stays fully in-memory and network-free for test fixtures or host-managed multi-graph workflows.
+
+For more complete federation examples, including schema-aware `SERVICE` generation, `ASK` checks, failure handling, local binding policy, and remote endpoint profiles, see [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md).
 
 For the external federation model and current WDQS endpoint split, see the official [Wikidata federated queries guide](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/Federated_queries), the [WDQS graph split note](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/WDQS_graph_split), and the [Wikidata Query Service user manual](https://www.mediawiki.org/wiki/Wikidata_Query_Service/User_Manual/en).
 
@@ -635,13 +895,18 @@ using ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal static class ExportGraphDemo
 {
-    public static void Run(MarkdownKnowledgeBuildResult result)
+    public static async Task RunAsync(MarkdownKnowledgeBuildResult result)
     {
         KnowledgeGraphSnapshot snapshot = result.Graph.ToSnapshot();
         string mermaid = result.Graph.SerializeMermaidFlowchart();
         string dot = result.Graph.SerializeDotGraph();
         string turtle = result.Graph.SerializeTurtle();
         string jsonLd = result.Graph.SerializeJsonLd();
+        KnowledgeGraph loadedFromJsonLd = KnowledgeGraph.LoadJsonLd(jsonLd);
+
+        await result.Graph.SaveJsonLdToFileAsync("knowledge-graph.payload");
+        KnowledgeGraph loadedFromFile = await KnowledgeGraph.LoadJsonLdFromFileAsync("knowledge-graph.payload");
+        var search = await loadedFromFile.SearchBySchemaAsync("rdf");
 
         Console.WriteLine(snapshot.Nodes.Count);
         Console.WriteLine(snapshot.Edges.Count);
@@ -649,11 +914,26 @@ internal static class ExportGraphDemo
         Console.WriteLine(dot);
         Console.WriteLine(turtle.Length);
         Console.WriteLine(jsonLd.Length);
+        Console.WriteLine(loadedFromJsonLd.TripleCount);
+        Console.WriteLine(search.Matches.Count);
     }
 }
 ```
 
 `ToSnapshot()` returns a stable object graph with `Nodes` and `Edges` so callers can build their own UI, JSON endpoint, or visualization layer without touching dotNetRDF internals. URI node labels are resolved from `schema:name` when available, so diagram output is readable by default.
+
+`SerializeJsonLd()` generates JSON-LD text directly. The explicit `SaveJsonLdToFileAsync`, `SaveJsonLdToStoreAsync`, `LoadJsonLdFromFileAsync`, and `LoadJsonLdFromStoreAsync` helpers force JSON-LD format even when a storage key does not have a `.jsonld` extension. Loaded JSON-LD becomes a normal in-memory `KnowledgeGraph`, so SPARQL and search APIs work the same way as they do on the original graph.
+
+Focused graph snapshots can also be exported directly:
+
+```csharp
+var search = await result.Graph.SearchBySchemaAsync("rdf", result.Contract.SearchProfile);
+
+string focusedJsonLd = search.FocusedGraph.SerializeJsonLd();
+string focusedTurtle = search.FocusedGraph.SerializeTurtle();
+string focusedMermaid = search.FocusedGraph.SerializeMermaidFlowchart();
+string focusedDot = search.FocusedGraph.SerializeDotGraph();
+```
 
 Example Mermaid output shape:
 
@@ -686,7 +966,7 @@ var shared = await pipeline.BuildFromMarkdownAsync(string.Empty);
 var next = await pipeline.BuildFromMarkdownAsync(markdown, path: "content/note.md");
 
 await shared.Graph.MergeAsync(next.Graph);
-var rows = await shared.Graph.SearchAsync("rdf");
+var search = await shared.Graph.SearchBySchemaAsync("rdf");
 ```
 
 ## Key Types
@@ -697,12 +977,18 @@ var rows = await shared.Graph.SearchAsync("rdf");
 | `MarkdownKnowledgeBuildResult` | Holds `Documents`, `Facts`, and the built `Graph`. |
 | `KnowledgeGraph` | In-memory dotNetRDF graph with query, search, SHACL validation, export, and merge. |
 | `KnowledgeGraphSnapshot` | Immutable view with `Nodes` (`KnowledgeGraphNode`) and `Edges` (`KnowledgeGraphEdge`). |
+| `KnowledgeGraphContract` | Build-result contract with actual schema description, search profile, and validation diagnostics. |
+| `KnowledgeGraphBuildProfile` | Pipeline-level bundle of build options, search profile, and optional SHACL shapes. |
+| `KnowledgeGraphSchemaDescription` | RDF shape summary with types, predicates, literal predicates, and resource predicates. |
 | `KnowledgeGraphShaclValidationReport` | SHACL conformance result with flattened issues and Turtle report output. |
 | `KnowledgeGraphShaclValidationIssue` | Caller-readable SHACL result fields such as focus node, path, value, severity, and message. |
 | `MarkdownDocument` | Pipeline parsed document: `FrontMatter`, `Body`, and `Sections`. |
 | `MarkdownFrontMatter` | Typed front matter model used by the low-level Markdown parser. |
 | `KnowledgeExtractionResult` | Merged collection of `KnowledgeEntityFact` and `KnowledgeAssertionFact`. |
 | `SparqlQueryResult` | Query result with `Variables` and `Rows` of `SparqlRow`. |
+| `KnowledgeGraphSchemaSearchProfile` | Schema-aware SPARQL search profile with prefixes, predicates, type filters, expansions, federation endpoints, and limits. |
+| `KnowledgeGraphSchemaSearchResult` | Schema-aware search result with matches, evidence, focused graph, generated SPARQL, and optional federated endpoint diagnostics. |
+| `KnowledgeGraphSchemaSearchEvidence` | Explanation record naming the predicate, matched text, related node, relationship predicate, score, and service endpoint. |
 | `KnowledgeSourceDocumentConverter` | Converts files and directories into pipeline-ready source documents. |
 | `ChatClientKnowledgeFactExtractor` | AI extraction adapter behind `IChatClient`. |
 | `TiktokenKnowledgeGraphOptions` | Options for explicit Tiktoken token-distance extraction. |
@@ -791,6 +1077,7 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 - `Markdig` parses Markdown structure.
 - `YamlDotNet` parses front matter.
 - `dotNetRDF` builds the RDF graph, runs local SPARQL, and serializes Turtle/JSON-LD.
+- Schema-aware search compiles caller profiles into local or federated SPARQL and keeps generated queries/evidence visible to callers.
 - `dotNetRdf.Shacl` validates built graphs with default or caller-supplied SHACL shapes.
 - `Microsoft.Extensions.AI.IChatClient` is the only AI boundary in the core pipeline.
 - The production source tree is organized by feature slices: Documents, Extraction, Pipeline, Graph, Tokenization, Query, and Rdf.
@@ -800,7 +1087,7 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 - Embeddings are not required for the current graph/search flow; Tiktoken mode uses token IDs, not embedding vectors.
 - Microsoft Agent Framework is treated as host-level orchestration, not a core package dependency.
 
-See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md), [ADR-0006](docs/ADR/ADR-0006-federated-sparql-adapter.md), [Graph Runtime Lifecycle](docs/Features/GraphRuntimeLifecycle.md), [Graph SHACL Validation](docs/Features/GraphShaclValidation.md), and [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md).
+See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md), [ADR-0006](docs/ADR/ADR-0006-federated-sparql-adapter.md), [Graph Runtime Lifecycle](docs/Features/GraphRuntimeLifecycle.md), [Graph Creation Contracts](docs/Features/GraphCreationContracts.md), [JSON-LD Graph Round Trip](docs/Features/JsonLdGraphRoundTrip.md), [Schema-Aware SPARQL Search](docs/Features/SchemaAwareSparqlSearch.md), [Graph SHACL Validation](docs/Features/GraphShaclValidation.md), and [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md).
 
 ## Inspiration And Attribution
 
@@ -831,8 +1118,8 @@ Coverage is collected through `Microsoft.Testing.Extensions.CodeCoverage`. Cober
 
 Current verification:
 
-- tests: 109 passed, 0 failed
-- line coverage: 95.97%
-- branch coverage: 84.01%
+- tests: 256 passed, 0 failed
+- line coverage: 96.04%
+- branch coverage: 84.62%
 - target framework: .NET 10
-- package version: 0.0.1
+- package version: 0.2.0

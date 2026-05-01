@@ -11,6 +11,7 @@ The canonical graph remains the local in-memory `KnowledgeGraph`. Federation is 
 In scope:
 
 - explicit read-only federated query execution through `ExecuteFederatedSelectAsync` and `ExecuteFederatedAskAsync`
+- schema-aware federated search through `SearchBySchemaFederatedAsync`, which compiles caller profiles into `SERVICE` queries
 - endpoint allowlists and endpoint profiles
 - deterministic local service bindings for multi-graph in-memory federation
 - caller-visible endpoint diagnostics
@@ -90,6 +91,235 @@ flowchart LR
 - Intended use: explicit caller-selected federation across the split WDQS graphs
 - Default behavior: require the caller to choose this profile or enumerate both endpoints explicitly
 
+## Which API To Use
+
+```mermaid
+flowchart LR
+    Need["Need cross-graph data?"] --> Raw{"Do you already have SPARQL?"}
+    Raw -->|"Yes"| Execute["ExecuteFederatedSelectAsync / ExecuteFederatedAskAsync"]
+    Raw -->|"No"| Schema{"Can the query be described by predicates?"}
+    Schema -->|"Yes"| Search["SearchBySchemaFederatedAsync"]
+    Schema -->|"No"| Local["Use local SearchBySchemaAsync or author raw SPARQL"]
+    Execute --> Allow["AllowedServiceEndpoints"]
+    Search --> Allow
+    Allow --> Bindings["Optional LocalServiceBindings"]
+    Allow --> Remote["Optional remote endpoints"]
+```
+
+Use raw federated SPARQL when the caller knows the exact cross-service join. Use schema-aware federated search when the caller wants the library to compile a search profile into `SERVICE` blocks. Use local schema-aware search when all required data is already in one `KnowledgeGraph`.
+
+## Raw Local Multi-Graph Example
+
+This example federates across two in-memory graphs without network access. The endpoint URIs are logical service names owned by the host application.
+
+```csharp
+var policyGraph = (await pipeline.BuildAsync(
+[
+    new MarkdownSourceDocument("policy/federation.md", policyMarkdown),
+])).Graph;
+
+var runbookGraph = (await pipeline.BuildAsync(
+[
+    new MarkdownSourceDocument("runbooks/federation.md", runbookMarkdown),
+])).Graph;
+
+var rootGraph = (await pipeline.BuildAsync(
+[
+    new MarkdownSourceDocument("scratch/root.md", string.Empty),
+])).Graph;
+
+var policyEndpoint = new Uri("https://kb.example/services/policy");
+var runbookEndpoint = new Uri("https://kb.example/services/runbook");
+
+var options = new FederatedSparqlExecutionOptions
+{
+    AllowedServiceEndpoints =
+    [
+        policyEndpoint,
+        runbookEndpoint,
+    ],
+    LocalServiceBindings =
+    [
+        new FederatedSparqlLocalServiceBinding(policyEndpoint, policyGraph),
+        new FederatedSparqlLocalServiceBinding(runbookEndpoint, runbookGraph),
+    ],
+};
+
+var sparql = """
+PREFIX schema: <https://schema.org/>
+SELECT ?policyTitle ?runbookTitle WHERE {
+  SERVICE <https://kb.example/services/policy> {
+    ?policy a schema:Article ;
+            schema:name ?policyTitle ;
+            schema:about ?topic .
+  }
+
+  SERVICE <https://kb.example/services/runbook> {
+    ?runbook a schema:HowTo ;
+             schema:name ?runbookTitle ;
+             schema:about ?topic .
+  }
+}
+""";
+
+var result = await rootGraph.ExecuteFederatedSelectAsync(sparql, options);
+
+Console.WriteLine(result.ServiceEndpointSpecifiers[0]);
+Console.WriteLine(result.Result.Rows[0].Values["policyTitle"]);
+```
+
+The root graph does not need to contain the data being joined. It provides the execution boundary. Each `SERVICE` block is routed either to an allowlisted local binding or to a remote SPARQL endpoint.
+
+## Raw Federated ASK Example
+
+Use `ExecuteFederatedAskAsync` when the caller needs a boolean policy or readiness check across graph slices.
+
+```csharp
+var ask = """
+PREFIX schema: <https://schema.org/>
+PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
+ASK WHERE {
+  SERVICE <https://kb.example/services/policy> {
+    ?policy schema:about ?topic .
+  }
+
+  SERVICE <https://kb.example/services/runbook> {
+    ?runbook schema:about ?topic ;
+             kb:nextStep ?nextStep .
+  }
+}
+""";
+
+var decision = await rootGraph.ExecuteFederatedAskAsync(ask, options);
+
+if (decision.Result)
+{
+    Console.WriteLine(decision.ServiceEndpointSpecifiers.Count);
+}
+```
+
+## Schema-Aware Federated Search Example
+
+`SearchBySchemaFederatedAsync` compiles a `KnowledgeGraphSchemaSearchProfile` into one `SERVICE` block per configured endpoint. It is the right path when callers want SPARQL federation but do not want to hand-author the full query string.
+
+```csharp
+var profile = new KnowledgeGraphSchemaSearchProfile
+{
+    Prefixes = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["ex"] = "https://kb.example/vocab/",
+    },
+    FederatedServiceEndpoints =
+    [
+        new Uri("https://kb.example/services/policy"),
+        new Uri("https://kb.example/services/runbook"),
+    ],
+    TypeFilters = ["ex:Capability"],
+    TextPredicates =
+    [
+        new KnowledgeGraphSchemaTextPredicate("schema:name", Weight: 1.2d),
+        new KnowledgeGraphSchemaTextPredicate("ex:intent", Weight: 1.5d),
+    ],
+    RelationshipPredicates =
+    [
+        new KnowledgeGraphSchemaRelationshipPredicate(
+            "ex:requires",
+            ["ex:symptom", "skos:prefLabel"],
+            Weight: 0.9d),
+    ],
+    TermMode = KnowledgeGraphSchemaSearchTermMode.AllTerms,
+};
+
+var search = await rootGraph.SearchBySchemaFederatedAsync(
+    "restore cache",
+    profile,
+    options);
+
+Console.WriteLine(search.Explain.GeneratedSparql);
+Console.WriteLine(search.ServiceEndpointSpecifiers[0]);
+Console.WriteLine(search.Matches[0].Evidence[0].ServiceEndpoint);
+```
+
+Federated schema search returns primary matches and predicate evidence from service endpoints. It does not create a focused local graph because the related graph neighborhood may live only behind the remote service boundary.
+
+## Remote Endpoint Example
+
+Remote endpoints are allowed only when explicitly configured. Use a named profile when it matches the endpoint set, or construct an options object yourself.
+
+```csharp
+var wikidataQuery = """
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?item ?itemLabel WHERE {
+  SERVICE <https://query.wikidata.org/sparql> {
+    ?item rdfs:label ?itemLabel .
+    FILTER(LANG(?itemLabel) = "en")
+  }
+}
+LIMIT 10
+""";
+
+var remote = await graph.ExecuteFederatedSelectAsync(
+    wikidataQuery,
+    FederatedSparqlProfiles.WikidataMain);
+```
+
+Remote federation is query-time access only. It does not import remote triples into the local `KnowledgeGraph`; use JSON-LD/Turtle loading or a separate preprocessing step when the local graph needs to keep those facts.
+
+## Allowlist Patterns
+
+Recommended host policy:
+
+- use stable logical service URIs for local graph slices, such as `https://kb.example/services/runbooks`
+- allowlist every `SERVICE` endpoint, including local bindings
+- bind local service endpoints with `FederatedSparqlLocalServiceBinding`
+- keep remote endpoint options separate from local-only test options
+- set `QueryExecutionTimeoutMilliseconds` for remote endpoints
+- inspect `ServiceEndpointSpecifiers` on success and on `FederatedSparqlQueryException`
+
+Avoid:
+
+- passing user-authored arbitrary endpoint URIs directly into `AllowedServiceEndpoints`
+- relying on variable `SERVICE ?endpoint` at the library boundary
+- expecting local `ExecuteSelectAsync` or `ExecuteAskAsync` to run top-level `SERVICE`
+- using federation as a hidden fallback when local schema search returns no matches
+- treating remote federation as graph ingestion
+
+## Failure Example
+
+Unallowlisted endpoints fail before execution:
+
+```csharp
+var unsafeQuery = """
+SELECT ?s WHERE {
+  SERVICE <https://unknown.example/sparql> {
+    ?s ?p ?o .
+  }
+}
+""";
+
+try
+{
+    await graph.ExecuteFederatedSelectAsync(unsafeQuery, FederatedSparqlProfiles.WikidataMain);
+}
+catch (FederatedSparqlQueryException exception)
+{
+    Console.WriteLine(exception.ServiceEndpointSpecifiers[0]);
+}
+```
+
+Variable service specifiers also fail before execution:
+
+```sparql
+SELECT ?s WHERE {
+  VALUES ?endpoint { <https://query.wikidata.org/sparql> }
+  SERVICE ?endpoint {
+    ?s ?p ?o .
+  }
+}
+```
+
+The library requires absolute endpoint IRIs in `SERVICE <...>` clauses so the allowlist can be evaluated before dotNetRDF executes the query.
+
 ## Main Flow
 
 ```mermaid
@@ -146,6 +376,7 @@ sequenceDiagram
 
 - The local graph remains authoritative for Markdown-derived knowledge.
 - Federation supplements query-time access; it does not mutate the local graph automatically.
+- Schema-aware federated search uses the same `SERVICE` allowlist and local binding policy as raw federated SPARQL.
 - Local service bindings give hosts and tests a deterministic way to federate across multiple in-memory graphs without network access.
 - The adapter may expose endpoint profiles, but it does not own remote dataset semantics.
 - Wikidata federation often needs explicit graph-shape knowledge and endpoint selection because WDQS split the main and scholarly graphs in 2025.
@@ -165,6 +396,7 @@ Current verification focus:
 - deterministic tests for one-query multi-graph federation across five local graphs
 - deterministic tests for federated `ASK` across multiple local graphs
 - deterministic tests that local service bindings do not bypass the allowlist
+- deterministic tests for schema-aware federated search over local JSON-LD service bindings
 
 ## Definition Of Done
 

@@ -72,6 +72,8 @@ public sealed record MarkdownKnowledgeBuildResult(
     KnowledgeExtractionResult Facts,
     KnowledgeGraph Graph)
 {
+    public KnowledgeGraphContract Contract { get; init; } = KnowledgeGraphContract.Empty;
+
     public MarkdownKnowledgeExtractionMode ExtractionMode { get; init; } = MarkdownKnowledgeExtractionMode.None;
 
     public IReadOnlyList<string> Diagnostics { get; init; } = [];
@@ -82,9 +84,49 @@ public sealed record MarkdownKnowledgeBuildResult(
     }
 }
 
+public sealed record MarkdownKnowledgeIncrementalBuildResult(
+    MarkdownKnowledgeBuildResult BuildResult,
+    KnowledgeGraphSourceManifest Manifest,
+    IReadOnlyList<string> ChangedPaths,
+    IReadOnlyList<string> RemovedPaths,
+    KnowledgeGraphDiff Diff);
+
+public sealed partial record KnowledgeGraphSourceManifest(
+    IReadOnlyList<KnowledgeGraphSourceManifestEntry> Entries)
+{
+    public static KnowledgeGraphSourceManifest Empty { get; } = new([]);
+}
+
+public sealed record KnowledgeGraphSourceManifestEntry(
+    string Path,
+    string Fingerprint);
+
 public sealed record KnowledgeGraphSnapshot(
     IReadOnlyList<KnowledgeGraphNode> Nodes,
-    IReadOnlyList<KnowledgeGraphEdge> Edges);
+    IReadOnlyList<KnowledgeGraphEdge> Edges)
+{
+    public static KnowledgeGraphSnapshot Empty { get; } = new([], []);
+
+    public string SerializeMermaidFlowchart()
+    {
+        return KnowledgeGraph.SerializeMermaidFlowchart(this);
+    }
+
+    public string SerializeDotGraph()
+    {
+        return KnowledgeGraph.SerializeDotGraph(this);
+    }
+
+    public string SerializeTurtle()
+    {
+        return KnowledgeGraph.SerializeTurtle(this);
+    }
+
+    public string SerializeJsonLd()
+    {
+        return KnowledgeGraph.SerializeJsonLd(this);
+    }
+}
 
 public sealed record KnowledgeGraphNode(
     string Id,

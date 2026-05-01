@@ -3,7 +3,7 @@ using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed class MarkdownKnowledgePipeline
+public sealed partial class MarkdownKnowledgePipeline
 {
     private readonly MarkdownDocumentParser _parser;
     private readonly KnowledgeFactMerger _factMerger;
@@ -14,6 +14,8 @@ public sealed class MarkdownKnowledgePipeline
     private readonly TiktokenKnowledgeGraphExtractor? _tiktokenExtractor;
     private readonly MarkdownKnowledgeExtractionMode _configuredExtractionMode;
     private readonly KnowledgeGraphBuildOptions _buildOptions;
+    private readonly KnowledgeGraphBuildProfile? _buildProfile;
+    private readonly KnowledgeGraphSchemaSearchProfile _searchProfile;
     private readonly IMarkdownChunker _chunker;
     private readonly IKnowledgeExtractionCache? _extractionCache;
 
@@ -54,7 +56,11 @@ public sealed class MarkdownKnowledgePipeline
             ? new TiktokenKnowledgeGraphExtractor(effectiveBaseUri, options.TiktokenOptions)
             : null;
         _configuredExtractionMode = options.ExtractionMode;
-        _buildOptions = options.BuildOptions;
+        _buildProfile = options.BuildProfile;
+        _buildOptions = options.BuildProfile?.BuildOptions ?? options.BuildOptions;
+        _searchProfile = options.BuildProfile?.SearchProfile ??
+                         _buildOptions.SchemaSearchProfile ??
+                         KnowledgeGraphSchemaSearchProfile.Default;
         _extractionCache = options.ExtractionCache;
     }
 
@@ -167,8 +173,13 @@ public sealed class MarkdownKnowledgePipeline
             ? _tiktokenExtractor!.CreateIndex(tokenResult!.Segments, tokenResult.VectorSpace)
             : null;
         var graph = _graphBuilder.Build(documents, mergedFacts, buildOptions, tokenIndex);
+        var searchProfile = buildOptions.SchemaSearchProfile ?? _searchProfile;
         return new MarkdownKnowledgeBuildResult(documents, mergedFacts, graph)
         {
+            Contract = graph.CreateContract(
+                _buildProfile?.Name ?? DefaultGraphBuildProfileName,
+                searchProfile,
+                _buildProfile?.ShaclShapesTurtle),
             ExtractionMode = effectiveMode,
             Diagnostics = CreateDiagnostics(effectiveMode).Concat(ruleResult.Diagnostics).ToArray(),
         };

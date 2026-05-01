@@ -52,17 +52,20 @@ public sealed partial class KnowledgeGraph
     private static IReadOnlyDictionary<string, string> CreateGraphNodeLabels(IEnumerable<Triple> triples)
     {
         var labels = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var triple in triples)
+        foreach (var predicateId in new[] { SchemaNameText, SkosPrefLabelText, RdfsLabelText })
         {
-            if (RenderGraphNodeId(triple.Predicate) != SchemaNameText || triple.Object is not ILiteralNode literalNode)
+            foreach (var triple in triples)
             {
-                continue;
-            }
+                if (RenderGraphNodeId(triple.Predicate) != predicateId || triple.Object is not ILiteralNode literalNode)
+                {
+                    continue;
+                }
 
-            var subjectId = RenderGraphNodeId(triple.Subject);
-            if (!labels.ContainsKey(subjectId) && !string.IsNullOrWhiteSpace(literalNode.Value))
-            {
-                labels[subjectId] = literalNode.Value;
+                var subjectId = RenderGraphNodeId(triple.Subject);
+                if (!labels.ContainsKey(subjectId) && !string.IsNullOrWhiteSpace(literalNode.Value))
+                {
+                    labels[subjectId] = literalNode.Value;
+                }
             }
         }
 

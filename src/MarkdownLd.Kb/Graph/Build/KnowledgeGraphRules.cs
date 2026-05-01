@@ -10,6 +10,8 @@ public sealed record KnowledgeGraphBuildOptions
 
     public KnowledgeGraphSemanticLayerOptions SemanticLayers { get; init; } = KnowledgeGraphSemanticLayerOptions.Default;
 
+    public KnowledgeGraphSchemaSearchProfile? SchemaSearchProfile { get; init; }
+
     public IReadOnlyList<KnowledgeGraphEntityRule> Entities { get; init; } = [];
 
     public IReadOnlyList<KnowledgeGraphEdgeRule> Edges { get; init; } = [];
@@ -65,6 +67,8 @@ public sealed record KnowledgeGraphFocusedSearchOptions
     public int MaxNextStepResults { get; init; } = 6;
 
     public KnowledgeGraphSemanticIndex? SemanticIndex { get; init; }
+
+    public KnowledgeGraphSchemaSearchProfile? SchemaSearchProfile { get; init; }
 }
 
 public sealed record KnowledgeGraphFocusedSearchResult(

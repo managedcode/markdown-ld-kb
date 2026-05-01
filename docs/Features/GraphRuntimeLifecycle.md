@@ -8,6 +8,7 @@ Markdown-LD Knowledge Bank now exposes a fuller graph runtime lifecycle over the
 
 - build a graph from one Markdown file, a directory, or in-memory Markdown
 - persist the graph through a graph-store abstraction and reload it later
+- generate JSON-LD and reload it through explicit JSON-LD helpers
 - materialize RDFS, SKOS, and optional N3-rule inference in memory
 - build optional full-text and dynamic adapters over the resulting graph
 - materialize a read-only Linked Data Fragments source into a local `KnowledgeGraph`
@@ -21,14 +22,17 @@ flowchart LR
     Md["Markdown file or directory"] --> Pipeline["MarkdownKnowledgePipeline"]
     Pipeline --> Graph["KnowledgeGraph"]
     Graph --> Save["SaveToStoreAsync / SaveToFileAsync"]
+    Graph --> JsonLd["SerializeJsonLd / SaveJsonLdToFileAsync"]
+    JsonLd --> JsonLdReload["LoadJsonLd / LoadJsonLdFromFileAsync"]
     Save --> Store["IKnowledgeGraphStore"]
     Store --> Memory["InMemoryKnowledgeGraphStore"]
     Store --> Storage["StorageKnowledgeGraphStore / FileSystemKnowledgeGraphStore"]
     Storage --> RdfFile["Turtle / JSON-LD / RDF/XML / N-Triples / N3 / TriG / N-Quads"]
     RdfFile --> Reload["LoadFromStoreAsync / LoadFromFileAsync / LoadFromDirectoryAsync"]
     Reload --> Graph2["KnowledgeGraph"]
+    JsonLdReload --> Graph2
     Graph2 --> Infer["MaterializeInferenceAsync"]
-    Infer --> Query["SPARQL / search / SHACL"]
+    Infer --> Query["SPARQL / schema-aware search / SHACL"]
     Infer --> FullText["BuildFullTextIndexAsync"]
     Infer --> Dynamic["ToDynamicSnapshot"]
     Ldf["Linked Data Fragments endpoint or file-backed TPF response"] --> Materialize["LoadFromLinkedDataFragmentsAsync"]
@@ -41,10 +45,20 @@ flowchart LR
 - `MarkdownKnowledgePipeline.BuildFromDirectoryAsync(...)`
 - `KnowledgeGraph.SaveToStoreAsync(...)`
 - `KnowledgeGraph.SaveToFileAsync(...)`
+- `KnowledgeGraph.SerializeJsonLd()`
+- `KnowledgeGraph.LoadJsonLd(...)`
+- `KnowledgeGraph.SaveJsonLdToStoreAsync(...)`
+- `KnowledgeGraph.SaveJsonLdToFileAsync(...)`
+- `KnowledgeGraph.LoadJsonLdFromStoreAsync(...)`
+- `KnowledgeGraph.LoadJsonLdFromFileAsync(...)`
 - `KnowledgeGraph.LoadFromStoreAsync(...)`
 - `KnowledgeGraph.LoadFromFileAsync(...)`
 - `KnowledgeGraph.LoadFromDirectoryAsync(...)`
 - `KnowledgeGraph.LoadFromLinkedDataFragmentsAsync(...)`
+- `KnowledgeGraph.DescribeSchema(...)`
+- `KnowledgeGraph.ValidateSchemaSearchProfile(...)`
+- `KnowledgeGraph.SearchBySchemaAsync(...)`
+- `KnowledgeGraph.SearchBySchemaFederatedAsync(...)`
 - `KnowledgeGraph.MaterializeInferenceAsync(...)`
 - `KnowledgeGraph.BuildFullTextIndexAsync(...)`
 - `KnowledgeGraph.ToDynamicSnapshot()`
@@ -115,6 +129,7 @@ Flow tests cover:
 - one Markdown file on disk becoming a queryable graph
 - a directory corpus becoming a merged graph
 - graph-store round-trips through in-memory, filesystem, keyed DI, and VFS-backed registrations
+- JSON-LD text, file, and store round-trips into queryable/searchable graphs
 - RDF file round-trips through public file convenience APIs
 - inference changing caller-visible SPARQL results
 - full-text and dynamic adapters over the inferred graph

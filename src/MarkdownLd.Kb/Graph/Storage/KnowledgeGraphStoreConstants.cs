@@ -4,6 +4,7 @@ internal static class KnowledgeGraphStoreConstants
 {
     public const string GraphLocationRequiredMessage = "Graph file or directory path is required.";
     public const string GraphLocationNotFoundMessagePrefix = "Graph file or directory was not found: ";
+    public const string JsonLdContentRequiredMessage = "JSON-LD content is required.";
     public const string UnsupportedGraphFileExtensionMessagePrefix = "Unsupported RDF graph file extension: ";
     public const string GraphDirectoryContainsNoSupportedFilesMessagePrefix = "Graph directory does not contain supported RDF files: ";
     public const string StorageSaveFailedMessagePrefix = "Knowledge graph save failed for location: ";

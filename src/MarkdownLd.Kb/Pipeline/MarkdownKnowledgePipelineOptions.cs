@@ -18,6 +18,8 @@ public sealed record MarkdownKnowledgePipelineOptions
 
     public KnowledgeGraphBuildOptions BuildOptions { get; init; } = KnowledgeGraphBuildOptions.Default;
 
+    public KnowledgeGraphBuildProfile? BuildProfile { get; init; }
+
     public DocumentRdfMappingOptions DocumentRdfMapping { get; init; } = DocumentRdfMappingOptions.Default;
 
     public IMarkdownChunker? MarkdownChunker { get; init; }

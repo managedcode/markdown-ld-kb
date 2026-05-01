@@ -13,6 +13,11 @@ public sealed partial class KnowledgeGraph
         cancellationToken.ThrowIfCancellationRequested();
 
         var effectiveOptions = options ?? new KnowledgeGraphFocusedSearchOptions();
+        if (effectiveOptions.SchemaSearchProfile is not null)
+        {
+            return await SearchFocusedBySchemaAsync(query, effectiveOptions, cancellationToken).ConfigureAwait(false);
+        }
+
         var snapshot = ToSnapshot();
         var nodesById = snapshot.Nodes.ToDictionary(static node => node.Id, StringComparer.Ordinal);
         var primary = await ResolvePrimaryMatchesAsync(query, effectiveOptions, nodesById, cancellationToken)
@@ -22,6 +27,50 @@ public sealed partial class KnowledgeGraph
         var focusedGraph = BuildFocusedGraph(snapshot, primary, related, nextSteps);
 
         return new KnowledgeGraphFocusedSearchResult(primary, related, nextSteps, focusedGraph);
+    }
+
+    private async Task<KnowledgeGraphFocusedSearchResult> SearchFocusedBySchemaAsync(
+        string query,
+        KnowledgeGraphFocusedSearchOptions options,
+        CancellationToken cancellationToken)
+    {
+        var schemaResult = await SearchBySchemaAsync(
+                query,
+                options.SchemaSearchProfile! with
+                {
+                    MaxResults = Math.Max(1, options.MaxPrimaryResults),
+                    MaxRelatedResults = Math.Max(0, options.MaxRelatedResults),
+                    MaxNextStepResults = Math.Max(0, options.MaxNextStepResults),
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return new KnowledgeGraphFocusedSearchResult(
+            schemaResult.Matches.Select(ConvertSchemaSearchMatch).ToArray(),
+            schemaResult.RelatedMatches.Select(ConvertSchemaSearchMatch).ToArray(),
+            schemaResult.NextStepMatches.Select(ConvertSchemaSearchMatch).ToArray(),
+            schemaResult.FocusedGraph);
+    }
+
+    private static KnowledgeGraphFocusedSearchMatch ConvertSchemaSearchMatch(KnowledgeGraphSchemaSearchMatch match)
+    {
+        return new KnowledgeGraphFocusedSearchMatch(
+            match.NodeId,
+            match.Label,
+            ConvertSchemaSearchRole(match.Role),
+            match.Score,
+            match.SourceNodeId,
+            match.ViaPredicateId);
+    }
+
+    private static KnowledgeGraphFocusedSearchRole ConvertSchemaSearchRole(KnowledgeGraphSchemaSearchRole role)
+    {
+        return role switch
+        {
+            KnowledgeGraphSchemaSearchRole.Related => KnowledgeGraphFocusedSearchRole.Related,
+            KnowledgeGraphSchemaSearchRole.NextStep => KnowledgeGraphFocusedSearchRole.NextStep,
+            _ => KnowledgeGraphFocusedSearchRole.Primary,
+        };
     }
 
     private async Task<IReadOnlyList<KnowledgeGraphFocusedSearchMatch>> ResolvePrimaryMatchesAsync(
