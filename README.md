@@ -1304,22 +1304,9 @@ dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --coverage 
 
 Coverage is collected through `Microsoft.Testing.Extensions.CodeCoverage`. Cobertura is the XML output format used for line and branch reporting; the test project does not reference Coverlet.
 
-BenchmarkDotNet performance runs are separate from TUnit correctness tests:
+BenchmarkDotNet performance runs are separate from TUnit correctness tests. Commands, workload profiles, profiler options, and full result tables live in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md). PR validation and the dedicated benchmark workflow both run the complete BenchmarkDotNet suite and upload the `benchmarkdotnet-results` artifact.
 
-```bash
-dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --list flat
-dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*"
-dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphBuildBenchmarks*"
-dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphSearchBenchmarks*"
-dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenSearchBenchmarks*"
-dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphPersistenceBenchmarks*"
-dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphLifecycleBenchmarks*"
-MARKDOWN_LD_KB_BENCHMARK_PROFILE=cpu dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*"
-```
-
-Benchmark reports are written to `artifacts/benchmarks/results` as Markdown, CSV, and full JSON. The reports are intentionally ignored by git because they depend on the local machine and current system load. PR validation and the dedicated workflow in `.github/workflows/benchmarks.yml` both run the complete BenchmarkDotNet suite and upload the `benchmarkdotnet-results` artifact. The benchmark config adds one `Default` job only when the command does not already pass `--job`, `--job=...`, or `-j`.
-
-The full metric definitions, workload profiles, and current result tables are maintained in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md). The README keeps only the current headline numbers from the May 3, 2026 local BenchmarkDotNet 0.15.8 run on Apple M2 Pro with .NET 10.0.5:
+Current local headline numbers from the May 3, 2026 BenchmarkDotNet 0.15.8 run on Apple M2 Pro with .NET 10.0.5:
 
 | Area | Current local result |
 | --- | --- |
@@ -1333,4 +1320,4 @@ The full metric definitions, workload profiles, and current result tables are ma
 | Lifecycle | Build/search/save/load/export is 55.35 ms / 54.44 MB |
 | Fuzzy edit distance | Long insertion is 376.58x faster than naive Levenshtein; long no-match is 172.88x faster, both with 0 B allocated |
 
-These numbers are local diagnostics, not a cross-machine performance contract. The full Markdown, CSV, and JSON BenchmarkDotNet reports remain the source for raw measurements.
+These numbers are local diagnostics, not a cross-machine performance contract.

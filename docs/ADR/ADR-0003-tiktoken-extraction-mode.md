@@ -143,9 +143,4 @@ Commands:
 - Unsupervised Keyphrase Extraction with Multipartite Graphs: `https://arxiv.org/abs/1803.08721`
 - Improving Graph-Based Text Representations with Character and Word Level N-grams: `https://arxiv.org/abs/2210.05999`
 - `docs/Architecture.md`
-- `tiktoken-graph-extraction.brainstorm.md`
-- `tiktoken-graph-extraction.plan.md`
-- `token-distance-ir-experiments.brainstorm.md`
-- `token-distance-ir-experiments.plan.md`
-- `local-corpus-graph-fallback.brainstorm.md`
-- `local-corpus-graph-fallback.plan.md`
+- `docs/Features/PerformanceBenchmarks.md`
