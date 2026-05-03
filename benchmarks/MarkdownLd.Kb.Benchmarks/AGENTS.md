@@ -21,9 +21,12 @@ Purpose: BenchmarkDotNet performance suite for Markdown-LD Knowledge Bank.
 ## Commands
 
 - build: `(cd ../.. && dotnet build MarkdownLd.Kb.slnx --no-restore)`
-- smoke: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphLifecycleSmokeBenchmarks*" --job Dry)`
-- quick: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphSearchBenchmarks*")`
+- fuzzy: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*")`
+- graph-build: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphBuildBenchmarks*")`
+- graph-search: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphSearchBenchmarks*")`
+- tiktoken-search: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenSearchBenchmarks*")`
 - persistence: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphPersistenceBenchmarks*")`
+- lifecycle: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphLifecycleBenchmarks*")`
 - profile: `(cd ../.. && MARKDOWN_LD_KB_BENCHMARK_PROFILE=cpu dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*")`
 
 ## Applicable Skills

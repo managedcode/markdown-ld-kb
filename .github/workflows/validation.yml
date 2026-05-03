@@ -12,9 +12,9 @@ env:
 
 jobs:
   validate:
-    name: Build, test, and pack
+    name: Build, test, benchmark, and pack
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 120
     permissions:
       contents: read
 
@@ -41,8 +41,23 @@ jobs:
     - name: Test with coverage
       run: dotnet test --solution MarkdownLd.Kb.slnx --configuration Release --verbosity normal -- --coverage --coverage-output-format cobertura --coverage-output "${{ github.workspace }}/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "${{ github.workspace }}/CodeCoverage.runsettings"
 
-    - name: Benchmark smoke
+    - name: Run fuzzy edit-distance benchmarks
       run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*"
+
+    - name: Run graph build benchmarks
+      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphBuildBenchmarks*"
+
+    - name: Run graph search benchmarks
+      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphSearchBenchmarks*"
+
+    - name: Run Tiktoken search benchmarks
+      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenSearchBenchmarks*"
+
+    - name: Run graph persistence benchmarks
+      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphPersistenceBenchmarks*"
+
+    - name: Run graph lifecycle benchmarks
+      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphLifecycleBenchmarks*"
 
     - name: Pack
       run: dotnet pack MarkdownLd.Kb.slnx --configuration Release -p:IncludeSymbols=false -p:SymbolPackageFormat=snupkg --output ./artifacts
@@ -57,7 +72,7 @@ jobs:
     - name: Upload benchmark artifact
       uses: actions/upload-artifact@v7
       with:
-        name: benchmark-smoke
+        name: benchmarkdotnet-results
         path: artifacts/benchmarks/results
         if-no-files-found: error
         retention-days: 5

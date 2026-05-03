@@ -127,7 +127,7 @@ The most important split is local graph search versus federated graph search. `S
 ## Install
 
 ```bash
-dotnet add package ManagedCode.MarkdownLd.Kb --version 0.2.1
+dotnet add package ManagedCode.MarkdownLd.Kb --version 0.2.5
 ```
 
 For local repository development:
@@ -1313,11 +1313,11 @@ dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter 
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphSearchBenchmarks*"
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenSearchBenchmarks*"
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphPersistenceBenchmarks*"
-dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphLifecycleSmokeBenchmarks*" --job Dry
+dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphLifecycleBenchmarks*"
 MARKDOWN_LD_KB_BENCHMARK_PROFILE=cpu dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*"
 ```
 
-Benchmark reports are written to `artifacts/benchmarks/results` as Markdown, CSV, and full JSON. The reports are intentionally ignored by git because they depend on the local machine and current system load. PR validation runs `FuzzyEditDistanceBenchmarks` as a mandatory smoke benchmark and uploads the reports as the `benchmark-smoke` artifact. The full benchmark workflow in `.github/workflows/benchmarks.yml` runs manually or on the weekly schedule and uploads the complete `benchmarkdotnet-results` artifact. The benchmark config adds one default `ShortRun` job only when the command does not already pass `--job`, `--job=...`, or `-j`.
+Benchmark reports are written to `artifacts/benchmarks/results` as Markdown, CSV, and full JSON. The reports are intentionally ignored by git because they depend on the local machine and current system load. PR validation and the dedicated workflow in `.github/workflows/benchmarks.yml` both run the complete BenchmarkDotNet suite and upload the `benchmarkdotnet-results` artifact. The benchmark config adds one `Default` job only when the command does not already pass `--job`, `--job=...`, or `-j`.
 
 The exported BenchmarkDotNet reports include the diagnostic columns that matter for this library:
 
@@ -1343,82 +1343,92 @@ Latest local benchmark run, executed on May 3, 2026 with BenchmarkDotNet 0.15.8,
 
 | Suite | Job | Benchmarks executed | Export prefix |
 | --- | --- | ---: | --- |
-| Fuzzy edit distance | ShortRun | 8 | `ManagedCode.MarkdownLd.Kb.Benchmarks.FuzzyEditDistanceBenchmarks-report` |
-| Graph build | ShortRun | 4 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphBuildBenchmarks-report` |
-| Graph search | ShortRun | 54 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphSearchBenchmarks-report` |
-| Tiktoken search | ShortRun | 12 | `ManagedCode.MarkdownLd.Kb.Benchmarks.TiktokenSearchBenchmarks-report` |
-| Graph persistence | ShortRun | 39 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphPersistenceBenchmarks-report` |
-| Graph lifecycle smoke | Dry | 1 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphLifecycleSmokeBenchmarks-report` |
+| Fuzzy edit distance | Default | 8 | `ManagedCode.MarkdownLd.Kb.Benchmarks.FuzzyEditDistanceBenchmarks-report` |
+| Graph build | Default | 4 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphBuildBenchmarks-report` |
+| Graph search | Default | 54 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphSearchBenchmarks-report` |
+| Tiktoken search | Default | 12 | `ManagedCode.MarkdownLd.Kb.Benchmarks.TiktokenSearchBenchmarks-report` |
+| Graph persistence | Default | 39 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphPersistenceBenchmarks-report` |
+| Graph lifecycle | Default | 1 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphLifecycleBenchmarks-report` |
+
+The full local pass executed 118 BenchmarkDotNet cases.
 
 Graph build:
 
 | Profile | Mean | StdDev | Allocated |
 | --- | ---: | ---: | ---: |
-| `ShortDocuments` | 9.548 ms | 0.0298 ms | 14.70 MB |
-| `LongDocuments` | 7.544 ms | 0.0149 ms | 14.35 MB |
-| `LargeCorpus` | 59.453 ms | 12.7272 ms | 58.08 MB |
-| `TokenizedMultilingual` | 12.433 ms | 0.0508 ms | 17.77 MB |
+| `ShortDocuments` | 9.462 ms | 0.0324 ms | 14.61 MB |
+| `LongDocuments` | 7.509 ms | 0.0127 ms | 14.35 MB |
+| `LargeCorpus` | 45.457 ms | 0.5488 ms | 57.74 MB |
+| `TokenizedMultilingual` | 12.206 ms | 0.2035 ms | 17.77 MB |
 
 Graph search exact-query mean time:
 
 | Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ShortDocuments` | 1.198 ms | 1.673 ms | 1.988 ms | 2.016 ms | 48.157 ms | 51.551 ms |
-| `LongDocuments` | 0.449 ms | 1.987 ms | 1.975 ms | 0.638 ms | 12.698 ms | 15.186 ms |
-| `FederatedRunbooks` | 1.327 ms | 2.024 ms | 2.038 ms | 2.255 ms | 41.309 ms | 61.614 ms |
+| `ShortDocuments` | 1.195 ms | 1.659 ms | 1.979 ms | 2.036 ms | 41.078 ms | 39.410 ms |
+| `LongDocuments` | 0.460 ms | 1.989 ms | 1.984 ms | 0.634 ms | 13.007 ms | 14.030 ms |
+| `FederatedRunbooks` | 1.317 ms | 2.022 ms | 2.041 ms | 2.244 ms | 41.528 ms | 44.219 ms |
 
 Graph search exact-query allocated memory per operation:
 
 | Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ShortDocuments` | 2.37 MB | 3.07 MB | 3.06 MB | 3.27 MB | 60.47 MB | 62.32 MB |
-| `LongDocuments` | 1.91 MB | 3.46 MB | 3.46 MB | 1.21 MB | 20.26 MB | 22.21 MB |
-| `FederatedRunbooks` | 2.53 MB | 3.53 MB | 3.53 MB | 3.48 MB | 60.75 MB | 62.75 MB |
+| `ShortDocuments` | 2.37 MB | 3.07 MB | 3.07 MB | 3.27 MB | 60.33 MB | 62.31 MB |
+| `LongDocuments` | 1.91 MB | 3.46 MB | 3.46 MB | 1.21 MB | 20.22 MB | 22.22 MB |
+| `FederatedRunbooks` | 2.54 MB | 3.52 MB | 3.52 MB | 3.48 MB | 61.10 MB | 62.65 MB |
 
 The `ShortDocuments` exact-query diagnostic slice shows the current hot paths:
 
 | Method | Mean | Allocated | Alloc ratio | Gen0 | Gen1 | Gen2 | Work items | Lock contentions |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Ranked graph | 1.198 ms | 2.37 MB | 1.00x | 296.8750 | 107.4219 | 0 | 0 | 0 |
-| BM25 | 1.673 ms | 3.07 MB | 1.29x | 384.7656 | 142.5781 | 0 | 0 | 0 |
-| BM25 fuzzy | 1.988 ms | 3.06 MB | 1.29x | 375.0000 | 156.2500 | 0 | 0 | 0 |
-| Focused | 2.016 ms | 3.27 MB | 1.38x | 406.2500 | 179.6875 | 0 | 0 | 0 |
-| Schema SPARQL | 48.157 ms | 60.47 MB | 25.49x | 8400.0000 | 1800.0000 | 400.0000 | 551 | 305.2000 |
-| Local federated | 51.551 ms | 62.32 MB | 26.27x | 8500.0000 | 2000.0000 | 333.3333 | 552 | 314.5000 |
+| Ranked graph | 1.195 ms | 2.37 MB | 1.00x | 296.8750 | 101.5625 | 0 | 0 | 0 |
+| BM25 | 1.659 ms | 3.07 MB | 1.29x | 384.7656 | 142.5781 | 0 | 0 | 0 |
+| BM25 fuzzy | 1.979 ms | 3.07 MB | 1.29x | 375.0000 | 125.0000 | 0 | 0 | 0 |
+| Focused | 2.036 ms | 3.27 MB | 1.38x | 406.2500 | 179.6875 | 0 | 0 | 0 |
+| Schema SPARQL | 41.078 ms | 60.33 MB | 25.43x | 8400.0000 | 1800.0000 | 400.0000 | 551 | 300.6000 |
+| Local federated | 39.410 ms | 62.31 MB | 26.27x | 8600.0000 | 1800.0000 | 400.0000 | 552 | 326.0000 |
 
-Allocation and GC columns come directly from BenchmarkDotNet diagnosers. Treat the ratios and relative pressure inside the same run as the useful signal; ShortRun is a fast diagnostic pass, not a release-grade SLA measurement.
+Allocation, GC, work-item, and lock-contention columns come directly from BenchmarkDotNet diagnosers. Treat ratios and relative pressure inside the same run as the useful signal; local numbers are diagnostics, not release-grade SLA measurements.
 
 Persistence and export on the `LargeCorpus` profile:
 
 | Method | Mean | StdDev | Allocated |
 | --- | ---: | ---: | ---: |
-| `CreateSnapshot` | 4.527 ms | 0.008 ms | 5.31 MB |
-| `SerializeTurtle` | 9.203 ms | 0.088 ms | 18.07 MB |
-| `SerializeJsonLd` | 13.157 ms | 0.086 ms | 20.31 MB |
-| `SaveTurtleToFile` | 29.853 ms | 0.122 ms | 34.74 MB |
-| `SaveJsonLdToFile` | 38.144 ms | 1.436 ms | 37.02 MB |
-| `LoadTurtleFromFile` | 35.983 ms | 0.373 ms | 28.10 MB |
-| `LoadJsonLdFromFile` | 99.980 ms | 2.262 ms | 75.32 MB |
+| `CreateSnapshot` | 4.494 ms | 0.0045 ms | 5.18 MB |
+| `SerializeTurtle` | 9.249 ms | 0.0436 ms | 18.07 MB |
+| `SerializeJsonLd` | 12.371 ms | 0.0586 ms | 20.31 MB |
+| `ExportMermaidFlowchart` | 5.884 ms | 0.0899 ms | 7.15 MB |
+| `ExportDotGraph` | 6.039 ms | 0.0050 ms | 7.55 MB |
+| `SaveTurtleToFile` | 29.641 ms | 0.1868 ms | 34.74 MB |
+| `SaveJsonLdToFile` | 38.491 ms | 1.5349 ms | 37.02 MB |
+| `LoadTurtleFromFile` | 35.708 ms | 0.8051 ms | 28.10 MB |
+| `LoadJsonLdFromFile` | 90.663 ms | 2.9780 ms | 75.32 MB |
+
+Broad graph lifecycle:
+
+| Method | Mean | StdDev | Allocated | Gen0 | Gen1 | Gen2 | Work items |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `BuildSearchSaveLoadAndExport` | 55.35 ms | 3.571 ms | 54.44 MB | 6750.0000 | 2250.0000 | 750.0000 | 52.0000 |
 
 Tiktoken token-distance search:
 
 | Profile | Query | Exact | Fuzzy-corrected | Exact allocated | Fuzzy allocated |
 | --- | --- | ---: | ---: | ---: | ---: |
-| `LongDocuments` | Exact | 298.1 us | 301.9 us | 212.24 KB | 212.99 KB |
-| `LongDocuments` | Typo | 350.4 us | 393.0 us | 212.88 KB | 216.13 KB |
-| `LongDocuments` | NoMatch | 254.3 us | 257.7 us | 212.19 KB | 213.41 KB |
-| `TokenizedMultilingual` | Exact | 219.4 us | 220.5 us | 139.18 KB | 140.13 KB |
-| `TokenizedMultilingual` | Typo | 246.2 us | 267.8 us | 139.59 KB | 142.02 KB |
-| `TokenizedMultilingual` | NoMatch | 200.3 us | 184.3 us | 138.91 KB | 140.06 KB |
+| `LongDocuments` | Exact | 298.1 us | 300.2 us | 212.24 KB | 213.16 KB |
+| `LongDocuments` | Typo | 334.8 us | 391.5 us | 212.88 KB | 216.30 KB |
+| `LongDocuments` | NoMatch | 254.1 us | 257.1 us | 212.19 KB | 213.49 KB |
+| `TokenizedMultilingual` | Exact | 219.8 us | 221.4 us | 139.18 KB | 140.30 KB |
+| `TokenizedMultilingual` | Typo | 245.2 us | 267.6 us | 139.59 KB | 142.20 KB |
+| `TokenizedMultilingual` | NoMatch | 182.7 us | 183.1 us | 138.91 KB | 140.15 KB |
 
 Fuzzy edit-distance mean time:
 
 | Scenario | Bounded bit-vector/banded | Naive Levenshtein | Speedup vs naive | Bounded allocation | Naive allocation |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Short deletion | 6.793 ns | 94.900 ns | 13.97x | 0 B | 112 B |
-| Short substitution | 32.973 ns | 83.927 ns | 2.55x | 0 B | 112 B |
-| Long insertion | 22.062 ns | 8,261.735 ns | 374.48x | 0 B | 640 B |
-| Long no-match | 53.873 ns | 9,292.649 ns | 172.49x | 0 B | 672 B |
+| Short deletion | 6.726 ns | 94.380 ns | 14.03x | 0 B | 112 B |
+| Short substitution | 33.756 ns | 82.509 ns | 2.44x | 0 B | 112 B |
+| Long insertion | 21.894 ns | 8,244.786 ns | 376.58x | 0 B | 640 B |
+| Long no-match | 53.268 ns | 9,208.866 ns | 172.88x | 0 B | 672 B |
 
 This run reflects the allocation-focused search hot-path pass: BM25 now uses the shared allocation-aware tokenizer, direct scoring loops, and bounded top-N match retention; fuzzy edit distance uses stack-backed bit-vector masks for short residual tokens and pooled rows for the long-token fallback; and Tiktoken search keeps only bounded top-N candidates while TF-IDF weighting updates dictionary values without temporary key arrays.
 

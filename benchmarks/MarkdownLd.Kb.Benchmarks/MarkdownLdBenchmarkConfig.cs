@@ -40,7 +40,7 @@ public sealed class MarkdownLdBenchmarkConfig : ManualConfig
             return;
         }
 
-        AddJob(Job.ShortRun.WithId("ShortRun"));
+        AddJob(Job.Default.WithId("Default"));
     }
 
     private static bool IsJobOption(string arg)

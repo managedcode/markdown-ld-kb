@@ -9,11 +9,11 @@ namespace ManagedCode.MarkdownLd.Kb.Benchmarks;
     BenchmarkCategories.Search,
     BenchmarkCategories.Persistence,
     BenchmarkCategories.Export,
-    BenchmarkCategories.Smoke)]
-public class GraphLifecycleSmokeBenchmarks
+    BenchmarkCategories.Lifecycle)]
+public class GraphLifecycleBenchmarks
 {
     private const BenchmarkCorpusProfile CorpusProfile = BenchmarkCorpusProfile.ShortDocuments;
-    private const string StoreLocation = "smoke/graph.ttl";
+    private const string StoreLocation = "lifecycle/graph.ttl";
     private const string FileName = "graph.ttl";
     private static readonly KnowledgeGraphFilePersistenceOptions TurtlePersistenceOptions = new()
     {
@@ -34,7 +34,7 @@ public class GraphLifecycleSmokeBenchmarks
     {
         _sources = BenchmarkCorpusFactory.CreateSources(CorpusProfile);
         _searchOptions = BenchmarkCorpusFactory.CreateRankedOptions(KnowledgeGraphSearchMode.Bm25);
-        _temporaryDirectory = Path.Combine(Path.GetTempPath(), $"{nameof(GraphLifecycleSmokeBenchmarks)}-{Guid.NewGuid():N}");
+        _temporaryDirectory = Path.Combine(Path.GetTempPath(), $"{nameof(GraphLifecycleBenchmarks)}-{Guid.NewGuid():N}");
         _filePath = Path.Combine(_temporaryDirectory, FileName);
     }
 
