@@ -1285,7 +1285,7 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 
 ## Algorithm References
 
-- Optional fuzzy lexical matching is shared by BM25 typo-tolerant ranking and Tiktoken fuzzy query correction. It uses bounded edit distance with portable SIMD common-affix trimming, a single-word bit-vector dynamic-programming path for short residual tokens, and a bounded banded dynamic-programming fallback for longer residual tokens. It is not a naive full-matrix Levenshtein implementation and does not use platform-specific SIMD intrinsics.
+- Optional fuzzy lexical matching is shared by BM25 typo-tolerant ranking and Tiktoken fuzzy query correction. It uses bounded edit distance with portable SIMD common-affix trimming, stack-backed bit-vector masks for short residual tokens, and a pooled bounded banded dynamic-programming fallback for longer residual tokens. It is not a naive full-matrix Levenshtein implementation and does not use platform-specific SIMD intrinsics.
 - The bit-vector path is guided by Gene Myers, "A fast bit-vector algorithm for approximate string matching based on dynamic programming", Journal of the ACM, 1999, DOI: <https://doi.org/10.1145/316542.316550>.
 - The bounded-threshold behavior is guided by Esko Ukkonen, "Algorithms for approximate string matching", Information and Control, 1985, DOI: <https://doi.org/10.1016/S0019-9958(85)80046-2>.
 - Thanks to `biegehydra/MyersBitParallelDotnet` for inspiring the practical direction we took for fast short-token typo matching.
@@ -1363,28 +1363,28 @@ Graph search exact-query mean time:
 
 | Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ShortDocuments` | 1.200 ms | 2.018 ms | 2.627 ms | 2.053 ms | 46.034 ms | 49.615 ms |
-| `LongDocuments` | 0.480 ms | 3.577 ms | 3.574 ms | 0.642 ms | 12.819 ms | 14.561 ms |
-| `FederatedRunbooks` | 1.334 ms | 2.723 ms | 2.720 ms | 2.271 ms | 45.981 ms | 55.269 ms |
+| `ShortDocuments` | 1.198 ms | 1.673 ms | 1.988 ms | 2.016 ms | 48.157 ms | 51.551 ms |
+| `LongDocuments` | 0.449 ms | 1.987 ms | 1.975 ms | 0.638 ms | 12.698 ms | 15.186 ms |
+| `FederatedRunbooks` | 1.327 ms | 2.024 ms | 2.038 ms | 2.255 ms | 41.309 ms | 61.614 ms |
 
 Graph search exact-query allocated memory per operation:
 
 | Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ShortDocuments` | 2.37 MB | 4.83 MB | 7.22 MB | 3.27 MB | 60.34 MB | 62.33 MB |
-| `LongDocuments` | 1.91 MB | 10.67 MB | 10.67 MB | 1.21 MB | 20.22 MB | 22.21 MB |
-| `FederatedRunbooks` | 2.54 MB | 6.80 MB | 6.80 MB | 3.48 MB | 60.75 MB | 62.61 MB |
+| `ShortDocuments` | 2.37 MB | 3.07 MB | 3.06 MB | 3.27 MB | 60.47 MB | 62.32 MB |
+| `LongDocuments` | 1.91 MB | 3.46 MB | 3.46 MB | 1.21 MB | 20.26 MB | 22.21 MB |
+| `FederatedRunbooks` | 2.53 MB | 3.53 MB | 3.53 MB | 3.48 MB | 60.75 MB | 62.75 MB |
 
 The `ShortDocuments` exact-query diagnostic slice shows the current hot paths:
 
 | Method | Mean | Allocated | Alloc ratio | Gen0 | Gen1 | Gen2 | Work items | Lock contentions |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Ranked graph | 1.200 ms | 2.37 MB | 1.00x | 296.8750 | 107.4219 | 0 | 0 | 0 |
-| BM25 | 2.018 ms | 4.83 MB | 2.04x | 601.5625 | 210.9375 | 0 | 0 | 0 |
-| BM25 fuzzy | 2.627 ms | 7.22 MB | 3.04x | 902.3438 | 230.4688 | 0 | 0 | 0 |
-| Focused | 2.053 ms | 3.27 MB | 1.38x | 406.2500 | 179.6875 | 0 | 0 | 0 |
-| Schema SPARQL | 46.034 ms | 60.34 MB | 25.44x | 8500.0000 | 1833.3333 | 500.0000 | 551 | 325 |
-| Local federated | 49.615 ms | 62.33 MB | 26.27x | 8666.6667 | 2166.6667 | 500.0000 | 552 | 315.1667 |
+| Ranked graph | 1.198 ms | 2.37 MB | 1.00x | 296.8750 | 107.4219 | 0 | 0 | 0 |
+| BM25 | 1.673 ms | 3.07 MB | 1.29x | 384.7656 | 142.5781 | 0 | 0 | 0 |
+| BM25 fuzzy | 1.988 ms | 3.06 MB | 1.29x | 375.0000 | 156.2500 | 0 | 0 | 0 |
+| Focused | 2.016 ms | 3.27 MB | 1.38x | 406.2500 | 179.6875 | 0 | 0 | 0 |
+| Schema SPARQL | 48.157 ms | 60.47 MB | 25.49x | 8400.0000 | 1800.0000 | 400.0000 | 551 | 305.2000 |
+| Local federated | 51.551 ms | 62.32 MB | 26.27x | 8500.0000 | 2000.0000 | 333.3333 | 552 | 314.5000 |
 
 Allocation and GC columns come directly from BenchmarkDotNet diagnosers. Treat the ratios and relative pressure inside the same run as the useful signal; ShortRun is a fast diagnostic pass, not a release-grade SLA measurement.
 
@@ -1404,18 +1404,22 @@ Tiktoken token-distance search:
 
 | Profile | Query | Exact | Fuzzy-corrected | Exact allocated | Fuzzy allocated |
 | --- | --- | ---: | ---: | ---: | ---: |
-| `LongDocuments` | Exact | 955.1 us | 952.7 us | 2.38 MB | 2.38 MB |
-| `LongDocuments` | Typo | 1.112 ms | 1.291 ms | 2.78 MB | 3.73 MB |
-| `TokenizedMultilingual` | Exact | 680.8 us | 690.5 us | 1.81 MB | 1.81 MB |
-| `TokenizedMultilingual` | Typo | 811.3 us | 861.2 us | 1.81 MB | 1.82 MB |
+| `LongDocuments` | Exact | 298.1 us | 301.9 us | 212.24 KB | 212.99 KB |
+| `LongDocuments` | Typo | 350.4 us | 393.0 us | 212.88 KB | 216.13 KB |
+| `LongDocuments` | NoMatch | 254.3 us | 257.7 us | 212.19 KB | 213.41 KB |
+| `TokenizedMultilingual` | Exact | 219.4 us | 220.5 us | 139.18 KB | 140.13 KB |
+| `TokenizedMultilingual` | Typo | 246.2 us | 267.8 us | 139.59 KB | 142.02 KB |
+| `TokenizedMultilingual` | NoMatch | 200.3 us | 184.3 us | 138.91 KB | 140.06 KB |
 
 Fuzzy edit-distance mean time:
 
 | Scenario | Bounded bit-vector/banded | Naive Levenshtein | Speedup vs naive | Bounded allocation | Naive allocation |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Short deletion | 6.778 ns | 91.780 ns | 13.54x | 0 B | 112 B |
-| Short substitution | 31.011 ns | 82.948 ns | 2.67x | 216 B | 112 B |
-| Long insertion | 21.980 ns | 7,990.146 ns | 363.53x | 0 B | 640 B |
-| Long no-match | 70.283 ns | 8,990.700 ns | 127.92x | 328 B | 672 B |
+| Short deletion | 6.793 ns | 94.900 ns | 13.97x | 0 B | 112 B |
+| Short substitution | 32.973 ns | 83.927 ns | 2.55x | 0 B | 112 B |
+| Long insertion | 22.062 ns | 8,261.735 ns | 374.48x | 0 B | 640 B |
+| Long no-match | 53.873 ns | 9,292.649 ns | 172.49x | 0 B | 672 B |
+
+This run reflects the allocation-focused search hot-path pass: BM25 now uses the shared allocation-aware tokenizer, direct scoring loops, and bounded top-N match retention; fuzzy edit distance uses stack-backed bit-vector masks for short residual tokens and pooled rows for the long-token fallback; and Tiktoken search keeps only bounded top-N candidates while TF-IDF weighting updates dictionary values without temporary key arrays.
 
 These numbers are local measurements, not a cross-machine performance contract. The README keeps compact slices only; [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md) and the full Markdown, CSV, and JSON BenchmarkDotNet reports remain the source for detailed diagnostics.

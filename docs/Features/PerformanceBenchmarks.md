@@ -109,28 +109,28 @@ Graph search exact-query mean time:
 
 | Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ShortDocuments` | 1.200 ms | 2.018 ms | 2.627 ms | 2.053 ms | 46.034 ms | 49.615 ms |
-| `LongDocuments` | 0.480 ms | 3.577 ms | 3.574 ms | 0.642 ms | 12.819 ms | 14.561 ms |
-| `FederatedRunbooks` | 1.334 ms | 2.723 ms | 2.720 ms | 2.271 ms | 45.981 ms | 55.269 ms |
+| `ShortDocuments` | 1.198 ms | 1.673 ms | 1.988 ms | 2.016 ms | 48.157 ms | 51.551 ms |
+| `LongDocuments` | 0.449 ms | 1.987 ms | 1.975 ms | 0.638 ms | 12.698 ms | 15.186 ms |
+| `FederatedRunbooks` | 1.327 ms | 2.024 ms | 2.038 ms | 2.255 ms | 41.309 ms | 61.614 ms |
 
 Graph search exact-query allocated memory per operation:
 
 | Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ShortDocuments` | 2.37 MB | 4.83 MB | 7.22 MB | 3.27 MB | 60.34 MB | 62.33 MB |
-| `LongDocuments` | 1.91 MB | 10.67 MB | 10.67 MB | 1.21 MB | 20.22 MB | 22.21 MB |
-| `FederatedRunbooks` | 2.54 MB | 6.80 MB | 6.80 MB | 3.48 MB | 60.75 MB | 62.61 MB |
+| `ShortDocuments` | 2.37 MB | 3.07 MB | 3.06 MB | 3.27 MB | 60.47 MB | 62.32 MB |
+| `LongDocuments` | 1.91 MB | 3.46 MB | 3.46 MB | 1.21 MB | 20.26 MB | 22.21 MB |
+| `FederatedRunbooks` | 2.53 MB | 3.53 MB | 3.53 MB | 3.48 MB | 60.75 MB | 62.75 MB |
 
 The `ShortDocuments` exact-query diagnostic slice shows the current hot paths:
 
 | Method | Mean | Allocated | Alloc ratio | Gen0 | Gen1 | Gen2 | Work items | Lock contentions |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Ranked graph | 1.200 ms | 2.37 MB | 1.00x | 296.8750 | 107.4219 | 0 | 0 | 0 |
-| BM25 | 2.018 ms | 4.83 MB | 2.04x | 601.5625 | 210.9375 | 0 | 0 | 0 |
-| BM25 fuzzy | 2.627 ms | 7.22 MB | 3.04x | 902.3438 | 230.4688 | 0 | 0 | 0 |
-| Focused | 2.053 ms | 3.27 MB | 1.38x | 406.2500 | 179.6875 | 0 | 0 | 0 |
-| Schema SPARQL | 46.034 ms | 60.34 MB | 25.44x | 8500.0000 | 1833.3333 | 500.0000 | 551 | 325 |
-| Local federated | 49.615 ms | 62.33 MB | 26.27x | 8666.6667 | 2166.6667 | 500.0000 | 552 | 315.1667 |
+| Ranked graph | 1.198 ms | 2.37 MB | 1.00x | 296.8750 | 107.4219 | 0 | 0 | 0 |
+| BM25 | 1.673 ms | 3.07 MB | 1.29x | 384.7656 | 142.5781 | 0 | 0 | 0 |
+| BM25 fuzzy | 1.988 ms | 3.06 MB | 1.29x | 375.0000 | 156.2500 | 0 | 0 | 0 |
+| Focused | 2.016 ms | 3.27 MB | 1.38x | 406.2500 | 179.6875 | 0 | 0 | 0 |
+| Schema SPARQL | 48.157 ms | 60.47 MB | 25.49x | 8400.0000 | 1800.0000 | 400.0000 | 551 | 305.2000 |
+| Local federated | 51.551 ms | 62.32 MB | 26.27x | 8500.0000 | 2000.0000 | 333.3333 | 552 | 314.5000 |
 
 Allocation, GC, work-item, and lock-contention columns come directly from BenchmarkDotNet diagnosers. Treat ratios and relative pressure inside the same run as the useful signal; ShortRun is a fast diagnostic pass, not a release-grade SLA measurement.
 
@@ -152,13 +152,13 @@ Tiktoken token-distance search over the semantic profiles:
 
 | Profile | Query | Exact | Fuzzy-corrected | Exact allocated | Fuzzy allocated |
 | --- | --- | ---: | ---: | ---: | ---: |
-| `LongDocuments` | Exact | 955.1 us | 952.7 us | 2.38 MB | 2.38 MB |
-| `LongDocuments` | Typo | 1.112 ms | 1.291 ms | 2.78 MB | 3.73 MB |
-| `LongDocuments` | NoMatch | 891.0 us | 902.5 us | 2.25 MB | 2.27 MB |
-| `TokenizedMultilingual` | Exact | 680.8 us | 690.5 us | 1.81 MB | 1.81 MB |
-| `TokenizedMultilingual` | Typo | 811.3 us | 861.2 us | 1.81 MB | 1.82 MB |
-| `TokenizedMultilingual` | NoMatch | 634.1 us | 634.7 us | 1.81 MB | 1.82 MB |
+| `LongDocuments` | Exact | 298.1 us | 301.9 us | 212.24 KB | 212.99 KB |
+| `LongDocuments` | Typo | 350.4 us | 393.0 us | 212.88 KB | 216.13 KB |
+| `LongDocuments` | NoMatch | 254.3 us | 257.7 us | 212.19 KB | 213.41 KB |
+| `TokenizedMultilingual` | Exact | 219.4 us | 220.5 us | 139.18 KB | 140.13 KB |
+| `TokenizedMultilingual` | Typo | 246.2 us | 267.8 us | 139.59 KB | 142.02 KB |
+| `TokenizedMultilingual` | NoMatch | 200.3 us | 184.3 us | 138.91 KB | 140.06 KB |
 
-Interpretation: ranked graph, BM25, BM25 fuzzy, and focused search are the low-latency retrieval paths. BM25 fuzzy deliberately spends more time and allocation on typo-heavy queries and should stay opt-in. Schema-aware SPARQL and local federation are explainable RDF query paths, but dotNetRDF query-plan execution keeps them materially heavier for repeated low-latency calls. JSON-LD load is the highest persistence cost in the current local run; Turtle load and snapshot/serialization are cheaper. Use ranked graph or BM25 search when the caller needs low-latency retrieval, and use schema/federation when caller-visible evidence and graph-shape constraints matter more than raw latency.
+Interpretation: ranked graph, BM25, BM25 fuzzy, focused search, and Tiktoken token-distance search are the low-latency retrieval paths. The current BM25 implementation keeps exact and fuzzy allocation close by sharing the same tokenizer, dictionary shape, bounded top-N match retention, stack-backed short-token edit-distance masks, and pooled long-token fallback rows. Tiktoken search keeps bounded top-N candidates and updates TF-IDF dictionary values without temporary key arrays. Fuzzy BM25 still costs more CPU on typo-heavy queries and should stay opt-in. Schema-aware SPARQL and local federation are explainable RDF query paths, but dotNetRDF query-plan execution keeps them materially heavier for repeated low-latency calls. JSON-LD load is the highest persistence cost in the current local run; Turtle load and snapshot/serialization are cheaper. Use ranked graph or BM25 search when the caller needs low-latency retrieval, and use schema/federation when caller-visible evidence and graph-shape constraints matter more than raw latency.
 
-The fuzzy edit-distance suite measured the bounded bit-vector/banded path faster than the naive Levenshtein baseline in every measured scenario, including 363.53x faster for the long-insertion case and 127.92x faster for the long no-match case.
+The fuzzy edit-distance suite measured the bounded bit-vector/banded path with zero allocated bytes and faster than the naive Levenshtein baseline in every measured scenario, including 374.48x faster for the long-insertion case and 172.49x faster for the long no-match case.

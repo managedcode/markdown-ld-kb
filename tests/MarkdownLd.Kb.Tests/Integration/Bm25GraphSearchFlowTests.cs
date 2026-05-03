@@ -24,6 +24,10 @@ public sealed class Bm25GraphSearchFlowTests
     private const string SharedTermQuery = "sharedneedle";
     private const string SharedTermFirstPath = "content/runbooks/shared-first.md";
     private const string SharedTermSecondPath = "content/runbooks/shared-second.md";
+    private const string CjkPath = "content/runbooks/cjk.md";
+    private const string CjkTitle = "CJK recovery runbook";
+    private const string CjkExactQuery = "知識庫圖譜";
+    private const string CjkTypoQuery = "知識庫圖普";
     private const string ExactFuzzyBoundaryMarkdown = """
 ---
 title: Alpha
@@ -49,6 +53,13 @@ title: Shared second
 summary: sharedneedle second routing notes.
 ---
 # Shared second
+""";
+    private const string CjkMarkdown = """
+---
+title: CJK recovery runbook
+summary: 知識庫圖譜 restore evidence.
+---
+# CJK recovery runbook
 """;
     private const string AnswerText = "Use the cache restore runbook for cache restore work [1].";
     private static readonly Uri BaseUri = new(BaseUriText);
@@ -247,6 +258,39 @@ Use this policy for archive retention reviews.
 
         results.Count.ShouldBe(2);
         results.ShouldAllBe(result => result.Score > 0d);
+    }
+
+    [Test]
+    public async Task Bm25_fuzzy_token_matching_handles_cjk_one_edit_terms()
+    {
+        var build = await BuildAsync(new MarkdownSourceDocument(CjkPath, CjkMarkdown));
+
+        var exactResults = await build.SearchRankedAsync(
+            CjkTypoQuery,
+            new KnowledgeGraphRankedSearchOptions
+            {
+                Mode = KnowledgeGraphSearchMode.Bm25,
+                MaxResults = 1,
+            });
+        var fuzzyResults = await build.SearchRankedAsync(
+            CjkTypoQuery,
+            new KnowledgeGraphRankedSearchOptions
+            {
+                Mode = KnowledgeGraphSearchMode.Bm25,
+                EnableFuzzyTokenMatching = true,
+                MaxResults = 1,
+            });
+        var exactCjkResults = await build.SearchRankedAsync(
+            CjkExactQuery,
+            new KnowledgeGraphRankedSearchOptions
+            {
+                Mode = KnowledgeGraphSearchMode.Bm25,
+                MaxResults = 1,
+            });
+
+        exactResults.ShouldBeEmpty();
+        fuzzyResults.Single().Label.ShouldBe(CjkTitle);
+        exactCjkResults.Single().Label.ShouldBe(CjkTitle);
     }
 
     private static Task<MarkdownKnowledgeBuildResult> BuildAsync(params MarkdownSourceDocument[]? sources)

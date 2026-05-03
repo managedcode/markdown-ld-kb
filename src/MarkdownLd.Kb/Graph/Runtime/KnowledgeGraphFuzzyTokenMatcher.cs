@@ -22,7 +22,7 @@ internal static class KnowledgeGraphFuzzyTokenMatcher
     private const int ExactDistance = 0;
 
     public static bool TryFindFuzzyFrequency(
-        IReadOnlyDictionary<string, int> candidateTermFrequency,
+        Dictionary<string, int> candidateTermFrequency,
         string queryTerm,
         KnowledgeGraphFuzzyTokenMatchingOptions options,
         out double frequency)
@@ -36,6 +36,11 @@ internal static class KnowledgeGraphFuzzyTokenMatcher
         var bestDistance = KnowledgeGraphBoundedEditDistance.NoMatchDistance;
         foreach (var (candidateTerm, candidateFrequency) in candidateTermFrequency)
         {
+            if (!IsLengthCompatible(queryTerm.Length, candidateTerm.Length, options.MaxEditDistance))
+            {
+                continue;
+            }
+
             if (!TryComputeSimilarityAndDistance(
                     queryTerm,
                     candidateTerm,
@@ -102,5 +107,10 @@ internal static class KnowledgeGraphFuzzyTokenMatcher
     private static double CreateSimilarityWeight(int queryTermLength, int distance)
     {
         return FullConfidence - ((double)distance / queryTermLength);
+    }
+
+    private static bool IsLengthCompatible(int queryTermLength, int candidateTermLength, int maxEditDistance)
+    {
+        return Math.Abs(queryTermLength - candidateTermLength) <= maxEditDistance;
     }
 }

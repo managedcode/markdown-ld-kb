@@ -40,7 +40,7 @@ flowchart LR
 - `schema:keywords` are excluded from canonical ranking.
 - BM25 mode does not require an embedding provider, semantic index, Lucene index, or database.
 - Build-result BM25 can find body-only terms that are absent from title, summary, and front matter.
-- Fuzzy BM25 token matching is opt-in through `KnowledgeGraphRankedSearchOptions.EnableFuzzyTokenMatching`, `MaxFuzzyEditDistance`, and `MinimumFuzzyTokenLength`. It handles insertion, deletion, and substitution typos with portable SIMD common-affix trimming, a single-word bit-vector path for short residual tokens, and a bounded banded dynamic-programming fallback for longer residual tokens. It does not use platform-specific SIMD intrinsics.
+- Fuzzy BM25 token matching is opt-in through `KnowledgeGraphRankedSearchOptions.EnableFuzzyTokenMatching`, `MaxFuzzyEditDistance`, and `MinimumFuzzyTokenLength`. It handles insertion, deletion, and substitution typos with portable SIMD common-affix trimming, stack-backed bit-vector masks for short residual tokens, and a pooled bounded banded dynamic-programming fallback for longer residual tokens. It does not use platform-specific SIMD intrinsics.
 - A hit present in both graph and semantic ranking is marked as merged and keeps its graph-first position.
 - Semantic-only hits never outrank canonical graph hits in hybrid mode.
 - `KnowledgeGraphHybridFusionStrategy.ReciprocalRank` is opt-in. It applies reciprocal rank fusion across graph and semantic result lists while preserving the canonical and semantic component scores for diagnostics.

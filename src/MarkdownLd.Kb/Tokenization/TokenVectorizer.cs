@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.ML.Tokenizers;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
@@ -73,15 +74,22 @@ internal sealed class TokenVectorSpace
 
     private static Dictionary<int, double> BuildBinaryWeights(IReadOnlyList<int> tokenIds)
     {
-        return tokenIds.Distinct().ToDictionary(static tokenId => tokenId, static _ => FullConfidence);
+        var weights = new Dictionary<int, double>(tokenIds.Count);
+        foreach (var tokenId in tokenIds)
+        {
+            weights[tokenId] = FullConfidence;
+        }
+
+        return weights;
     }
 
     private static Dictionary<int, double> BuildTermFrequencyWeights(IReadOnlyList<int> tokenIds)
     {
-        var weights = new Dictionary<int, double>();
+        var weights = new Dictionary<int, double>(tokenIds.Count);
         foreach (var tokenId in tokenIds)
         {
-            weights[tokenId] = weights.GetValueOrDefault(tokenId) + TokenCountIncrement;
+            ref var weight = ref CollectionsMarshal.GetValueRefOrAddDefault(weights, tokenId, out _);
+            weight += TokenCountIncrement;
         }
 
         return weights;
@@ -90,9 +98,10 @@ internal sealed class TokenVectorSpace
     private Dictionary<int, double> BuildTfIdfWeights(IReadOnlyList<int> tokenIds)
     {
         var weights = BuildTermFrequencyWeights(tokenIds);
-        foreach (var tokenId in weights.Keys.ToArray())
+        foreach (var tokenId in weights.Keys)
         {
-            weights[tokenId] *= _idfWeights.GetValueOrDefault(tokenId, _unseenTokenIdfWeight);
+            ref var weight = ref CollectionsMarshal.GetValueRefOrNullRef(weights, tokenId);
+            weight *= _idfWeights.GetValueOrDefault(tokenId, _unseenTokenIdfWeight);
         }
 
         return weights;
@@ -109,11 +118,19 @@ internal sealed class TokenVectorSpace
     private static Dictionary<int, double> CountDocumentFrequencies(IReadOnlyList<IReadOnlyList<int>> corpusTokenIds)
     {
         var frequencies = new Dictionary<int, double>();
+        var seen = new HashSet<int>();
         foreach (var tokenIds in corpusTokenIds)
         {
-            foreach (var tokenId in tokenIds.Distinct())
+            seen.Clear();
+            foreach (var tokenId in tokenIds)
             {
-                frequencies[tokenId] = frequencies.GetValueOrDefault(tokenId) + TokenCountIncrement;
+                if (!seen.Add(tokenId))
+                {
+                    continue;
+                }
+
+                ref var frequency = ref CollectionsMarshal.GetValueRefOrAddDefault(frequencies, tokenId, out _);
+                frequency += TokenCountIncrement;
             }
         }
 
@@ -132,10 +149,10 @@ internal sealed record TokenVector(IReadOnlyDictionary<int, double> Weights)
     {
         if (weights.Count == 0)
         {
-            return new TokenVector(new Dictionary<int, double>());
+            return new TokenVector(new Dictionary<int, double>(0));
         }
 
-        var magnitude = Math.Sqrt(weights.Values.Sum(static weight => weight * weight));
+        var magnitude = Math.Sqrt(CalculateSquaredMagnitude(weights));
         return new TokenVector(NormalizeWeights(weights, magnitude));
     }
 
@@ -143,21 +160,40 @@ internal sealed record TokenVector(IReadOnlyDictionary<int, double> Weights)
     {
         ArgumentNullException.ThrowIfNull(other);
 
-        var keys = Weights.Keys.Concat(other.Weights.Keys).Distinct();
-        var sum = keys.Sum(key =>
+        var sum = ZeroConfidence;
+        foreach (var pair in Weights)
         {
-            var left = Weights.GetValueOrDefault(key);
-            var right = other.Weights.GetValueOrDefault(key);
-            var difference = left - right;
-            return difference * difference;
-        });
+            var difference = pair.Value - other.Weights.GetValueOrDefault(pair.Key);
+            sum += difference * difference;
+        }
+
+        foreach (var pair in other.Weights)
+        {
+            if (Weights.ContainsKey(pair.Key))
+            {
+                continue;
+            }
+
+            sum += pair.Value * pair.Value;
+        }
 
         return Math.Sqrt(sum);
     }
 
+    private static double CalculateSquaredMagnitude(IReadOnlyDictionary<int, double> weights)
+    {
+        var sum = ZeroConfidence;
+        foreach (var weight in weights.Values)
+        {
+            sum += weight * weight;
+        }
+
+        return sum;
+    }
+
     private static Dictionary<int, double> NormalizeWeights(IReadOnlyDictionary<int, double> weights, double magnitude)
     {
-        var normalized = new Dictionary<int, double>();
+        var normalized = new Dictionary<int, double>(weights.Count);
         foreach (var pair in weights)
         {
             normalized[pair.Key] = pair.Value / magnitude;
