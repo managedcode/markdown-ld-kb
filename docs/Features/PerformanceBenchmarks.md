@@ -85,7 +85,7 @@ MARKDOWN_LD_KB_BENCHMARK_PROFILE=jit dotnet run --project benchmarks/MarkdownLd.
 
 ## Current Results
 
-On May 3, 2026, local BenchmarkDotNet runs on Apple M2 Pro with .NET 10.0.5 wrote Markdown, CSV, and JSON reports to `artifacts/benchmarks/results`.
+On May 3, 2026, a full local BenchmarkDotNet run on Apple M2 Pro with .NET 10.0.5 wrote Markdown, CSV, and JSON reports to `artifacts/benchmarks/results`.
 
 | Suite | Job | Cases | Result files |
 | --- | --- | ---: | --- |
@@ -102,37 +102,37 @@ Graph build now reports named workload profiles:
 
 | Profile | Mean | StdDev | Allocated |
 | --- | ---: | ---: | ---: |
-| `ShortDocuments` | 9.462 ms | 0.0324 ms | 14.61 MB |
-| `LongDocuments` | 7.509 ms | 0.0127 ms | 14.35 MB |
-| `LargeCorpus` | 45.457 ms | 0.5488 ms | 57.74 MB |
-| `TokenizedMultilingual` | 12.206 ms | 0.2035 ms | 17.77 MB |
+| `ShortDocuments` | 9.987 ms | 0.2821 ms | 14.7 MB |
+| `LongDocuments` | 7.757 ms | 0.0475 ms | 14.35 MB |
+| `LargeCorpus` | 47.851 ms | 1.5044 ms | 57.73 MB |
+| `TokenizedMultilingual` | 12.499 ms | 0.1466 ms | 17.86 MB |
 
 Graph search exact-query mean time:
 
 | Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ShortDocuments` | 1.195 ms | 1.659 ms | 1.979 ms | 2.036 ms | 41.078 ms | 39.410 ms |
-| `LongDocuments` | 0.460 ms | 1.989 ms | 1.984 ms | 0.634 ms | 13.007 ms | 14.030 ms |
-| `FederatedRunbooks` | 1.317 ms | 2.022 ms | 2.041 ms | 2.244 ms | 41.528 ms | 44.219 ms |
+| `ShortDocuments` | 1.092 ms | 1.309 ms | 1.626 ms | 2.019 ms | 49.212 ms | 41.243 ms |
+| `LongDocuments` | 0.410 ms | 1.155 ms | 1.532 ms | 0.621 ms | 12.940 ms | 14.379 ms |
+| `FederatedRunbooks` | 1.176 ms | 1.536 ms | 1.697 ms | 2.082 ms | 41.349 ms | 44.783 ms |
 
 Graph search exact-query allocated memory per operation:
 
 | Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ShortDocuments` | 2.37 MB | 3.07 MB | 3.07 MB | 3.27 MB | 60.33 MB | 62.31 MB |
-| `LongDocuments` | 1.91 MB | 3.46 MB | 3.46 MB | 1.21 MB | 20.22 MB | 22.22 MB |
-| `FederatedRunbooks` | 2.54 MB | 3.52 MB | 3.52 MB | 3.48 MB | 61.10 MB | 62.65 MB |
+| `ShortDocuments` | 2.17 MB | 2.14 MB | 2.86 MB | 3.08 MB | 60.32 MB | 62.3 MB |
+| `LongDocuments` | 1.85 MB | 1.84 MB | 3.39 MB | 1.14 MB | 20.22 MB | 22.22 MB |
+| `FederatedRunbooks` | 2.34 MB | 2.32 MB | 3.31 MB | 3.29 MB | 60.65 MB | 62.65 MB |
 
 The `ShortDocuments` exact-query diagnostic slice shows the current hot paths:
 
 | Method | Mean | Allocated | Alloc ratio | Gen0 | Gen1 | Gen2 | Work items | Lock contentions |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Ranked graph | 1.195 ms | 2.37 MB | 1.00x | 296.8750 | 101.5625 | 0 | 0 | 0 |
-| BM25 | 1.659 ms | 3.07 MB | 1.29x | 384.7656 | 142.5781 | 0 | 0 | 0 |
-| BM25 fuzzy | 1.979 ms | 3.07 MB | 1.29x | 375.0000 | 125.0000 | 0 | 0 | 0 |
-| Focused | 2.036 ms | 3.27 MB | 1.38x | 406.2500 | 179.6875 | 0 | 0 | 0 |
-| Schema SPARQL | 41.078 ms | 60.33 MB | 25.43x | 8400.0000 | 1800.0000 | 400.0000 | 551 | 300.6000 |
-| Local federated | 39.410 ms | 62.31 MB | 26.27x | 8600.0000 | 1800.0000 | 400.0000 | 552 | 326.0000 |
+| Ranked graph | 1.092 ms | 2.17 MB | 1.00x | 271.4844 | 91.7969 | 0 | 0 | 0 |
+| BM25 | 1.309 ms | 2.14 MB | 0.99x | 267.5781 | 95.7031 | 0 | 0 | 0 |
+| BM25 fuzzy | 1.626 ms | 2.86 MB | 1.32x | 357.4219 | 119.1406 | 0 | 0 | 0 |
+| Focused | 2.019 ms | 3.08 MB | 1.42x | 382.8125 | 156.2500 | 0 | 0 | 0 |
+| Schema SPARQL | 49.212 ms | 60.32 MB | 27.79x | 8000.0000 | 1500.0000 | 250.0000 | 551 | 211.7500 |
+| Local federated | 41.243 ms | 62.3 MB | 28.70x | 8400.0000 | 1800.0000 | 200.0000 | 552 | 328.8000 |
 
 Allocation, GC, work-item, and lock-contention columns come directly from BenchmarkDotNet diagnosers. Treat ratios and relative pressure inside the same run as the useful signal; local numbers are diagnostics, not release-grade SLA measurements.
 
@@ -140,33 +140,37 @@ Persistence and export on the `LargeCorpus` profile:
 
 | Method | Mean | StdDev | Allocated |
 | --- | ---: | ---: | ---: |
-| `CreateSnapshot` | 4.494 ms | 0.0045 ms | 5.18 MB |
-| `SerializeTurtle` | 9.249 ms | 0.0436 ms | 18.07 MB |
-| `SerializeJsonLd` | 12.371 ms | 0.0586 ms | 20.31 MB |
-| `ExportMermaidFlowchart` | 5.884 ms | 0.0899 ms | 7.15 MB |
-| `ExportDotGraph` | 6.039 ms | 0.0050 ms | 7.55 MB |
-| `SaveTurtleToFile` | 29.641 ms | 0.1868 ms | 34.74 MB |
-| `SaveJsonLdToFile` | 38.491 ms | 1.5349 ms | 37.02 MB |
-| `LoadTurtleFromFile` | 35.708 ms | 0.8051 ms | 28.10 MB |
-| `LoadJsonLdFromFile` | 90.663 ms | 2.9780 ms | 75.32 MB |
+| `CreateSnapshot` | 4.559 ms | 0.008 ms | 5309.45 KB |
+| `SerializeTurtle` | 9.261 ms | 0.065 ms | 18499.4 KB |
+| `SerializeJsonLd` | 12.484 ms | 0.098 ms | 20793.76 KB |
+| `ExportMermaidFlowchart` | 5.985 ms | 0.045 ms | 7319.25 KB |
+| `ExportDotGraph` | 6.344 ms | 0.103 ms | 7733.59 KB |
+| `SaveTurtleToInMemoryStore` | 28.284 ms | 0.224 ms | 30754.28 KB |
+| `SaveJsonLdToInMemoryStore` | 38.182 ms | 0.380 ms | 33048.41 KB |
+| `SaveTurtleToFile` | 30.210 ms | 0.163 ms | 35572.86 KB |
+| `SaveJsonLdToFile` | 38.853 ms | 0.556 ms | 37909.87 KB |
+| `LoadTurtleFromInMemoryStore` | 32.332 ms | 0.206 ms | 25860.44 KB |
+| `LoadJsonLdFromInMemoryStore` | 102.065 ms | 1.957 ms | 74038.5 KB |
+| `LoadTurtleFromFile` | 34.787 ms | 0.190 ms | 28772.9 KB |
+| `LoadJsonLdFromFile` | 98.267 ms | 2.833 ms | 77123.59 KB |
 
 Broad graph lifecycle:
 
 | Method | Mean | StdDev | Allocated | Gen0 | Gen1 | Gen2 | Work items |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `BuildSearchSaveLoadAndExport` | 55.35 ms | 3.571 ms | 54.44 MB | 6750.0000 | 2250.0000 | 750.0000 | 52.0000 |
+| `BuildSearchSaveLoadAndExport` | 45.44 ms | 1.335 ms | 53.51 MB | 6333.3333 | 2000.0000 | 666.6667 | 52.0000 |
 
-Tiktoken token-distance search over the semantic profiles:
+Tiktoken token-distance search over the token-heavy profiles:
 
 | Profile | Query | Exact | Fuzzy-corrected | Exact allocated | Fuzzy allocated |
 | --- | --- | ---: | ---: | ---: | ---: |
-| `LongDocuments` | Exact | 298.1 us | 300.2 us | 212.24 KB | 213.16 KB |
-| `LongDocuments` | Typo | 334.8 us | 391.5 us | 212.88 KB | 216.30 KB |
-| `LongDocuments` | NoMatch | 254.1 us | 257.1 us | 212.19 KB | 213.49 KB |
-| `TokenizedMultilingual` | Exact | 219.8 us | 221.4 us | 139.18 KB | 140.30 KB |
-| `TokenizedMultilingual` | Typo | 245.2 us | 267.6 us | 139.59 KB | 142.20 KB |
-| `TokenizedMultilingual` | NoMatch | 182.7 us | 183.1 us | 138.91 KB | 140.15 KB |
+| `LongDocuments` | Exact | 159.8 us | 151.6 us | 107.27 KB | 108.38 KB |
+| `LongDocuments` | Typo | 182.5 us | 225.7 us | 107.91 KB | 110.68 KB |
+| `LongDocuments` | NoMatch | 115.6 us | 118.1 us | 107.22 KB | 108.33 KB |
+| `TokenizedMultilingual` | Exact | 112.0 us | 112.0 us | 70.85 KB | 72.05 KB |
+| `TokenizedMultilingual` | Typo | 136.9 us | 165.0 us | 71.27 KB | 73.41 KB |
+| `TokenizedMultilingual` | NoMatch | 107.5 us | 106.9 us | 70.58 KB | 71.63 KB |
 
-Interpretation: ranked graph, BM25, BM25 fuzzy, focused search, and Tiktoken token-distance search are the low-latency retrieval paths. The current BM25 implementation keeps exact and fuzzy allocation close by sharing the same tokenizer, dictionary shape, bounded top-N match retention, stack-backed short-token edit-distance masks, and pooled long-token fallback rows. Tiktoken search keeps bounded top-N candidates and updates TF-IDF dictionary values without temporary key arrays. Fuzzy BM25 still costs more CPU on typo-heavy queries and should stay opt-in. Schema-aware SPARQL and local federation are explainable RDF query paths, but dotNetRDF query-plan execution keeps them materially heavier for repeated low-latency calls. JSON-LD load is the highest persistence cost in the current local run; Turtle load and snapshot/serialization are cheaper. Use ranked graph or BM25 search when the caller needs low-latency retrieval, and use schema/federation when caller-visible evidence and graph-shape constraints matter more than raw latency.
+Interpretation: ranked graph, exact BM25, focused search, and Tiktoken token-distance search are the low-latency retrieval paths. Exact BM25 now counts only selected query terms with span-based dictionary lookup and pooled per-query statistics instead of building a full term-frequency dictionary for every candidate. Fuzzy BM25 still builds full candidate dictionaries because it must enumerate possible typo matches, so it remains opt-in for typo-tolerant calls. Tiktoken search keeps bounded top-N candidates, cached vector squared magnitudes, and dictionary value updates without temporary key arrays. Schema-aware SPARQL and local federation are explainable RDF query paths, but dotNetRDF query-plan execution keeps them materially heavier for repeated low-latency calls. JSON-LD load is the highest persistence cost in the current local run; Turtle load and snapshot/serialization are cheaper. Use ranked graph or exact BM25 search when the caller needs low-latency retrieval, and use schema/federation when caller-visible evidence and graph-shape constraints matter more than raw latency.
 
-The fuzzy edit-distance suite measured the bounded bit-vector/banded path with zero allocated bytes and faster than the naive Levenshtein baseline in every measured scenario, including 376.58x faster for the long-insertion case and 172.88x faster for the long no-match case.
+The fuzzy edit-distance suite measured the bounded bit-vector/banded path with zero allocated bytes and faster than the naive Levenshtein baseline in every measured scenario, including 368.69x faster for the long-insertion case and 176.19x faster for the long no-match case.

@@ -67,9 +67,14 @@ public sealed class TokenizedKnowledgeIndex
             options.EnableFuzzyQueryCorrection,
             options.MaxFuzzyEditDistance,
             options.MinimumFuzzyTokenLength);
+        var queryTerms = KnowledgeGraphSearchTokenizer.TokenizeDistinct(query);
         var corrections = new HashSet<string>(StringComparer.Ordinal);
+        var correctionCapacity = Math.Min(
+            (long)queryTerms.Length * options.MaxFuzzyCorrectionsPerToken,
+            int.MaxValue);
+        corrections.EnsureCapacity((int)correctionCapacity);
 
-        foreach (var queryTerm in KnowledgeGraphSearchTokenizer.TokenizeDistinct(query))
+        foreach (var queryTerm in queryTerms)
         {
             if (_corpusTermFrequency.ContainsKey(queryTerm))
             {
@@ -137,13 +142,30 @@ public sealed class TokenizedKnowledgeIndex
     private static IReadOnlyDictionary<int, IReadOnlyList<FuzzyCorpusTerm>> CreateCorpusTermsByLength(
         IReadOnlyDictionary<string, int> corpusTermFrequency)
     {
-        return corpusTermFrequency
-            .GroupBy(static pair => pair.Key.Length)
-            .ToDictionary(
-                static group => group.Key,
-                static group => (IReadOnlyList<FuzzyCorpusTerm>)group
-                    .Select(static pair => new FuzzyCorpusTerm(pair.Key, pair.Value))
-                    .OrderBy(static term => term.Value, StringComparer.Ordinal)
-                    .ToArray());
+        var termsByLength = new Dictionary<int, List<FuzzyCorpusTerm>>();
+        foreach (var pair in corpusTermFrequency)
+        {
+            if (!termsByLength.TryGetValue(pair.Key.Length, out var terms))
+            {
+                terms = [];
+                termsByLength.Add(pair.Key.Length, terms);
+            }
+
+            terms.Add(new FuzzyCorpusTerm(pair.Key, pair.Value));
+        }
+
+        var result = new Dictionary<int, IReadOnlyList<FuzzyCorpusTerm>>(termsByLength.Count);
+        foreach (var pair in termsByLength)
+        {
+            pair.Value.Sort(CompareCorpusTerms);
+            result.Add(pair.Key, pair.Value.ToArray());
+        }
+
+        return result;
+    }
+
+    private static int CompareCorpusTerms(FuzzyCorpusTerm left, FuzzyCorpusTerm right)
+    {
+        return string.Compare(left.Value, right.Value, StringComparison.Ordinal);
     }
 }

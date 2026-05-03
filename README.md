@@ -779,7 +779,7 @@ River sensors use cached forecasts to protect orchards from frost.
 }
 ```
 
-Tiktoken mode uses `Microsoft.ML.Tokenizers` to encode section/paragraph text into token IDs, builds normalized sparse vectors, and calculates Euclidean distance. The default weighting is `SubwordTfIdf`, fitted over the current build corpus and reused for query vectors. `TermFrequency` uses raw token counts, and `Binary` uses token presence/absence.
+Tiktoken mode uses `Microsoft.ML.Tokenizers` to encode section/paragraph text into token IDs, builds normalized sparse vectors, and calculates token-distance ranking from cached squared magnitudes and dot products. The default weighting is `SubwordTfIdf`, fitted over the current build corpus and reused for query vectors. `TermFrequency` uses raw token counts, and `Binary` uses token presence/absence.
 
 `SearchByTokenDistanceAsync` keeps exact token-distance behavior by default. Pass `TokenDistanceSearchOptions` with `EnableFuzzyQueryCorrection = true` when user queries may contain typos. The correction step checks words that are absent from the indexed corpus vocabulary, finds close corpus terms with the bounded edit-distance matcher, appends the best corrections to the query, and only then runs Tiktoken vector search. This improves recall for misspelled words in the query or corpus text while leaving the Tiktoken vector space as the ranking signal.
 
@@ -1272,6 +1272,7 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 - `dotNetRDF` builds the RDF graph, runs local SPARQL, and serializes Turtle/JSON-LD.
 - Schema-aware search compiles caller profiles into local or federated SPARQL and keeps generated queries/evidence visible to callers.
 - Ranked search can use graph-native ranking, in-memory BM25, optional fuzzy BM25 token matching, optional semantic ranking, or hybrid reciprocal-rank fusion.
+- Exact BM25 counts selected query terms with span-based lookup and pooled per-query statistics; fuzzy BM25 stays opt-in because it must enumerate typo candidates.
 - Cited answers use `IChatClient` plus ranked graph retrieval and return source citations without storing conversation history.
 - Chunk evaluation and source-change planning are deterministic local helpers, not hosted indexing services.
 - `dotNetRdf.Shacl` validates built graphs with default or caller-supplied SHACL shapes.
@@ -1285,7 +1286,7 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 
 ## Algorithm References
 
-- Optional fuzzy lexical matching is shared by BM25 typo-tolerant ranking and Tiktoken fuzzy query correction. It uses bounded edit distance with portable SIMD common-affix trimming, stack-backed bit-vector masks for short residual tokens, and a pooled bounded banded dynamic-programming fallback for longer residual tokens. It is not a naive full-matrix Levenshtein implementation and does not use platform-specific SIMD intrinsics.
+- Optional fuzzy lexical matching is shared by BM25 typo-tolerant ranking and Tiktoken fuzzy query correction. It uses bounded edit distance with common-affix trimming, stack-backed bit-vector masks for short residual tokens, and a pooled bounded banded dynamic-programming fallback for longer residual tokens. It is not a naive full-matrix Levenshtein implementation and does not use platform-specific SIMD intrinsics.
 - The bit-vector path is guided by Gene Myers, "A fast bit-vector algorithm for approximate string matching based on dynamic programming", Journal of the ACM, 1999, DOI: <https://doi.org/10.1145/316542.316550>.
 - The bounded-threshold behavior is guided by Esko Ukkonen, "Algorithms for approximate string matching", Information and Control, 1985, DOI: <https://doi.org/10.1016/S0019-9958(85)80046-2>.
 - Thanks to `biegehydra/MyersBitParallelDotnet` for inspiring the practical direction we took for fast short-token typo matching.
@@ -1311,13 +1312,13 @@ Current local headline numbers from the May 3, 2026 BenchmarkDotNet 0.15.8 run o
 | Area | Current local result |
 | --- | --- |
 | Full suite | 118 BenchmarkDotNet cases using the `Default` job |
-| Graph build | `LargeCorpus` builds in 45.457 ms with 57.74 MB allocated |
-| Low-latency search | `ShortDocuments` exact ranked graph search is 1.195 ms / 2.37 MB; BM25 is 1.659 ms / 3.07 MB |
-| Typo-tolerant search | BM25 fuzzy stays opt-in; `ShortDocuments` exact fuzzy search is 1.979 ms / 3.07 MB |
-| RDF query paths | `ShortDocuments` exact schema SPARQL is 41.078 ms / 60.33 MB; local federated schema search is 39.410 ms / 62.31 MB |
-| Tiktoken search | `LongDocuments` exact token-distance search is 298.1 us / 212.24 KB; typo correction is 391.5 us / 216.30 KB |
-| Persistence | `LargeCorpus` Turtle file load is 35.708 ms / 28.10 MB; JSON-LD file load is 90.663 ms / 75.32 MB |
-| Lifecycle | Build/search/save/load/export is 55.35 ms / 54.44 MB |
-| Fuzzy edit distance | Long insertion is 376.58x faster than naive Levenshtein; long no-match is 172.88x faster, both with 0 B allocated |
+| Graph build | `LargeCorpus` builds in 47.851 ms with 57.73 MB allocated |
+| Low-latency search | `ShortDocuments` exact ranked graph search is 1.092 ms / 2.17 MB; BM25 is 1.309 ms / 2.14 MB |
+| Typo-tolerant search | BM25 fuzzy stays opt-in; `ShortDocuments` typo fuzzy search is 1.815 ms / 2.86 MB |
+| RDF query paths | `ShortDocuments` exact schema SPARQL is 49.212 ms / 60.32 MB; local federated schema search is 41.243 ms / 62.3 MB |
+| Tiktoken search | `LongDocuments` exact token-distance search is 159.8 us / 107.27 KB; typo correction is 225.7 us / 110.68 KB |
+| Persistence | `LargeCorpus` Turtle file load is 34.787 ms / 28.10 MB; JSON-LD file load is 98.267 ms / 75.32 MB |
+| Lifecycle | Build/search/save/load/export is 45.44 ms / 53.51 MB |
+| Fuzzy edit distance | Long insertion is 368.69x faster than naive Levenshtein; long no-match is 176.19x faster, both with 0 B allocated |
 
 These numbers are local diagnostics, not a cross-machine performance contract.

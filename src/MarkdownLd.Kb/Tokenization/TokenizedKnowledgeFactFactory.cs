@@ -11,20 +11,37 @@ internal static class TokenizedKnowledgeFactFactory
         IReadOnlyList<TokenizedKnowledgeEntityHint> entityHints,
         IReadOnlyList<TokenizedKnowledgeRelation> relations)
     {
+        var entities = new List<KnowledgeEntityFact>(
+            entityHints.Count + sections.Count + segments.Count + topics.Count);
+        foreach (var entityHint in entityHints)
+        {
+            entities.Add(CreateEntityHintEntity(entityHint));
+        }
+
+        foreach (var section in sections)
+        {
+            entities.Add(CreateSectionEntity(section));
+        }
+
+        foreach (var segment in segments)
+        {
+            entities.Add(CreateSegmentEntity(segment));
+        }
+
+        foreach (var topic in topics)
+        {
+            entities.Add(CreateTopicEntity(topic));
+        }
+
         return new KnowledgeExtractionResult
         {
-            Entities = entityHints.Select(CreateEntityHintEntity)
-                .Concat(sections.Select(CreateSectionEntity))
-                .Concat(segments.Select(CreateSegmentEntity))
-                .Concat(topics.Select(CreateTopicEntity))
-                .ToList(),
-            Assertions = CreateEntityHintAssertions(entityHints)
-                .Concat(CreateDocumentSectionAssertions(sections))
-                .Concat(CreateSegmentParentAssertions(segments))
-                .Concat(CreateDocumentSegmentAssertions(segments))
-                .Concat(CreateTopicAssertions(topics))
-                .Concat(relations.Select(CreateRelationAssertion))
-                .ToList(),
+            Entities = entities,
+            Assertions = TokenizedKnowledgeAssertionBuilder.Build(
+                sections,
+                segments,
+                topics,
+                entityHints,
+                relations),
         };
     }
 
@@ -74,100 +91,4 @@ internal static class TokenizedKnowledgeFactFactory
         };
     }
 
-    private static IEnumerable<KnowledgeAssertionFact> CreateEntityHintAssertions(
-        IEnumerable<TokenizedKnowledgeEntityHint> hints)
-    {
-        foreach (var hint in hints)
-        {
-            yield return new KnowledgeAssertionFact
-            {
-                SubjectId = hint.DocumentId,
-                Predicate = SchemaMentionsText,
-                ObjectId = hint.Id,
-                Confidence = FullConfidence,
-                Source = hint.DocumentId,
-            };
-        }
-    }
-
-    private static IEnumerable<KnowledgeAssertionFact> CreateDocumentSectionAssertions(
-        IEnumerable<TokenizedKnowledgeSection> sections)
-    {
-        foreach (var section in sections)
-        {
-            yield return new KnowledgeAssertionFact
-            {
-                SubjectId = section.DocumentId,
-                Predicate = SchemaHasPartText,
-                ObjectId = section.Id,
-                Source = section.DocumentId,
-            };
-        }
-    }
-
-    private static IEnumerable<KnowledgeAssertionFact> CreateSegmentParentAssertions(
-        IEnumerable<TokenizedKnowledgeSegment> segments)
-    {
-        foreach (var segment in segments)
-        {
-            yield return new KnowledgeAssertionFact
-            {
-                SubjectId = segment.ParentId,
-                Predicate = SchemaHasPartText,
-                ObjectId = segment.Id,
-                Source = segment.DocumentId,
-            };
-        }
-    }
-
-    private static IEnumerable<KnowledgeAssertionFact> CreateDocumentSegmentAssertions(
-        IEnumerable<TokenizedKnowledgeSegment> segments)
-    {
-        foreach (var segment in segments)
-        {
-            yield return new KnowledgeAssertionFact
-            {
-                SubjectId = segment.DocumentId,
-                Predicate = SchemaMentionsText,
-                ObjectId = segment.Id,
-                Source = segment.DocumentId,
-            };
-        }
-    }
-
-    private static IEnumerable<KnowledgeAssertionFact> CreateTopicAssertions(IEnumerable<TokenizedKnowledgeTopic> topics)
-    {
-        foreach (var topic in topics)
-        {
-            yield return new KnowledgeAssertionFact
-            {
-                SubjectId = topic.SegmentId,
-                Predicate = SchemaAboutText,
-                ObjectId = topic.Id,
-                Confidence = topic.Score,
-                Source = topic.DocumentId,
-            };
-
-            yield return new KnowledgeAssertionFact
-            {
-                SubjectId = topic.DocumentId,
-                Predicate = SchemaAboutText,
-                ObjectId = topic.Id,
-                Confidence = topic.Score,
-                Source = topic.DocumentId,
-            };
-        }
-    }
-
-    private static KnowledgeAssertionFact CreateRelationAssertion(TokenizedKnowledgeRelation relation)
-    {
-        return new KnowledgeAssertionFact
-        {
-            SubjectId = relation.SubjectId,
-            Predicate = KbRelatedTo,
-            ObjectId = relation.ObjectId,
-            Confidence = Math.Max(ZeroConfidence, FullConfidence - (relation.Distance / MaximumNormalizedTokenDistance)),
-            Source = relation.SubjectId,
-        };
-    }
 }

@@ -19,19 +19,25 @@ internal sealed class TokenizedEntityHintExtractor
     public IReadOnlyList<TokenizedKnowledgeEntityHint> Extract(IReadOnlyList<MarkdownDocument> documents)
     {
         ArgumentNullException.ThrowIfNull(documents);
-        return documents.SelectMany(Extract).ToArray();
+        var hints = new List<TokenizedKnowledgeEntityHint>();
+        foreach (var document in documents)
+        {
+            AddEntityHints(hints, document);
+        }
+
+        return hints.ToArray();
     }
 
-    private IEnumerable<TokenizedKnowledgeEntityHint> Extract(MarkdownDocument document)
+    private void AddEntityHints(ICollection<TokenizedKnowledgeEntityHint> hints, MarkdownDocument document)
     {
         foreach (var hint in ReadEntityHints(document.FrontMatter))
         {
-            yield return new TokenizedKnowledgeEntityHint(
+            hints.Add(new TokenizedKnowledgeEntityHint(
                 CreateEntityHintId(hint.Label),
                 document.DocumentUri.AbsoluteUri,
                 hint.Label,
                 hint.Type,
-                hint.SameAs);
+                hint.SameAs));
         }
     }
 
@@ -104,12 +110,20 @@ internal sealed class TokenizedEntityHintExtractor
             return [];
         }
 
-        return ReadSequence(value)
-            .Select(ConvertFrontMatterString)
-            .Where(static text => !string.IsNullOrWhiteSpace(text))
-            .Select(static text => text!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var strings = new List<string>();
+        foreach (var item in ReadSequence(value))
+        {
+            var text = ConvertFrontMatterString(item);
+            if (string.IsNullOrWhiteSpace(text) || !seen.Add(text))
+            {
+                continue;
+            }
+
+            strings.Add(text);
+        }
+
+        return strings.ToArray();
     }
 
     private static string? ReadString(IReadOnlyDictionary<string, object?> map, string key)

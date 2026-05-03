@@ -110,9 +110,13 @@ internal sealed class TokenVectorSpace
     private static Dictionary<int, double> FitIdfWeights(IReadOnlyList<IReadOnlyList<int>> corpusTokenIds)
     {
         var documentFrequencies = CountDocumentFrequencies(corpusTokenIds);
-        return documentFrequencies.ToDictionary(
-            static pair => pair.Key,
-            pair => CalculateIdfWeight(corpusTokenIds.Count, pair.Value));
+        var weights = new Dictionary<int, double>(documentFrequencies.Count);
+        foreach (var pair in documentFrequencies)
+        {
+            weights.Add(pair.Key, CalculateIdfWeight(corpusTokenIds.Count, pair.Value));
+        }
+
+        return weights;
     }
 
     private static Dictionary<int, double> CountDocumentFrequencies(IReadOnlyList<IReadOnlyList<int>> corpusTokenIds)

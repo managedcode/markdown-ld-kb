@@ -1,4 +1,3 @@
-using System.Globalization;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
@@ -8,6 +7,8 @@ internal sealed class TiktokenKnowledgeGraphExtractor
     private readonly Uri _baseUri;
     private readonly TiktokenKnowledgeGraphOptions _options;
     private readonly TokenVectorizer _vectorizer;
+    private readonly TiktokenSegmentCandidateBuilder _segmentBuilder;
+    private readonly TiktokenRelatedSegmentBuilder _relationBuilder;
     private readonly TokenKeyphraseExtractor _topicExtractor;
     private readonly TokenizedEntityHintExtractor _entityHintExtractor;
 
@@ -16,6 +17,8 @@ internal sealed class TiktokenKnowledgeGraphExtractor
         _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
         _options = ValidateOptions(options ?? new TiktokenKnowledgeGraphOptions());
         _vectorizer = new TokenVectorizer(_options.ModelName);
+        _segmentBuilder = new TiktokenSegmentCandidateBuilder(_baseUri, _options, _vectorizer);
+        _relationBuilder = new TiktokenRelatedSegmentBuilder(_options);
         _topicExtractor = new TokenKeyphraseExtractor(_baseUri, _options);
         _entityHintExtractor = new TokenizedEntityHintExtractor(_baseUri);
     }
@@ -24,14 +27,14 @@ internal sealed class TiktokenKnowledgeGraphExtractor
     {
         ArgumentNullException.ThrowIfNull(documents);
 
-        var sections = documents.SelectMany(BuildSections).ToArray();
-        var candidates = documents.SelectMany(BuildSegmentCandidates).ToArray();
-        var vectorSpace = TokenVectorSpace.Fit(candidates.Select(static candidate => candidate.TokenIds).ToArray(), _options.Weighting);
-        var segments = candidates.Select(candidate => CreateSegment(candidate, vectorSpace)).ToArray();
+        var sections = _segmentBuilder.BuildSections(documents);
+        var candidates = _segmentBuilder.BuildSegmentCandidates(documents);
+        var vectorSpace = TokenVectorSpace.Fit(CreateCandidateTokenIds(candidates), _options.Weighting);
+        var segments = CreateSegments(candidates, vectorSpace);
         var topics = _topicExtractor.Extract(candidates);
         var entityHints = _entityHintExtractor.Extract(documents);
         var relations = _options.BuildAutoRelatedSegmentRelations
-            ? BuildRelations(segments).ToArray()
+            ? _relationBuilder.BuildRelations(segments)
             : [];
         var facts = TokenizedKnowledgeFactFactory.Build(sections, segments, topics, entityHints, relations);
         return new TokenizedKnowledgeExtractionResult(facts, segments, vectorSpace);
@@ -56,92 +59,28 @@ internal sealed class TiktokenKnowledgeGraphExtractor
         return options;
     }
 
-    private IEnumerable<TokenizedKnowledgeSection> BuildSections(MarkdownDocument document)
+    private static IReadOnlyList<int>[] CreateCandidateTokenIds(IReadOnlyList<TokenizedSegmentCandidate> candidates)
     {
-        for (var index = 0; index < document.Sections.Count; index++)
+        var tokenIds = new IReadOnlyList<int>[candidates.Count];
+        for (var index = 0; index < candidates.Count; index++)
         {
-            var section = document.Sections[index];
-            if (string.IsNullOrWhiteSpace(section.Text))
-            {
-                continue;
-            }
-
-            yield return new TokenizedKnowledgeSection(
-                CreateSectionId(document, index),
-                document.DocumentUri.AbsoluteUri,
-                ResolveSectionLabel(document, section));
+            tokenIds[index] = candidates[index].TokenIds;
         }
+
+        return tokenIds;
     }
 
-    private IEnumerable<TokenizedSegmentCandidate> BuildSegmentCandidates(MarkdownDocument document)
+    private static TokenizedKnowledgeSegment[] CreateSegments(
+        IReadOnlyList<TokenizedSegmentCandidate> candidates,
+        TokenVectorSpace vectorSpace)
     {
-        var order = 0;
-        for (var sectionIndex = 0; sectionIndex < document.Sections.Count; sectionIndex++)
+        var segments = new TokenizedKnowledgeSegment[candidates.Count];
+        for (var index = 0; index < candidates.Count; index++)
         {
-            var section = document.Sections[sectionIndex];
-            var parentId = CreateSectionId(document, sectionIndex);
-
-            foreach (var text in SplitSegmentBlocks(section.Text))
-            {
-                var tokenIds = _vectorizer.Tokenize(text);
-                if (tokenIds.Count < _options.MinimumTokenCount)
-                {
-                    continue;
-                }
-
-                yield return new TokenizedSegmentCandidate(
-                    CreateSegmentId(document, order),
-                    document.DocumentUri.AbsoluteUri,
-                    parentId,
-                    text,
-                    order,
-                    tokenIds);
-                order++;
-            }
+            segments[index] = CreateSegment(candidates[index], vectorSpace);
         }
-    }
 
-    private static IEnumerable<string> SplitSegmentBlocks(string text)
-    {
-        foreach (var paragraph in text.Split(DoubleNewLineDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var lines = paragraph.Split(NewLineDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (lines.Length > 1)
-            {
-                foreach (var line in lines)
-                {
-                    yield return line;
-                }
-            }
-            else if (lines.Length == 1)
-            {
-                yield return lines[0];
-            }
-        }
-    }
-
-    private IEnumerable<TokenizedKnowledgeRelation> BuildRelations(IReadOnlyList<TokenizedKnowledgeSegment> segments)
-    {
-        foreach (var segment in segments)
-        {
-            foreach (var related in FindRelatedSegments(segment, segments))
-            {
-                yield return new TokenizedKnowledgeRelation(segment.Id, related.Segment.Id, related.Distance);
-            }
-        }
-    }
-
-    private IEnumerable<(TokenizedKnowledgeSegment Segment, double Distance)> FindRelatedSegments(
-        TokenizedKnowledgeSegment source,
-        IReadOnlyList<TokenizedKnowledgeSegment> segments)
-    {
-        return segments
-            .Where(segment => segment.Id != source.Id)
-            .Select(segment => (Segment: segment, Distance: source.Vector.EuclideanDistanceTo(segment.Vector)))
-            .Where(related => related.Distance <= _options.MaximumRelatedDistance)
-            .OrderBy(related => related.Distance)
-            .ThenBy(related => related.Segment.Id, StringComparer.Ordinal)
-            .Take(_options.MaxRelatedSegments);
+        return segments;
     }
 
     private static TokenizedKnowledgeSegment CreateSegment(
@@ -157,31 +96,6 @@ internal sealed class TiktokenKnowledgeGraphExtractor
             vectorSpace.CreateVector(candidate.TokenIds));
     }
 
-    private static string ResolveSectionLabel(MarkdownDocument document, MarkdownSection section)
-    {
-        if (!string.IsNullOrWhiteSpace(section.Heading))
-        {
-            return section.Heading;
-        }
-
-        return !string.IsNullOrWhiteSpace(document.Title)
-            ? document.Title
-            : KnowledgeNaming.NormalizeSourcePath(document.SourcePath);
-    }
-
-    private string CreateSegmentId(MarkdownDocument document, int lineIndex)
-    {
-        var slug = KnowledgeNaming.Slugify(document.SourcePath);
-        var line = lineIndex.ToString(CultureInfo.InvariantCulture);
-        return new Uri(_baseUri, TokenSegmentIdPrefix + slug + Hyphen + line).AbsoluteUri;
-    }
-
-    private string CreateSectionId(MarkdownDocument document, int sectionIndex)
-    {
-        var slug = KnowledgeNaming.Slugify(document.SourcePath);
-        var section = sectionIndex.ToString(CultureInfo.InvariantCulture);
-        return new Uri(_baseUri, TokenSectionIdPrefix + slug + Hyphen + section).AbsoluteUri;
-    }
 }
 
 internal sealed record TokenizedKnowledgeExtractionResult(

@@ -28,7 +28,7 @@ Use explicit extraction modes in `MarkdownKnowledgePipeline`:
 - `ChatClient`: require an `IChatClient` and use structured chat extraction only.
 - `Tiktoken`: build an experimental token-distance graph from Tiktoken token IDs.
 
-The Tiktoken mode uses `Microsoft.ML.Tokenizers` and `Microsoft.ML.Tokenizers.Data.O200kBase`. It segments Markdown through heading or loose document sections and paragraph/line blocks, encodes each segment with Tiktoken, fits a corpus-local sparse vector space, calculates Euclidean distance, creates segment entities, links the source document to each segment with `schema:mentions`, and links near segments with `kb:relatedTo`.
+The Tiktoken mode uses `Microsoft.ML.Tokenizers` and `Microsoft.ML.Tokenizers.Data.O200kBase`. It segments Markdown through heading or loose document sections and paragraph/line blocks, encodes each segment with Tiktoken, fits a corpus-local sparse vector space, calculates normalized token-distance ranking from cached squared magnitudes and dot products, creates segment entities, links the source document to each segment with `schema:mentions`, and links near segments with `kb:relatedTo`.
 
 `SearchByTokenDistanceAsync` remains exact by default. Callers can pass `TokenDistanceSearchOptions` with `EnableFuzzyQueryCorrection = true` to expand absent query words with close corpus vocabulary terms before Tiktoken query encoding. This uses bounded word-level edit distance as a query-normalization step; it does not compute edit distance over Tiktoken IDs.
 
@@ -65,7 +65,7 @@ flowchart LR
     Token --> Hints["Explicit front matter entity hints"]
     Token --> Structure["schema:hasPart structure"]
     Chat --> Facts["Knowledge facts"]
-    Weighting --> Segments["Segment nodes and related edges"]
+    Weighting --> Segments["Segment nodes and bounded related edges"]
     Topics --> Segments
     Hints --> HintFacts["Hint entities and mentions"]
     Structure --> Segments
@@ -90,6 +90,7 @@ flowchart LR
 - Subword TF-IDF downweights corpus-common tokens without manually curated language rules.
 - Tiktoken mode now produces named topic vertices and typed `schema:hasPart` / `schema:about` edges, not only segment similarity edges.
 - Tiktoken mode preserves explicit front matter entity hints without reintroducing Markdown link, wikilink, or arrow scanner heuristics.
+- Segment building avoids paragraph/line split arrays, related-segment selection keeps bounded nearest neighbors, and vector distance avoids recomputing magnitudes per comparison.
 - Fuzzy query correction improves typo-heavy same-language token-distance search without changing the default exact behavior.
 - Raw term frequency and binary weighting remain testable baselines.
 - The core library still avoids concrete LLM and embedding providers.
@@ -112,7 +113,7 @@ Testing methodology:
 - Chat mode builds graph facts only from `IChatClient` output and does not use Markdown link heuristics.
 - Tiktoken mode builds graph nodes/edges and supports `SearchByTokenDistanceAsync`.
 - Fuzzy query correction tests cover query-side typos, corpus-side misspellings, distractor-biased exact tokens, invalid options, opt-in behavior, and long-vocabulary performance.
-- Focused vector tests verify L2 normalization, binary count suppression, TF-IDF common-token downweighting, and Euclidean distance behavior.
+- Focused vector tests verify L2 normalization, binary count suppression, TF-IDF common-token downweighting, and cached Euclidean distance behavior.
 - English, Ukrainian, French, and German same-language sources with 10 same-language queries each must hit at least 8 top matches.
 - Cross-language translated-topic checks must stay low because no embedding or translation model is present.
 - `TermFrequency`, `Binary`, and `SubwordTfIdf` must each remain selectable and pass the English flow baseline.

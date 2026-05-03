@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.Extensions.AI;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
@@ -131,10 +130,22 @@ public sealed partial class KnowledgeGraph
             return candidates;
         }
 
-        var allowedNodeIds = candidateNodeIds.ToHashSet(StringComparer.Ordinal);
-        return candidates
-            .Where(candidate => allowedNodeIds.Contains(candidate.NodeId))
-            .ToArray();
+        var allowedNodeIds = new HashSet<string>(candidateNodeIds.Count, StringComparer.Ordinal);
+        foreach (var nodeId in candidateNodeIds)
+        {
+            allowedNodeIds.Add(nodeId);
+        }
+
+        var filtered = new List<KnowledgeGraphSearchCandidate>(Math.Min(candidates.Count, allowedNodeIds.Count));
+        foreach (var candidate in candidates)
+        {
+            if (allowedNodeIds.Contains(candidate.NodeId))
+            {
+                filtered.Add(candidate);
+            }
+        }
+
+        return filtered.Count == candidates.Count ? candidates : filtered.ToArray();
     }
 
     private static KnowledgeGraphRankedSearchMatch CreateCanonicalMatch(
@@ -277,110 +288,4 @@ public sealed partial class KnowledgeGraph
         };
     }
 
-    internal static IReadOnlyList<KnowledgeGraphSearchCandidate> CreateSearchCandidates(KnowledgeGraphSnapshot snapshot)
-    {
-        var nodesById = snapshot.Nodes.ToDictionary(static node => node.Id, StringComparer.Ordinal);
-        var edgesBySubject = snapshot.Edges
-            .GroupBy(static edge => edge.SubjectId, StringComparer.Ordinal)
-            .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
-        var candidateNodeIds = snapshot.Edges
-            .Where(edge => edge.PredicateId == RdfTypeText && nodesById.TryGetValue(edge.SubjectId, out var node) && node.Kind == KnowledgeGraphNodeKind.Uri)
-            .Select(static edge => edge.SubjectId)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(static id => id, StringComparer.Ordinal);
-        var candidates = new List<KnowledgeGraphSearchCandidate>();
-
-        foreach (var nodeId in candidateNodeIds)
-        {
-            if (!edgesBySubject.TryGetValue(nodeId, out var edges))
-            {
-                continue;
-            }
-
-            var label = ResolvePrimaryText(edges, nodesById, SchemaNameText);
-            var description = ResolvePrimaryText(edges, nodesById, SchemaDescriptionText);
-            var relatedLabels = ResolveSearchContextLabels(edges, nodesById);
-            if (string.IsNullOrWhiteSpace(label) && string.IsNullOrWhiteSpace(description) && relatedLabels.Count == 0)
-            {
-                continue;
-            }
-
-            candidates.Add(new KnowledgeGraphSearchCandidate(
-                nodeId,
-                label ?? nodesById[nodeId].Label,
-                description,
-                relatedLabels,
-                ComposeSearchText(label ?? nodesById[nodeId].Label, description, relatedLabels)));
-        }
-
-        return candidates;
-    }
-
-    private static string? ResolvePrimaryText(
-        IEnumerable<KnowledgeGraphEdge> edges,
-        IReadOnlyDictionary<string, KnowledgeGraphNode> nodesById,
-        string predicateId)
-    {
-        foreach (var edge in edges.Where(edge => edge.PredicateId == predicateId))
-        {
-            if (nodesById.TryGetValue(edge.ObjectId, out var node) && !string.IsNullOrWhiteSpace(node.Label))
-            {
-                return node.Label;
-            }
-        }
-
-        return null;
-    }
-
-    private static IReadOnlyList<string> ResolveSearchContextLabels(
-        IEnumerable<KnowledgeGraphEdge> edges,
-        IReadOnlyDictionary<string, KnowledgeGraphNode> nodesById)
-    {
-        return edges
-            .Where(edge => SearchContextPredicateIds.Contains(edge.PredicateId, StringComparer.Ordinal))
-            .Select(edge => nodesById.TryGetValue(edge.ObjectId, out var node) ? node.Label : string.Empty)
-            .Where(static label => !string.IsNullOrWhiteSpace(label))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static label => label, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static string ComposeSearchText(
-        string label,
-        string? description,
-        IReadOnlyList<string> relatedLabels)
-    {
-        var builder = new StringBuilder();
-        AppendSearchText(builder, label);
-        AppendSearchText(builder, description);
-
-        foreach (var relatedLabel in relatedLabels)
-        {
-            AppendSearchText(builder, relatedLabel);
-        }
-
-        return builder.ToString();
-    }
-
-    private static void AppendSearchText(StringBuilder builder, string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return;
-        }
-
-        if (builder.Length > 0)
-        {
-            builder.Append('\n');
-        }
-
-        builder.Append(text.Trim());
-    }
 }
-
-internal sealed record KnowledgeGraphSearchCandidate(
-    string NodeId,
-    string Label,
-    string? Description,
-    IReadOnlyList<string> RelatedLabels,
-    string SearchText);

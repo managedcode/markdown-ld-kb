@@ -16,7 +16,7 @@ flowchart TD
     Blocks --> Tokenizer["Tiktoken tokenizer"]
     Tokenizer --> Weighting["Token weighting\nSubword TF-IDF default\nTermFrequency / Binary experiments"]
     Weighting --> Vectors["L2-normalized sparse vectors"]
-    Vectors --> Distance["Euclidean distance"]
+    Vectors --> Distance["Cached sparse-vector distance"]
     Blocks --> SegmentNodes["schema:CreativeWork segment nodes"]
     Blocks --> Keyphrases["Local TF-IDF keyphrases"]
     FrontMatter --> EntityHints["entity_hints / entityHints"]
@@ -47,7 +47,7 @@ flowchart TD
 - `MarkdownKnowledgeExtractionMode.Tiktoken` must be selected explicitly.
 - Markdown headings create section-aware graph structure when present.
 - Headingless Markdown and loose pre-heading text still receive a section node, labeled from the document title.
-- Paragraphs or non-empty lines become segment nodes.
+- Paragraphs or non-empty lines become segment nodes. Segment creation scans paragraph and line boundaries with spans and materializes only accepted segment text.
 - Section nodes and segment nodes use `schema:CreativeWork`.
 - Topic/keyphrase nodes use `schema:DefinedTerm`.
 - Explicit front matter `entity_hints` / `entityHints` entries become named graph entities in Tiktoken mode and keep `sameAs` links when present.
@@ -61,7 +61,7 @@ flowchart TD
 - `TermFrequency` preserves the first raw count baseline.
 - `Binary` is an experimental presence/absence baseline that ignores repeated counts.
 - The source document is connected to each segment node with `schema:mentions`.
-- Nearby segment vectors are connected with `kb:relatedTo`.
+- Nearby segment vectors are connected with `kb:relatedTo`; related-segment selection keeps a bounded nearest-neighbor list instead of sorting the full corpus for every source segment.
 - `KnowledgeGraph.SearchByTokenDistanceAsync` searches the in-memory token index attached to graphs built in Tiktoken mode.
 - `TokenDistanceSearchOptions.EnableFuzzyQueryCorrection` optionally expands absent query words with close corpus vocabulary terms before Tiktoken query encoding.
 - Fuzzy query correction is word-level and corpus-local; it does not compute edit distance over model-specific Tiktoken IDs.
@@ -76,7 +76,7 @@ Other options reviewed:
 
 - [SPLADE v2](https://arxiv.org/abs/2109.10086) supports the broader point that sparse lexical representations remain strong in retrieval, but SPLADE requires a neural model and is too heavy for the current core fallback.
 - [Sentence-BERT](https://arxiv.org/abs/1908.10084), [MiniLM](https://arxiv.org/abs/2002.10957), and [Language-agnostic BERT Sentence Embedding](https://arxiv.org/abs/2007.01852) point to the right future path for semantic and cross-lingual retrieval, but they require model weights and a runtime. That belongs behind a future optional embedding adapter, not inside the current core pipeline.
-- BM25-style ranking remains a future candidate for a separate scoring backend. It is not used in this pass because the current graph relation model is Euclidean vector distance over normalized sparse vectors.
+- BM25 lexical ranking is implemented in the ranked graph-search boundary. Tiktoken mode keeps a separate sparse token-distance index because it ranks tokenized segment vectors, not graph candidate text.
 - TextRank, YAKE/RAKE-style local keyword scoring, char n-gram TF-IDF, and clustering were reviewed as next-layer candidates. The implemented slice is smaller: structure-aware segmentation plus local TF-IDF keyphrase topic nodes. This gives named graph vertices without adding a model runtime or language-specific stop-word lists.
 
 ## Test Matrix
