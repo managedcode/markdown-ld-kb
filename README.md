@@ -11,7 +11,9 @@
 
 Markdown-LD Knowledge Bank is a .NET 10 library for turning Markdown knowledge-base files into an in-memory RDF graph that can be searched, queried with read-only SPARQL, validated with SHACL, exported as RDF, and rendered as a diagram.
 
-The package is a C# library implementation of the Markdown-LD knowledge graph workflow. The runtime is local and in-memory: no localhost server, no Azure Functions host, no database server, and no hosted graph service are required.
+The recommended entry point is `MarkdownKnowledgeBank`. It is a single facade for build, source-change planning, chunk evaluation, ranked search, optional semantic indexing, and cited answers. Lower-level pipeline and graph APIs remain available when a host needs more control.
+
+The runtime is local and in-memory: no localhost server, no Azure Functions host, no database server, and no hosted graph service are required.
 
 Use it when you want plain Markdown notes to become a queryable knowledge graph without making your application depend on a specific model provider, graph server, or hosted indexing service.
 
@@ -19,9 +21,12 @@ Use it when you want plain Markdown notes to become a queryable knowledge graph 
 
 ```mermaid
 flowchart LR
-    Source["Markdown / MDX / text\nJSON / YAML / CSV"] --> Converter["KnowledgeSourceDocumentConverter"]
+    Source["Markdown / MDX / text\nJSON / YAML / CSV"] --> Bank["MarkdownKnowledgeBank\nfacade API"]
+    Bank --> Plan["Source manifest\nchange planning"]
+    Bank --> Converter["KnowledgeSourceDocumentConverter"]
     Converter --> Parser["MarkdownDocumentParser\n→ MarkdownDocument"]
     Parser --> Mode["Extraction mode\nAuto / None / ChatClient / Tiktoken"]
+    Parser --> ChunkEval["MarkdownChunkEvaluator"]
     Mode --> None["None\nmetadata only"]
     Mode --> Chat["ChatClientKnowledgeFactExtractor\nIChatClient"]
     Mode --> Token["Tiktoken token-distance extractor\nMicrosoft.ML.Tokenizers"]
@@ -30,6 +35,8 @@ flowchart LR
     Token --> Merge
     Merge --> Builder["KnowledgeGraphBuilder\n→ RDF + ontology + SKOS graph"]
     Builder --> Search["SearchBySchemaAsync"]
+    Builder --> Ranked["SearchRankedAsync\nGraph / BM25 / Semantic / Hybrid RRF\nDocument-aware via build result"]
+    Ranked --> Answer["AnswerAsync\ncited IChatClient answer"]
     Builder --> Sparql["ExecuteSelectAsync\nExecuteAskAsync"]
     Builder --> FederatedSearch["SearchBySchemaFederatedAsync"]
     Builder --> Shacl["ValidateShacl\nSHACL report"]
@@ -45,10 +52,16 @@ Extraction is explicit:
 - `ChatClient` builds facts only from structured `Microsoft.Extensions.AI.IChatClient` output.
 - `Tiktoken` builds a local corpus graph from Tiktoken token IDs, section/segment structure, explicit front matter entity hints, and local keyphrase topics using `Microsoft.ML.Tokenizers`.
 
-Tiktoken mode is deterministic and network-free. It uses lexical token-distance search rather than semantic embedding search. Its default local weighting is subword TF-IDF; raw term frequency and binary presence are also available. It creates `schema:DefinedTerm` topic nodes, explicit front matter hint entities, and `schema:hasPart` / `schema:about` / `schema:mentions` edges.
+Tiktoken mode is deterministic and network-free. It uses lexical token-distance search rather than semantic embedding search. Its default local weighting is subword TF-IDF; raw term frequency and binary presence are also available. Token-distance search can opt into fuzzy query correction over corpus words before Tiktoken encoding, which helps typo-heavy same-language queries without treating model-specific token IDs as editable text. It creates `schema:DefinedTerm` topic nodes, explicit front matter hint entities, and `schema:hasPart` / `schema:about` / `schema:mentions` edges.
 
 **Graph outputs:**
 
+- `MarkdownKnowledgeBank` — recommended facade for build, change planning, chunk evaluation, ranked search, optional semantic indexing, and cited answers
+- `MarkdownKnowledgeBankBuild.SearchAsync(...)` — ranked graph search through one build object
+- `MarkdownKnowledgeBankBuild.AnswerAsync(...)` — answer a question with citations from the built Markdown graph through `IChatClient`
+- `MarkdownKnowledgeBankBuild.BuildSemanticIndexAsync(...)` — optional semantic index through `IEmbeddingGenerator<string, Embedding<float>>`
+- `MarkdownKnowledgeBank.PlanChanges(...)` — compare source SHA256 fingerprints and return changed, unchanged, and removed paths before a build
+- `MarkdownKnowledgeBank.EvaluateChunks(...)` — deterministic chunk-size, expected-answer coverage, and quality-sample report
 - `ToSnapshot()` — stable `KnowledgeGraphSnapshot` with `Nodes` and `Edges`
 - `SerializeMermaidFlowchart()` — Mermaid `graph LR` diagram
 - `SerializeDotGraph()` — Graphviz DOT diagram
@@ -80,7 +93,7 @@ Tiktoken mode is deterministic and network-free. It uses lexical token-distance 
 - `SearchFocusedAsync(term, options)` — sparse graph search that can use a schema-aware profile and returns primary, related, and next-step matches plus a bounded focused graph snapshot
 - `SearchAsync(term)` — compatibility helper for simple `schema:name` / `schema:description` lookup; use schema-aware SPARQL search for application search
 - `KnowledgeGraph.Diff(other)` — compare graph snapshots and report added, removed, and changed literal edges
-- `BuildIncrementalAsync(...)` — rebuild deterministically while returning a source manifest, changed paths, removed paths, and optional graph diff
+- `BuildIncrementalAsync(...)` — rebuild deterministically while returning a source manifest, changed paths, unchanged paths, removed paths, and optional graph diff
 - `MaterializeInferenceAsync(options)` — explicit RDFS / SKOS / N3-rule materialization
 - `BuildFullTextIndexAsync(options)` — optional Lucene-backed graph full-text index
 - `ToDynamicSnapshot()` — optional dynamic graph access over dotNetRDF dynamic types
@@ -91,7 +104,11 @@ All async methods accept an optional `CancellationToken`.
 
 | Goal | Use | Details |
 | --- | --- | --- |
-| Build a graph from Markdown files | `MarkdownKnowledgePipeline.BuildFromDirectoryAsync(...)` | [Build From Files](#build-from-files) |
+| Start from one library API | `MarkdownKnowledgeBank` | [Unified API](#unified-api) |
+| Build a graph from Markdown files | `MarkdownKnowledgeBank.BuildFromDirectoryAsync(...)` | [Build From Files](#build-from-files) |
+| Ask questions with source citations | `MarkdownKnowledgeBankBuild.AnswerAsync(...)` | [Unified API](#unified-api) |
+| Search with graph, BM25, optional fuzzy BM25, semantic, or hybrid RRF ranking | `MarkdownKnowledgeBankBuild.SearchAsync(...)` | [Unified API](#unified-api) |
+| Evaluate chunking quality | `MarkdownKnowledgeBank.EvaluateChunks(...)` | [Unified API](#unified-api) |
 | Generate portable graph output | `SerializeJsonLd()`, `SaveJsonLdToFileAsync(...)`, `SerializeTurtle()` | [Generate JSON-LD Files](#generate-json-ld-files), [Export The Graph](#export-the-graph) |
 | Load a preprocessed graph from another system | `KnowledgeGraph.LoadJsonLd(...)`, `LoadJsonLdFromFileAsync(...)` | [Generate JSON-LD Files](#generate-json-ld-files) |
 | Keep graph creation and search rules together | `KnowledgeGraphBuildProfile`, `MarkdownKnowledgeBuildResult.Contract` | [Schema-Aware SPARQL Search](#schema-aware-sparql-search), [Graph Production Pipeline](docs/Features/GraphProductionPipeline.md) |
@@ -100,8 +117,9 @@ All async methods accept an optional `CancellationToken`.
 | Search across graph slices or endpoints | `SearchBySchemaFederatedAsync(...)`, `ExecuteFederatedSelectAsync(...)` | [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md) |
 | Explain why a result matched | `KnowledgeGraphSchemaSearchResult.Explain`, `Evidence`, `SourceContexts` | [Schema-Aware SPARQL Search](#schema-aware-sparql-search) |
 | Compare graph versions | `KnowledgeGraph.Diff(other)` | [Graph Production Pipeline](docs/Features/GraphProductionPipeline.md) |
-| Rebuild and know which source files changed | `BuildIncrementalAsync(...)`, `KnowledgeGraphSourceManifest` | [Graph Production Pipeline](docs/Features/GraphProductionPipeline.md) |
+| Rebuild and know which source files changed | `MarkdownKnowledgeBank.PlanChanges(...)`, `BuildIncrementalAsync(...)` | [Graph Production Pipeline](docs/Features/GraphProductionPipeline.md) |
 | Add AI extraction without provider lock-in | `IChatClient`, `MarkdownKnowledgeExtractionMode.ChatClient` | [Optional AI Extraction](#optional-ai-extraction) |
+| Add optional semantic retrieval | `IEmbeddingGenerator<string, Embedding<float>>` | [Unified API](#unified-api) |
 | Use deterministic local extraction | `MarkdownKnowledgeExtractionMode.Tiktoken` | [Local Tiktoken Extraction](#local-tiktoken-extraction) |
 
 The most important split is local graph search versus federated graph search. `SearchBySchemaAsync` searches one in-memory graph. `SearchBySchemaFederatedAsync` and `ExecuteFederatedSelectAsync` are explicit opt-in federation paths that require allowlisted `SERVICE` endpoints.
@@ -109,7 +127,7 @@ The most important split is local graph search versus federated graph search. `S
 ## Install
 
 ```bash
-dotnet add package ManagedCode.MarkdownLd.Kb --version 0.2.0
+dotnet add package ManagedCode.MarkdownLd.Kb --version 0.2.1
 ```
 
 For local repository development:
@@ -124,6 +142,8 @@ The production source tree now follows feature-oriented slices instead of a most
 
 - `src/MarkdownLd.Kb/Documents`
   `Models`, `Parsing`, and `Chunking`
+- `src/MarkdownLd.Kb/MarkdownKnowledgeBank*`
+  high-level facade for the common build/search/answer/evaluation flow
 - `src/MarkdownLd.Kb/Extraction`
   `Chat`, `Cache`, and `Processing`
 - `src/MarkdownLd.Kb/Pipeline`
@@ -133,7 +153,7 @@ The production source tree now follows feature-oriented slices instead of a most
 - `src/MarkdownLd.Kb/Tokenization`
   local Tiktoken graph extraction
 - `src/MarkdownLd.Kb/Query`
-  `Search`, `Sparql`, and `NaturalLanguage`
+  `Search`, `Sparql`, `NaturalLanguage`, and `Answering`
 - `src/MarkdownLd.Kb/Rdf`
   low-level RDF helpers and serialization
 
@@ -141,9 +161,77 @@ This layout mirrors [docs/Architecture.md](docs/Architecture.md) and keeps orche
 
 For production graph handoff, contract artifacts, generated SHACL, explainable SPARQL evidence, presets, diffing, and incremental rebuilds, see [docs/Features/GraphProductionPipeline.md](docs/Features/GraphProductionPipeline.md).
 
+## Unified API
+
+Use `MarkdownKnowledgeBank` when you want one object to own the normal knowledge-bank flow. It wraps the deterministic pipeline and keeps optional AI services behind `Microsoft.Extensions.AI` abstractions.
+
+```csharp
+using ManagedCode.MarkdownLd.Kb;
+using ManagedCode.MarkdownLd.Kb.Pipeline;
+using ManagedCode.MarkdownLd.Kb.Query;
+using Microsoft.Extensions.AI;
+
+internal static class KnowledgeBankDemo
+{
+    public static async Task RunAsync(
+        IReadOnlyList<MarkdownSourceDocument> documents,
+        IChatClient chatClient,
+        IEmbeddingGenerator<string, Embedding<float>> embeddings,
+        KnowledgeGraphSourceManifest? previousManifest = null)
+    {
+        var bank = new MarkdownKnowledgeBank(new MarkdownKnowledgeBankOptions
+        {
+            PipelineOptions = new MarkdownKnowledgePipelineOptions
+            {
+                BaseUri = new Uri("https://kb.example/"),
+                ExtractionMode = MarkdownKnowledgeExtractionMode.None,
+            },
+            ChatClient = chatClient,
+            EmbeddingGenerator = embeddings,
+        });
+
+        var changeSet = bank.PlanChanges(documents, previousManifest);
+        var chunkReport = bank.EvaluateChunks(
+            documents[0].Content,
+            documents[0].Path,
+            [new MarkdownChunkCoverageExpectation("How do I restore cache?", "cache restore verification")]);
+
+        var build = await bank.BuildAsync(documents);
+        await build.BuildSemanticIndexAsync();
+
+        var matches = await build.SearchAsync(
+            "restore cache manifest",
+            new KnowledgeGraphRankedSearchOptions
+            {
+                Mode = KnowledgeGraphSearchMode.Hybrid,
+                HybridFusionStrategy = KnowledgeGraphHybridFusionStrategy.ReciprocalRank,
+                MaxResults = 5,
+            });
+
+        var answer = await build.AnswerAsync(
+            "What should I use to restore cache?",
+            new KnowledgeGraphRankedSearchOptions
+            {
+                Mode = KnowledgeGraphSearchMode.Bm25,
+                EnableFuzzyTokenMatching = true,
+                MaxResults = 3,
+            });
+
+        Console.WriteLine(changeSet.ChangedPaths.Count);
+        Console.WriteLine(chunkReport.CoverageRate);
+        Console.WriteLine(matches[0].Label);
+        Console.WriteLine(answer.Answer);
+        Console.WriteLine(answer.Citations[0].SourcePath);
+    }
+}
+```
+
+The facade does not hide missing optional services. `AnswerAsync` requires an `IChatClient`; `BuildSemanticIndexAsync` requires an `IEmbeddingGenerator<string, Embedding<float>>`. If those services are absent, the call fails explicitly instead of silently falling back to a weaker path. Facade search and cited answers are document-aware: document node candidates include parsed Markdown body chunks, so BM25 and optional semantic search can retrieve evidence that is only present in body text. BM25 can also opt into bounded fuzzy token matching for typo-tolerant lexical retrieval; the default remains exact token matching. `EvaluateChunks` uses the facade pipeline chunking options by default, including the Han, Japanese kana, and Korean Hangul-aware token estimate, so build and evaluation share the same chunk budget unless a caller passes explicit evaluation options.
+
 ## Minimal Example
 
 ```csharp
+using ManagedCode.MarkdownLd.Kb;
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal static class MinimalGraphDemo
@@ -167,14 +255,24 @@ Markdown-LD Knowledge Bank links [RDF](https://www.w3.org/RDF/) and [SPARQL](htt
 
     public static async Task RunAsync()
     {
-        var pipeline = new MarkdownKnowledgePipeline(
-            extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
+        var bank = new MarkdownKnowledgeBank(new MarkdownKnowledgeBankOptions
+        {
+            PipelineOptions = new MarkdownKnowledgePipelineOptions
+            {
+                ExtractionMode = MarkdownKnowledgeExtractionMode.None,
+            },
+        });
 
-        var result = await pipeline.BuildFromMarkdownAsync(ArticleMarkdown);
+        var result = await bank.BuildFromMarkdownAsync(ArticleMarkdown);
 
-        var search = await result.Graph.SearchByTokenDistanceAsync(SearchTerm);
+        var search = await result.SearchAsync(
+            SearchTerm,
+            new KnowledgeGraphRankedSearchOptions
+            {
+                Mode = KnowledgeGraphSearchMode.Bm25,
+            });
 
-        Console.WriteLine(search[0].Text);
+        Console.WriteLine(search[0].Label);
     }
 }
 ```
@@ -182,6 +280,7 @@ Markdown-LD Knowledge Bank links [RDF](https://www.w3.org/RDF/) and [SPARQL](htt
 ## Build From Files
 
 ```csharp
+using ManagedCode.MarkdownLd.Kb;
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal static class FileGraphDemo
@@ -192,10 +291,10 @@ internal static class FileGraphDemo
 
     public static async Task RunAsync()
     {
-        var pipeline = new MarkdownKnowledgePipeline();
+        var bank = new MarkdownKnowledgeBank();
 
-        var singleFile = await pipeline.BuildFromFileAsync(FilePath);
-        var directory = await pipeline.BuildFromDirectoryAsync(
+        var singleFile = await bank.BuildFromFileAsync(FilePath);
+        var directory = await bank.BuildFromDirectoryAsync(
             DirectoryPath,
             searchPattern: MarkdownSearchPattern);
 
@@ -209,13 +308,15 @@ internal static class FileGraphDemo
 
 Graph loading and persistence support RDF files in Turtle (`.ttl`), JSON-LD (`.jsonld`, `.json`), RDF/XML (`.rdf`, `.xml`), N-Triples (`.nt`), Notation3 (`.n3`), TriG (`.trig`), and N-Quads (`.nq`). Use the explicit JSON-LD helpers when a file path or storage key has no extension or uses an opaque name.
 
+Relative Markdown links, image links, and same-document fragment links are resolved from the current source path before base URI composition. For example, a link from `content/guides/setup/intro.md` to `../runbooks/cache-restore.md#steps` resolves to `https://kb.example/guides/runbooks/cache-restore/#steps` when `https://kb.example/` is the base URI, and `[Steps](#steps)` in the same file resolves to `https://kb.example/guides/setup/intro/#steps`.
+
 You do not need to pass a base URI for normal use. Document identity is resolved in this order:
 
 - `KnowledgeDocumentConversionOptions.CanonicalUri` when you provide one
-- the file path, normalized the same way as the upstream project: `content/notes/rdf.md` becomes a stable document IRI
+- the file path, normalized deterministically: `content/notes/rdf.md` becomes a stable document IRI
 - the generated inline document path when `BuildFromMarkdownAsync` is called without a path
 
-The library uses `urn:managedcode:markdown-ld-kb:/` as an internal default base URI only to create valid RDF IRIs when the source does not provide `KnowledgeDocumentConversionOptions.CanonicalUri`. Pass `new MarkdownKnowledgePipeline(new Uri("https://your-domain/"))` only when you want generated document/entity IRIs to live under your own domain.
+The library uses `urn:managedcode:markdown-ld-kb:/` as an internal default base URI only to create valid RDF IRIs when the source does not provide `KnowledgeDocumentConversionOptions.CanonicalUri`. Configure `MarkdownKnowledgeBankOptions.PipelineOptions.BaseUri` only when you want generated document/entity IRIs to live under your own domain.
 
 ## Capability Graph Rules
 
@@ -272,7 +373,7 @@ internal static class CapabilityGraphDemo
 
 Use `BuildAsync(documents, KnowledgeGraphBuildOptions)` when graph rules are assembled by the host application instead of authored in Markdown front matter.
 
-Entities with the same `schema:sameAs` target are merged before assertions are emitted, and assertion endpoints are rewritten to the chosen canonical entity IRI. This keeps the graph sparse and avoids duplicated workflow edges when callers provide multiple labels or IDs for the same outside resource.
+Entities with the same `schema:sameAs` target are merged before assertions are emitted, including cases where a later entity uses that `sameAs` target as its direct ID. Assertion endpoints are rewritten to the chosen canonical entity IRI. Duplicate assertions keep all source provenance before graph materialization, so cited answers and SPARQL evidence can still point at the best Markdown source. This keeps the graph sparse without losing useful source attribution when callers provide multiple labels, IDs, or rule sources for the same outside resource.
 
 ## Ontology And SKOS Layers
 
@@ -569,6 +670,85 @@ ASK WHERE {
 
 The built-in chat extractor requests structured output through `GetResponseAsync<T>()`, normalizes the returned entity/assertion payload, and then builds the same in-memory RDF graph used by search and SPARQL. Tests use one local non-network `IChatClient` implementation so the full extraction-to-graph flow is covered without a live model. When cache reuse is enabled, the cache key includes document identity, chunk fingerprints, chunker profile, prompt version, and model identity so stale reuse stays explicit and controllable.
 
+## Ranked Search And Cited Answers
+
+Ranked search has four modes:
+
+- `Graph` — graph-native label, description, and related-label ranking
+- `Bm25` — in-memory lexical ranking over graph candidate text
+- `Semantic` — optional in-memory semantic index built through `IEmbeddingGenerator<string, Embedding<float>>`
+- `Hybrid` — graph plus semantic ranking, with default canonical-first ordering or opt-in reciprocal-rank fusion
+
+`KnowledgeGraph.SearchRankedAsync` works when callers only have an RDF graph, so it ranks graph-native labels, descriptions, and related labels. `MarkdownKnowledgeBuildResult.SearchRankedAsync`, `MarkdownKnowledgeBankBuild.SearchAsync`, and cited answers add parsed Markdown chunks to document candidates. Use the build-result or facade API when body-only evidence matters.
+
+```csharp
+var bank = new MarkdownKnowledgeBank(new MarkdownKnowledgeBankOptions
+{
+    PipelineOptions = new MarkdownKnowledgePipelineOptions
+    {
+        ExtractionMode = MarkdownKnowledgeExtractionMode.None,
+    },
+    ChatClient = chatClient,
+});
+var build = await bank.BuildFromDirectoryAsync("/absolute/path/to/content");
+
+var bm25 = await build.SearchAsync(
+    "cache restore manifest",
+    new KnowledgeGraphRankedSearchOptions
+    {
+        Mode = KnowledgeGraphSearchMode.Bm25,
+        MaxResults = 5,
+    });
+
+var answer = await build.AnswerAsync(
+    "Which runbook restores cache manifests?",
+    new KnowledgeGraphRankedSearchOptions
+    {
+        Mode = KnowledgeGraphSearchMode.Bm25,
+        MaxResults = 3,
+    });
+
+Console.WriteLine(bm25[0].Label);
+Console.WriteLine(answer.Answer);
+Console.WriteLine(answer.Citations[0].SourcePath);
+```
+
+Cited answers use the built Markdown documents and graph matches to create citation snippets, then call `IChatClient` for the final grounded response. Snippets are bounded and focus around matched query text when evidence appears deep in a chunk. Source scopes intersect any existing candidate-node filter instead of widening it. Duplicate document URIs and graph nodes with multiple entity or assertion provenance sources are resolved by the best available Markdown evidence, so citations point at the useful source document instead of just the first provenance edge. Body snippets can support graph labels through shared description context, but a single weak overlap token is not enough to override stronger label evidence. Follow-up question rewriting is optional and uses caller-supplied conversation messages; the library does not store chat history or own session policy.
+
+## Chunk Evaluation And Change Planning
+
+`MarkdownKnowledgeBank.EvaluateChunks(...)` reports chunk size distribution, expected-answer coverage, and deterministic quality samples. Invalid threshold ranges and empty coverage expectations fail explicitly so evaluation reports do not silently overstate quality. `PlanChanges(...)` compares source fingerprints before a build so host adapters can skip expensive downstream work without adding an indexer, database, or background service to the core library. Chunk overlap is opt-in through `MarkdownChunkingOptions.ChunkOverlapTokenTarget`; overlap copies whole trailing blocks into the next chunk and leaves the default chunker non-overlapping. Chunk budgeting treats Han ideographs, Japanese kana, Korean Hangul, CJK symbols, and fullwidth forms as denser token ranges than Latin text.
+
+```csharp
+var bank = new MarkdownKnowledgeBank();
+var report = bank.EvaluateChunks(
+    markdown,
+    "content/runbooks/cache-restore.md",
+    [new MarkdownChunkCoverageExpectation("How do I restore cache?", "cache restore verification")]);
+
+var overlapReport = bank.EvaluateChunks(
+    markdown,
+    "content/runbooks/cache-restore.md",
+    options: new MarkdownChunkEvaluationOptions
+    {
+        ParsingOptions = new MarkdownParsingOptions
+        {
+            Chunking = new MarkdownChunkingOptions
+            {
+                ChunkTokenTarget = 512,
+                ChunkOverlapTokenTarget = 50,
+            },
+        },
+    });
+
+var changeSet = bank.PlanChanges(documents, previousManifest);
+
+Console.WriteLine(report.CoverageRate);
+Console.WriteLine(overlapReport.SizeDistribution.Total);
+Console.WriteLine(changeSet.ChangedPaths.Count);
+Console.WriteLine(changeSet.UnchangedPaths.Count);
+```
+
 ## Local Tiktoken Extraction
 
 ```csharp
@@ -587,7 +767,12 @@ River sensors use cached forecasts to protect orchards from frost.
             extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken);
 
         var result = await pipeline.BuildFromMarkdownAsync(Markdown);
-        var matches = await result.Graph.SearchByTokenDistanceAsync("telescope image archive");
+        var matches = await result.Graph.SearchByTokenDistanceAsync(
+            "telescop image archive",
+            new TokenDistanceSearchOptions
+            {
+                EnableFuzzyQueryCorrection = true,
+            });
 
         Console.WriteLine(matches[0].Text);
     }
@@ -595,6 +780,8 @@ River sensors use cached forecasts to protect orchards from frost.
 ```
 
 Tiktoken mode uses `Microsoft.ML.Tokenizers` to encode section/paragraph text into token IDs, builds normalized sparse vectors, and calculates Euclidean distance. The default weighting is `SubwordTfIdf`, fitted over the current build corpus and reused for query vectors. `TermFrequency` uses raw token counts, and `Binary` uses token presence/absence.
+
+`SearchByTokenDistanceAsync` keeps exact token-distance behavior by default. Pass `TokenDistanceSearchOptions` with `EnableFuzzyQueryCorrection = true` when user queries may contain typos. The correction step checks words that are absent from the indexed corpus vocabulary, finds close corpus terms with the bounded edit-distance matcher, appends the best corrections to the query, and only then runs Tiktoken vector search. This improves recall for misspelled words in the query or corpus text while leaving the Tiktoken vector space as the ranking signal.
 
 Tiktoken mode also builds a corpus graph:
 
@@ -606,7 +793,7 @@ Tiktoken mode also builds a corpus graph:
 - document/entity-hint membership uses `schema:mentions`
 - segment similarity uses `kb:relatedTo`
 
-The local lexical design follows [Multilingual Search with Subword TF-IDF](https://arxiv.org/abs/2209.14281): use subword tokenization plus TF-IDF instead of manually curated tokenization, stop words, or stemming rules. It is designed for same-language lexical retrieval. Cross-language semantic retrieval requires a translation or embedding layer owned by the host application.
+The local lexical design uses subword tokenization plus TF-IDF instead of manually curated tokenization, stop words, or stemming rules. It is designed for same-language lexical retrieval. Cross-language semantic retrieval requires a translation or embedding layer owned by the host application.
 
 The current test corpus validates top-1 token-distance retrieval across English, Ukrainian, French, and German. Same-language queries hit the expected segment at `10/10` for each language in the test corpus. Sampled cross-language aligned hits stay low at `3/40`, which matches the lexical design.
 
@@ -754,7 +941,7 @@ The supported query surface is intentionally narrow:
 
 The default public SPARQL contract remains local and in-memory. Local `ExecuteSelectAsync` / `ExecuteAskAsync` reject top-level `SERVICE` clauses. Federated queries are explicit through `ExecuteFederatedSelectAsync` / `ExecuteFederatedAskAsync`, require an allowlist or named profile, and currently ship caller-visible endpoint diagnostics through `FederatedSparqlSelectResult` / `FederatedSparqlAskResult`.
 
-This follows the official Wikidata Query Service federation model, where cross-endpoint access is expressed with SPARQL `SERVICE` clauses and endpoint policy stays explicit at the caller boundary. The library ships ready-made profiles for the WDQS main/scholarly split introduced on 9 May 2025:
+Cross-endpoint access is expressed with SPARQL `SERVICE` clauses and endpoint policy stays explicit at the caller boundary. The library ships ready-made profiles for the WDQS main/scholarly split introduced on 9 May 2025:
 
 - `FederatedSparqlProfiles.WikidataMain` allowlists `https://query.wikidata.org/sparql`
 - `FederatedSparqlProfiles.WikidataScholarly` allowlists `https://query-scholarly.wikidata.org/sparql`
@@ -819,8 +1006,6 @@ var result = await rootGraph.ExecuteFederatedSelectAsync(
 This path still uses SPARQL `SERVICE` and the same allowlist checks, but it stays fully in-memory and network-free for test fixtures or host-managed multi-graph workflows.
 
 For more complete federation examples, including schema-aware `SERVICE` generation, `ASK` checks, failure handling, local binding policy, and remote endpoint profiles, see [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md).
-
-For the external federation model and current WDQS endpoint split, see the official [Wikidata federated queries guide](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/Federated_queries), the [WDQS graph split note](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/WDQS_graph_split), and the [Wikidata Query Service user manual](https://www.mediawiki.org/wiki/Wikidata_Query_Service/User_Manual/en).
 
 ## Validate With SHACL
 
@@ -973,7 +1158,9 @@ var search = await shared.Graph.SearchBySchemaAsync("rdf");
 
 | Type | Purpose |
 |---|---|
-| `MarkdownKnowledgePipeline` | Entry point. Orchestrates parsing, extraction, merge, and graph build. |
+| `MarkdownKnowledgeBank` | Recommended facade for build, change planning, chunk evaluation, ranked search, optional semantic indexing, and cited answers. |
+| `MarkdownKnowledgeBankBuild` | Build-session wrapper with `Graph`, `SearchAsync(...)`, `AnswerAsync(...)`, and `BuildSemanticIndexAsync(...)`. |
+| `MarkdownKnowledgePipeline` | Lower-level pipeline. Orchestrates parsing, extraction, merge, and graph build. |
 | `MarkdownKnowledgeBuildResult` | Holds `Documents`, `Facts`, and the built `Graph`. |
 | `KnowledgeGraph` | In-memory dotNetRDF graph with query, search, SHACL validation, export, and merge. |
 | `KnowledgeGraphSnapshot` | Immutable view with `Nodes` (`KnowledgeGraphNode`) and `Edges` (`KnowledgeGraphEdge`). |
@@ -989,10 +1176,16 @@ var search = await shared.Graph.SearchBySchemaAsync("rdf");
 | `KnowledgeGraphSchemaSearchProfile` | Schema-aware SPARQL search profile with prefixes, predicates, type filters, expansions, federation endpoints, and limits. |
 | `KnowledgeGraphSchemaSearchResult` | Schema-aware search result with matches, evidence, focused graph, generated SPARQL, and optional federated endpoint diagnostics. |
 | `KnowledgeGraphSchemaSearchEvidence` | Explanation record naming the predicate, matched text, related node, relationship predicate, score, and service endpoint. |
+| `KnowledgeGraphRankedSearchOptions` | Ranked search options for graph, BM25, semantic, and hybrid reciprocal-rank retrieval. |
+| `KnowledgeAnswerRequest` | Cited answer request with question, optional conversation history, ranked-search options, semantic index, and source filters. |
+| `KnowledgeAnswerCitation` | Caller-visible citation with document URI, source path, heading path, snippet, match label, score, and search source. |
+| `MarkdownChunkEvaluator` | Deterministic chunk-size, expected-answer coverage, and review-sample helper. |
+| `KnowledgeGraphSourceManifest` | Source fingerprint manifest and changed/unchanged/removed path planner. |
 | `KnowledgeSourceDocumentConverter` | Converts files and directories into pipeline-ready source documents. |
 | `ChatClientKnowledgeFactExtractor` | AI extraction adapter behind `IChatClient`. |
 | `TiktokenKnowledgeGraphOptions` | Options for explicit Tiktoken token-distance extraction. |
 | `TokenVectorWeighting` | Local token weighting mode: `SubwordTfIdf`, `TermFrequency`, or `Binary`. |
+| `TokenDistanceSearchOptions` | Token-distance search options, including opt-in fuzzy query correction. |
 | `TokenDistanceSearchResult` | Search result returned by `SearchByTokenDistanceAsync`. |
 
 ## Markdown Conventions
@@ -1078,31 +1271,26 @@ Markdown links, wikilinks, and arrow assertions are not implicitly converted int
 - `YamlDotNet` parses front matter.
 - `dotNetRDF` builds the RDF graph, runs local SPARQL, and serializes Turtle/JSON-LD.
 - Schema-aware search compiles caller profiles into local or federated SPARQL and keeps generated queries/evidence visible to callers.
+- Ranked search can use graph-native ranking, in-memory BM25, optional fuzzy BM25 token matching, optional semantic ranking, or hybrid reciprocal-rank fusion.
+- Cited answers use `IChatClient` plus ranked graph retrieval and return source citations without storing conversation history.
+- Chunk evaluation and source-change planning are deterministic local helpers, not hosted indexing services.
 - `dotNetRdf.Shacl` validates built graphs with default or caller-supplied SHACL shapes.
 - `Microsoft.Extensions.AI.IChatClient` is the only AI boundary in the core pipeline.
 - The production source tree is organized by feature slices: Documents, Extraction, Pipeline, Graph, Tokenization, Query, and Rdf.
 - `Microsoft.ML.Tokenizers` powers the explicit Tiktoken token-distance mode.
 - Subword TF-IDF is the default local token weighting because it downweights corpus-common tokens without adding language-specific preprocessing or model runtime dependencies.
 - Local topic graph construction uses Unicode word n-gram keyphrases and RDF `schema:DefinedTerm`, `schema:hasPart`, and `schema:about` edges.
-- Embeddings are not required for the current graph/search flow; Tiktoken mode uses token IDs, not embedding vectors.
+- Embeddings are not required for the core graph/search flow; optional semantic ranking uses `IEmbeddingGenerator<string, Embedding<float>>` supplied by the host.
 - Microsoft Agent Framework is treated as host-level orchestration, not a core package dependency.
 
-See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md), [ADR-0006](docs/ADR/ADR-0006-federated-sparql-adapter.md), [Graph Runtime Lifecycle](docs/Features/GraphRuntimeLifecycle.md), [Graph Creation Contracts](docs/Features/GraphCreationContracts.md), [JSON-LD Graph Round Trip](docs/Features/JsonLdGraphRoundTrip.md), [Schema-Aware SPARQL Search](docs/Features/SchemaAwareSparqlSearch.md), [Graph SHACL Validation](docs/Features/GraphShaclValidation.md), and [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md).
+## Algorithm References
 
-## Inspiration And Attribution
+- Optional fuzzy lexical matching is shared by BM25 typo-tolerant ranking and Tiktoken fuzzy query correction. It uses bounded edit distance with portable SIMD common-affix trimming, a single-word bit-vector dynamic-programming path for short residual tokens, and a bounded banded dynamic-programming fallback for longer residual tokens. It is not a naive full-matrix Levenshtein implementation and does not use platform-specific SIMD intrinsics.
+- The bit-vector path is guided by Gene Myers, "A fast bit-vector algorithm for approximate string matching based on dynamic programming", Journal of the ACM, 1999, DOI: <https://doi.org/10.1145/316542.316550>.
+- The bounded-threshold behavior is guided by Esko Ukkonen, "Algorithms for approximate string matching", Information and Control, 1985, DOI: <https://doi.org/10.1016/S0019-9958(85)80046-2>.
+- Thanks to `biegehydra/MyersBitParallelDotnet` for inspiring the practical direction we took for fast short-token typo matching.
 
-This project is inspired by Luis Quintanilla's Markdown-LD / AI Memex work:
-
-- [lqdev/markdown-ld-kb](https://github.com/lqdev/markdown-ld-kb) - upstream Python reference repository
-- [Zero-Cost Knowledge Graph from Markdown](https://lqdev.me/resources/ai-memex/blog-post-zero-cost-knowledge-graph-from-markdown/) - core idea for using Markdown, YAML front matter, LLM extraction, RDF, JSON-LD, Turtle, and SPARQL
-- [Project Report: Entity Extraction & RDF Pipeline](https://lqdev.me/resources/ai-memex/project-report-entity-extraction-rdf-pipeline/) - extraction and RDF pipeline context
-- [W3C SPARQL Federated Query](https://github.com/w3c/sparql-federated-query) - SPARQL federation reference material
-- [Wikidata Federated Queries](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/Federated_queries) - official WDQS `SERVICE` federation guide and examples
-- [Wikidata Query Service User Manual](https://www.mediawiki.org/wiki/Wikidata_Query_Service/User_Manual/en) - official WDQS operational and usage guidance
-- [WDQS Graph Split](https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/WDQS_graph_split) - official main/scholarly endpoint split and migration guidance
-- [dotNetRDF](https://github.com/dotnetrdf/dotnetrdf) - RDF/SPARQL/SHACL engine used by this C# implementation
-
-The upstream reference repository is kept as a read-only submodule under `external/lqdev-markdown-ld-kb`.
+See [docs/Architecture.md](docs/Architecture.md), [ADR-0001](docs/ADR/ADR-0001-rdf-sparql-library.md), [ADR-0002](docs/ADR/ADR-0002-llm-extraction-ichatclient.md), [ADR-0003](docs/ADR/ADR-0003-tiktoken-extraction-mode.md), [ADR-0006](docs/ADR/ADR-0006-federated-sparql-adapter.md), [Graph Runtime Lifecycle](docs/Features/GraphRuntimeLifecycle.md), [Graph Creation Contracts](docs/Features/GraphCreationContracts.md), [JSON-LD Graph Round Trip](docs/Features/JsonLdGraphRoundTrip.md), [Schema-Aware SPARQL Search](docs/Features/SchemaAwareSparqlSearch.md), [Graph SHACL Validation](docs/Features/GraphShaclValidation.md), [Federated SPARQL Execution](docs/Features/FederatedSparqlExecution.md), and [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md).
 
 ## Development
 
@@ -1116,10 +1304,61 @@ dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --coverage 
 
 Coverage is collected through `Microsoft.Testing.Extensions.CodeCoverage`. Cobertura is the XML output format used for line and branch reporting; the test project does not reference Coverlet.
 
-Current verification:
+BenchmarkDotNet performance runs are separate from TUnit correctness tests:
 
-- tests: 256 passed, 0 failed
-- line coverage: 96.04%
-- branch coverage: 84.62%
-- target framework: .NET 10
-- package version: 0.2.0
+```bash
+dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --list flat
+dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*"
+dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphBuildBenchmarks*"
+dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphSearchBenchmarks*"
+dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenSearchBenchmarks*"
+MARKDOWN_LD_KB_BENCHMARK_PROFILE=cpu dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*"
+```
+
+Benchmark reports are written to `artifacts/benchmarks/results` as Markdown, CSV, and JSON. The reports are intentionally ignored by git because they depend on the local machine and current system load. PR validation runs `FuzzyEditDistanceBenchmarks` as a mandatory smoke benchmark and uploads the reports as the `benchmark-smoke` artifact. The full benchmark workflow in `.github/workflows/benchmarks.yml` runs manually or on the weekly schedule and uploads the complete `benchmarkdotnet-results` artifact.
+
+Latest local benchmark run, executed on May 3, 2026 with BenchmarkDotNet 0.15.8, .NET 10.0.5, ShortRun, Apple M2 Pro, exported these reports:
+
+| Suite | Benchmarks executed | Export prefix |
+| --- | ---: | --- |
+| Fuzzy edit distance | 8 | `ManagedCode.MarkdownLd.Kb.Benchmarks.FuzzyEditDistanceBenchmarks-report` |
+| Graph build | 3 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphBuildBenchmarks-report` |
+| Graph search | 54 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphSearchBenchmarks-report` |
+| Tiktoken search | 18 | `ManagedCode.MarkdownLd.Kb.Benchmarks.TiktokenSearchBenchmarks-report` |
+
+Graph build scales over generated Markdown corpora like this:
+
+| Documents | Mean | Allocated |
+| ---: | ---: | ---: |
+| 25 | 1.169 ms | 1.81 MB |
+| 250 | 9.873 ms | 14.65 MB |
+| 1000 | 70.672 ms | 57.94 MB |
+
+Graph search exact-query mean time:
+
+| Documents | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 25 | 0.111 ms | 0.197 ms | 0.234 ms | 0.191 ms | 5.799 ms | 8.769 ms |
+| 250 | 1.225 ms | 2.251 ms | 2.663 ms | 2.103 ms | 59.994 ms | 65.124 ms |
+| 1000 | 8.907 ms | 16.187 ms | 17.939 ms | 13.258 ms | 282.885 ms | 293.240 ms |
+
+Typo-query search at 1000 generated documents measured 7.551 ms for ranked graph search, 12.044 ms for BM25, 20.340 ms for BM25 fuzzy, 12.700 ms for focused search, 258.953 ms for schema SPARQL, and 306.332 ms for local federated schema search. The fuzzy paths are opt-in and are expected to spend extra time to recover typo-heavy queries; they are not intended to beat exact lexical matching on raw speed.
+
+Tiktoken token-distance search mean time:
+
+| Documents | Exact query | Fuzzy-corrected exact | Typo query | Fuzzy-corrected typo | No-match query | Fuzzy-corrected no-match |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 25 | 15.04 us | 15.94 us | 17.15 us | 24.99 us | 15.39 us | 18.60 us |
+| 100 | 61.65 us | 57.72 us | 64.87 us | 75.74 us | 57.71 us | 64.71 us |
+| 250 | 146.74 us | 146.27 us | 161.66 us | 184.64 us | 145.79 us | 153.14 us |
+
+Fuzzy edit-distance mean time:
+
+| Scenario | Bounded bit-vector/banded | Naive Levenshtein | Speedup vs naive | Bounded allocation | Naive allocation |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Short deletion | 6.778 ns | 91.780 ns | 13.54x | 0 B | 112 B |
+| Short substitution | 31.011 ns | 82.948 ns | 2.67x | 216 B | 112 B |
+| Long insertion | 21.980 ns | 7,990.146 ns | 363.53x | 0 B | 640 B |
+| Long no-match | 70.283 ns | 8,990.700 ns | 127.92x | 328 B | 672 B |
+
+These numbers are local measurements, not a cross-machine performance contract. The full Markdown, CSV, and JSON BenchmarkDotNet reports remain the source for detailed diagnostics.

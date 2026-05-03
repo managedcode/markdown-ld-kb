@@ -4,26 +4,6 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 {
-    private static readonly IReadOnlyDictionary<string, int> TypePriorities = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-    {
-        [SchemaPersonTypeText] = 5,
-        [SchemaOrganizationTypeText] = 5,
-        [SchemaSoftwareApplicationTypeText] = 5,
-        [SchemaTechArticleTypeText] = 4,
-        [SchemaScholarlyArticleTypeText] = 4,
-        [SchemaBlogPostingTypeText] = 4,
-        [SchemaCreativeWorkTypeText] = 4,
-        [SchemaArticleTypeText] = 4,
-        [SkosConceptTypeText] = 4,
-        [SkosConceptSchemeTypeText] = 4,
-        [KbKnowledgeConceptTypeText] = 4,
-        [KbKnowledgeConceptSchemeTypeText] = 4,
-        [KbMarkdownDocumentTypeText] = 4,
-        [KbKnowledgeAssertionTypeText] = 4,
-        [SchemaDefinedTermTypeText] = 3,
-        [SchemaThingTypeText] = 1,
-    };
-
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
 
     public KnowledgeExtractionResult Merge(params KnowledgeExtractionResult[] results)
@@ -32,8 +12,7 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 
         var entities = new Dictionary<string, KnowledgeEntityFact>(StringComparer.OrdinalIgnoreCase);
         var assertions = new Dictionary<string, KnowledgeAssertionFact>(StringComparer.OrdinalIgnoreCase);
-        var entityAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var sameAsAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var aliases = new KnowledgeFactAliasIndex();
         var pendingAssertions = new List<KnowledgeAssertionFact>();
 
         foreach (var result in results)
@@ -42,7 +21,7 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 
             foreach (var entity in result.Entities)
             {
-                UpsertEntity(entities, entityAliases, sameAsAliases, CanonicalizeEntity(entity));
+                UpsertEntity(entities, aliases, CanonicalizeEntity(entity));
             }
 
             pendingAssertions.AddRange(result.Assertions);
@@ -50,7 +29,7 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 
         foreach (var assertion in pendingAssertions)
         {
-            var canonical = RewriteAssertionAliases(CanonicalizeAssertion(assertion), entityAliases);
+            var canonical = RewriteAssertionAliases(CanonicalizeAssertion(assertion), aliases.EntityAliases);
             if (IsValidAssertion(canonical))
             {
                 UpsertAssertion(assertions, canonical);
@@ -79,6 +58,7 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
             Type = string.IsNullOrWhiteSpace(entity.Type) ? DefaultSchemaThing : entity.Type.Trim(),
             SameAs = entity.SameAs.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             Source = entity.Source,
+            Sources = KnowledgeFactSourceCollector.MergeEntitySources(entity),
         };
     }
 
@@ -89,6 +69,7 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
             SubjectId = CanonicalizeNodeId(assertion.SubjectId),
             ObjectId = CanonicalizeNodeId(assertion.ObjectId),
             Predicate = KnowledgeNaming.NormalizePredicate(assertion.Predicate),
+            Sources = KnowledgeFactSourceCollector.MergeAssertionSources(assertion),
         };
     }
 
@@ -146,61 +127,28 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 
     private static void UpsertEntity(
         IDictionary<string, KnowledgeEntityFact> entities,
-        IDictionary<string, string> entityAliases,
-        IDictionary<string, string> sameAsAliases,
+        KnowledgeFactAliasIndex aliases,
         KnowledgeEntityFact entity)
     {
-        var key = ResolveEntityKey(sameAsAliases, entity);
+        var key = aliases.ResolveEntityKey(entity);
         if (!entities.TryGetValue(key, out var existing))
         {
             entities[key] = entity with { Id = key };
-            IndexEntityAliases(entityAliases, sameAsAliases, key, entity);
+            aliases.Index(key, entity);
             return;
         }
 
         entities[key] = existing with
         {
             Label = existing.Label.Length >= entity.Label.Length ? existing.Label : entity.Label,
-            Type = PreferHigherPriority(existing.Type, entity.Type),
+            Type = KnowledgeFactTypeSelector.PreferHigherPriority(existing.Type, entity.Type),
             SameAs = existing.SameAs.Concat(entity.SameAs).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             Confidence = Math.Max(existing.Confidence, entity.Confidence),
             Source = string.IsNullOrWhiteSpace(existing.Source) ? entity.Source : existing.Source,
+            Sources = KnowledgeFactSourceCollector.MergeEntitySources(existing, entity),
         };
-        IndexEntityAliases(entityAliases, sameAsAliases, key, entities[key]);
-        IndexEntityAliases(entityAliases, sameAsAliases, key, entity);
-    }
-
-    private static string ResolveEntityKey(
-        IDictionary<string, string> sameAsAliases,
-        KnowledgeEntityFact entity)
-    {
-        foreach (var sameAs in entity.SameAs)
-        {
-            if (sameAsAliases.TryGetValue(sameAs, out var existingKey))
-            {
-                return existingKey;
-            }
-        }
-
-        return entity.Id ?? entity.Label;
-    }
-
-    private static void IndexEntityAliases(
-        IDictionary<string, string> entityAliases,
-        IDictionary<string, string> sameAsAliases,
-        string key,
-        KnowledgeEntityFact entity)
-    {
-        if (!string.IsNullOrWhiteSpace(entity.Id))
-        {
-            entityAliases[entity.Id] = key;
-        }
-
-        foreach (var sameAs in entity.SameAs)
-        {
-            entityAliases[sameAs] = key;
-            sameAsAliases[sameAs] = key;
-        }
+        aliases.Index(key, entities[key]);
+        aliases.Index(key, entity);
     }
 
     private static void UpsertAssertion(IDictionary<string, KnowledgeAssertionFact> assertions, KnowledgeAssertionFact assertion)
@@ -216,16 +164,7 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
         {
             Confidence = Math.Max(existing.Confidence, assertion.Confidence),
             Source = string.IsNullOrWhiteSpace(existing.Source) ? assertion.Source : existing.Source,
+            Sources = KnowledgeFactSourceCollector.MergeAssertionSources(existing, assertion),
         };
-    }
-
-    private static string PreferHigherPriority(string left, string right)
-    {
-        return TypePriority(right) > TypePriority(left) ? right : left;
-    }
-
-    private static int TypePriority(string type)
-    {
-        return TypePriorities.TryGetValue(type, out var priority) ? priority : 0;
     }
 }

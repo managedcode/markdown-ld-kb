@@ -3,6 +3,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="dotNetRdf" Version="3.5.1" />
     <PackageVersion Include="dotNetRdf.Dynamic" Version="3.5.1" />
     <PackageVersion Include="dotNetRdf.Inferencing" Version="3.5.1" />
@@ -16,15 +17,15 @@
     <PackageVersion Include="ManagedCode.Storage.Core" Version="10.0.5" />
     <PackageVersion Include="ManagedCode.Storage.FileSystem" Version="10.0.5" />
     <PackageVersion Include="ManagedCode.Storage.VirtualFileSystem" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.5.0" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.0" />
-    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.6" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.5.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.1" />
+    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.7" />
     <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
     <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.4.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.6.2" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
-    <PackageVersion Include="TUnit" Version="1.37.10" />
-    <PackageVersion Include="YamlDotNet" Version="17.0.1" />
+    <PackageVersion Include="TUnit" Version="1.43.11" />
+    <PackageVersion Include="YamlDotNet" Version="17.1.0" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using ManagedCode.MarkdownLd.Kb.Parsing;
 using Markdig;
 using Markdig.Syntax;
@@ -9,8 +8,35 @@ internal static partial class MarkdownChunkFactory
 {
     private const int InitialLinkOrder = 0;
     private const int MinimumTokenCount = 1;
-    private const int EstimatedCharactersPerToken = 4;
-    private const char HeadingPipeSeparator = '|';
+    private const int TokenQuarterUnitsPerToken = 4;
+    private const int NonCjkTokenQuarterUnits = 1;
+    private const int CjkTokenQuarterUnits = 6;
+    private const char CjkUnifiedIdeographsStart = '\u4E00';
+    private const char CjkUnifiedIdeographsEnd = '\u9FFF';
+    private const char CjkExtensionAStart = '\u3400';
+    private const char CjkExtensionAEnd = '\u4DBF';
+    private const char CjkCompatibilityStart = '\uF900';
+    private const char CjkCompatibilityEnd = '\uFAFF';
+    private const char CjkSymbolsStart = '\u3000';
+    private const char CjkSymbolsEnd = '\u303F';
+    private const char HiraganaStart = '\u3040';
+    private const char HiraganaEnd = '\u309F';
+    private const char KatakanaStart = '\u30A0';
+    private const char KatakanaEnd = '\u30FF';
+    private const char KatakanaPhoneticExtensionsStart = '\u31F0';
+    private const char KatakanaPhoneticExtensionsEnd = '\u31FF';
+    private const char HangulJamoStart = '\u1100';
+    private const char HangulJamoEnd = '\u11FF';
+    private const char HangulCompatibilityJamoStart = '\u3130';
+    private const char HangulCompatibilityJamoEnd = '\u318F';
+    private const char HangulSyllablesStart = '\uAC00';
+    private const char HangulSyllablesEnd = '\uD7AF';
+    private const char HangulJamoExtendedAStart = '\uA960';
+    private const char HangulJamoExtendedAEnd = '\uA97F';
+    private const char HangulJamoExtendedBStart = '\uD7B0';
+    private const char HangulJamoExtendedBEnd = '\uD7FF';
+    private const char FullwidthHalfwidthStart = '\uFF00';
+    private const char FullwidthHalfwidthEnd = '\uFFEF';
     private static readonly MarkdownPipeline BlockParsingPipeline = new MarkdownPipelineBuilder()
         .UsePreciseSourceLocation()
         .UseDefinitionLists()
@@ -46,6 +72,9 @@ internal static partial class MarkdownChunkFactory
         MarkdownChunkingSection section,
         MarkdownChunkingOptions options)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.ChunkTokenTarget);
+        ArgumentOutOfRangeException.ThrowIfNegative(options.ChunkOverlapTokenTarget);
+
         var sectionBody = ExtractSectionBody(section);
         var blocks = SplitBlocks(sectionBody);
         if (blocks.Count == 0)
@@ -70,7 +99,7 @@ internal static partial class MarkdownChunkFactory
             if (currentBlocks.Count > 0 && EstimateTokens(candidate) > options.ChunkTokenTarget)
             {
                 chunks.Add(CreateChunk(document, section, currentBlocks, order++, ref linkOrder));
-                currentBlocks.Clear();
+                currentBlocks = CreateOverlapBlocks(currentBlocks, options.ChunkOverlapTokenTarget);
             }
 
             currentBlocks.Add(block);
@@ -106,7 +135,7 @@ internal static partial class MarkdownChunkFactory
         ref int linkOrder)
     {
         var markdown = string.Join(MarkdownTextConstants.DoubleLineFeed, blocks).Trim();
-        var links = ExtractLinks(markdown, document.BaseUri, ref linkOrder)
+        var links = ExtractLinks(markdown, document.BaseUri, document.ContentPath, ref linkOrder)
             .DistinctBy(GetLinkKey)
             .ToArray();
 
@@ -154,6 +183,37 @@ internal static partial class MarkdownChunkFactory
         return blocks.Length == 0 ? [normalized] : blocks;
     }
 
+    private static List<string> CreateOverlapBlocks(
+        IReadOnlyList<string> blocks,
+        int overlapTokenTarget)
+    {
+        if (overlapTokenTarget <= 0 || blocks.Count == 0)
+        {
+            return [];
+        }
+
+        var overlapBlocks = new List<string>();
+        var overlapTokens = 0;
+        for (var index = blocks.Count - 1; index >= 0; index--)
+        {
+            var block = blocks[index];
+            var blockTokens = EstimateTokens(block);
+            if (overlapBlocks.Count > 0 && overlapTokens + blockTokens > overlapTokenTarget)
+            {
+                break;
+            }
+
+            overlapBlocks.Insert(0, block);
+            overlapTokens += blockTokens;
+            if (overlapTokens >= overlapTokenTarget)
+            {
+                break;
+            }
+        }
+
+        return overlapBlocks;
+    }
+
     private static string ExtractBlockMarkdown(string markdown, Block block)
     {
         if (block.Span.Start < 0 || block.Span.End < block.Span.Start || block.Span.End >= markdown.Length)
@@ -164,167 +224,35 @@ internal static partial class MarkdownChunkFactory
         return markdown[block.Span.Start..(block.Span.End + 1)].Trim();
     }
 
-    private static IReadOnlyList<MarkdownLinkReference> ExtractLinks(
-        string markdown,
-        Uri baseUri,
-        ref int linkOrder)
+    private static int EstimateTokens(string text)
     {
-        var links = new List<MarkdownLinkReference>();
-
-        foreach (Match match in WikiLinkRegex().Matches(markdown))
+        var quarterUnits = 0;
+        foreach (var character in text)
         {
-            var rawTarget = match.Groups[MarkdownTextConstants.GroupTarget].Value.Trim();
-            if (string.IsNullOrWhiteSpace(rawTarget))
-            {
-                continue;
-            }
-
-            var parts = rawTarget.Split(HeadingPipeSeparator, 2, StringSplitOptions.TrimEntries);
-            var target = parts[0];
-            var displayText = parts.Length == 2 ? parts[1] : parts[0];
-            links.Add(new MarkdownLinkReference(
-                MarkdownLinkKind.WikiLink,
-                target,
-                displayText,
-                target,
-                null,
-                false,
-                false,
-                false,
-                null,
-                linkOrder++));
+            quarterUnits += IsCjkCharacter(character)
+                ? CjkTokenQuarterUnits
+                : NonCjkTokenQuarterUnits;
         }
 
-        foreach (Match match in MarkdownImageLinkRegex().Matches(markdown))
-        {
-            var target = match.Groups[MarkdownTextConstants.GroupTarget].Value.Trim();
-            if (string.IsNullOrWhiteSpace(target))
-            {
-                continue;
-            }
-
-            links.Add(CreateMarkdownLink(
-                target,
-                match.Groups[MarkdownTextConstants.GroupLabel].Value.Trim(),
-                GetLinkTitle(match),
-                baseUri,
-                ref linkOrder,
-                true));
-        }
-
-        foreach (Match match in MarkdownLinkRegex().Matches(markdown))
-        {
-            var target = match.Groups[MarkdownTextConstants.GroupTarget].Value.Trim();
-            if (string.IsNullOrWhiteSpace(target))
-            {
-                continue;
-            }
-
-            links.Add(CreateMarkdownLink(
-                target,
-                match.Groups[MarkdownTextConstants.GroupLabel].Value.Trim(),
-                GetLinkTitle(match),
-                baseUri,
-                ref linkOrder,
-                false));
-        }
-
-        return links;
+        return Math.Max(MinimumTokenCount, quarterUnits / TokenQuarterUnitsPerToken);
     }
 
-    private static MarkdownLinkReference CreateMarkdownLink(
-        string target,
-        string label,
-        string? title,
-        Uri baseUri,
-        ref int linkOrder,
-        bool isImage)
+    private static bool IsCjkCharacter(char character)
     {
-        var isExternal = IsExternalTarget(target);
-        var resolvedTarget = isExternal
-            ? target
-            : ResolveDocumentTarget(target, baseUri);
-
-        return new MarkdownLinkReference(
-            MarkdownLinkKind.MarkdownLink,
-            target,
-            label,
-            target,
-            title,
-            isExternal,
-            isImage,
-            !isExternal,
-            resolvedTarget,
-            linkOrder++);
+        return IsBetween(character, CjkUnifiedIdeographsStart, CjkUnifiedIdeographsEnd) ||
+               IsBetween(character, CjkExtensionAStart, CjkExtensionAEnd) ||
+               IsBetween(character, CjkCompatibilityStart, CjkCompatibilityEnd) ||
+               IsBetween(character, CjkSymbolsStart, CjkSymbolsEnd) ||
+               IsBetween(character, HiraganaStart, HiraganaEnd) ||
+               IsBetween(character, KatakanaStart, KatakanaEnd) ||
+               IsBetween(character, KatakanaPhoneticExtensionsStart, KatakanaPhoneticExtensionsEnd) ||
+               IsBetween(character, HangulJamoStart, HangulJamoEnd) ||
+               IsBetween(character, HangulCompatibilityJamoStart, HangulCompatibilityJamoEnd) ||
+               IsBetween(character, HangulSyllablesStart, HangulSyllablesEnd) ||
+               IsBetween(character, HangulJamoExtendedAStart, HangulJamoExtendedAEnd) ||
+               IsBetween(character, HangulJamoExtendedBStart, HangulJamoExtendedBEnd) ||
+               IsBetween(character, FullwidthHalfwidthStart, FullwidthHalfwidthEnd);
     }
 
-    private static bool IsExternalTarget(string target) =>
-        Uri.TryCreate(target, UriKind.Absolute, out var uri) &&
-        (uri.Scheme.Equals(MarkdownTextConstants.HttpScheme, StringComparison.OrdinalIgnoreCase) ||
-         uri.Scheme.Equals(MarkdownTextConstants.HttpsScheme, StringComparison.OrdinalIgnoreCase) ||
-         uri.Scheme.Equals(MarkdownTextConstants.MailtoScheme, StringComparison.OrdinalIgnoreCase));
-
-    private static string ResolveDocumentTarget(string target, Uri baseUri)
-    {
-        if (Uri.TryCreate(target, UriKind.RelativeOrAbsolute, out var uri) && uri.IsAbsoluteUri)
-        {
-            return uri.AbsoluteUri;
-        }
-
-        if (!Uri.TryCreate(baseUri, target, out var resolvedUri))
-        {
-            return target;
-        }
-
-        var uriBuilder = new UriBuilder(resolvedUri)
-        {
-            Fragment = resolvedUri.Fragment,
-            Query = resolvedUri.Query,
-        };
-
-        var path = uriBuilder.Uri.AbsolutePath;
-        if (path.EndsWith(MarkdownTextConstants.MarkdownExtension, StringComparison.OrdinalIgnoreCase) ||
-            path.EndsWith(MarkdownTextConstants.MarkdownExtensionLong, StringComparison.OrdinalIgnoreCase) ||
-            path.EndsWith(MarkdownTextConstants.MarkdownExtensionAlternate, StringComparison.OrdinalIgnoreCase))
-        {
-            path = Path.ChangeExtension(path, null);
-            if (!path.EndsWith(MarkdownTextConstants.PathSeparator, StringComparison.Ordinal))
-            {
-                path = string.Concat(path, MarkdownTextConstants.PathSeparator);
-            }
-        }
-
-        uriBuilder.Path = path;
-        return uriBuilder.Uri.AbsoluteUri;
-    }
-
-    private static string? GetLinkTitle(Match match)
-    {
-        var titleGroup = match.Groups[MarkdownTextConstants.GroupTitle];
-        return titleGroup.Success ? titleGroup.Value.Trim() : null;
-    }
-
-    private static int EstimateTokens(string text) => Math.Max(MinimumTokenCount, text.Length / EstimatedCharactersPerToken);
-
-    private static object GetLinkKey(MarkdownLinkReference link) =>
-        (
-            link.Kind,
-            link.Target,
-            link.DisplayText,
-            link.Destination,
-            link.Title,
-            link.IsExternal,
-            link.IsImage,
-            link.IsDocumentLink,
-            link.ResolvedTarget
-        );
-
-    [GeneratedRegex(MarkdownTextConstants.WikiLinkPattern, RegexOptions.CultureInvariant)]
-    private static partial Regex WikiLinkRegex();
-
-    [GeneratedRegex(MarkdownTextConstants.MarkdownImageLinkPattern, RegexOptions.CultureInvariant)]
-    private static partial Regex MarkdownImageLinkRegex();
-
-    [GeneratedRegex(MarkdownTextConstants.MarkdownLinkPattern, RegexOptions.CultureInvariant)]
-    private static partial Regex MarkdownLinkRegex();
+    private static bool IsBetween(char character, char start, char end) => character >= start && character <= end;
 }

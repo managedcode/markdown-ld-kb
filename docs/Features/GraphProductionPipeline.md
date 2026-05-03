@@ -74,6 +74,14 @@ var pipeline = new MarkdownKnowledgePipeline(new MarkdownKnowledgePipelineOption
 
 The runtime still receives deterministic `MarkdownSourceDocument` inputs and produces an in-memory `KnowledgeGraph`.
 
+Optional semantic indexing uses the Microsoft.Extensions.AI embedding abstraction, not a provider SDK:
+
+```csharp
+var semanticIndex = await result.BuildSemanticIndexAsync(embeddingGenerator);
+```
+
+The concrete embedding provider and any vector storage remain host-owned.
+
 ## Generated SHACL
 
 `KnowledgeGraphContract.GenerateShacl()` creates Turtle SHACL from the search contract. Required text predicates and facet filters become required property shapes. Relationship and expansion predicates are included as optional IRI property constraints.
@@ -157,13 +165,14 @@ foreach (var changed in diff.ChangedLiteralEdges)
 }
 ```
 
-Use incremental builds when the caller needs changed-path diagnostics. The implementation rebuilds the in-memory graph deterministically, returns a source manifest, reports changed and removed paths, and optionally diffs against the previous graph.
+Use incremental builds when the caller needs changed-path diagnostics. The implementation rebuilds the in-memory graph deterministically, returns a source manifest, reports changed, unchanged, and removed paths, and optionally diffs against the previous graph.
 
 ```csharp
 var first = await pipeline.BuildIncrementalAsync(sources);
 var next = await pipeline.BuildIncrementalAsync(updatedSources, first.Manifest, first.BuildResult.Graph);
 
 Console.WriteLine(next.ChangedPaths.Count);
+Console.WriteLine(next.UnchangedPaths.Count);
 Console.WriteLine(next.Diff.ChangedLiteralEdges.Count);
 ```
 
@@ -175,6 +184,21 @@ await next.Manifest.SaveJsonToFileAsync("/absolute/path/to/graph.manifest.json")
 var previousManifest = await KnowledgeGraphSourceManifest.LoadJsonFromFileAsync(
     "/absolute/path/to/graph.manifest.json");
 ```
+
+When a host wants to avoid expensive unchanged-source work before building, it can plan the source changes directly from the manifest:
+
+```csharp
+var changeSet = KnowledgeGraphSourceManifest.CreateChangeSet(sources, previousManifest);
+
+foreach (var changedPath in changeSet.ChangedPaths)
+{
+    Console.WriteLine(changedPath);
+}
+```
+
+The planner uses the same path, canonical URI, and content fingerprint semantics as `BuildIncrementalAsync`; it does not introduce a database, background indexer, or provider dependency.
+
+Entity and assertion de-duplication happen before graph materialization. Entities merge through shared `schema:sameAs` targets, including direct-ID aliases to those targets, and duplicate assertions preserve all source provenance so search evidence and cited answers can choose the best supporting Markdown source.
 
 ## Presets
 
@@ -191,7 +215,8 @@ Presets are starting points. For domain graphs, prefer an explicit `KnowledgeGra
 ## Verification
 
 ```bash
-dotnet test --project tests/MarkdownLd.Kb.Tests/MarkdownLd.Kb.Tests.csproj --configuration Release -- --treenode-filter "/*/*/GraphProductionPipelineFlowTests/*"
+dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --treenode-filter "/*/*/GraphProductionPipelineFlowTests/*"
+dotnet test --solution MarkdownLd.Kb.slnx --configuration Release
 ```
 
 Covered scenarios:

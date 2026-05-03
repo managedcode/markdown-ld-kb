@@ -36,7 +36,10 @@ flowchart TD
     DocAbout --> Graph
     RelatedEdges --> Graph
     Vectors --> Index["TokenizedKnowledgeIndex"]
-    Index --> Search["SearchByTokenDistanceAsync"]
+    Query["Search query"] --> FuzzyCorrection["Optional corpus-word\nfuzzy correction"]
+    FuzzyCorrection --> QueryTokenizer["Tiktoken query tokenizer"]
+    QueryTokenizer --> Search["SearchByTokenDistanceAsync"]
+    Index --> Search
 ```
 
 ## Behavior
@@ -60,6 +63,9 @@ flowchart TD
 - The source document is connected to each segment node with `schema:mentions`.
 - Nearby segment vectors are connected with `kb:relatedTo`.
 - `KnowledgeGraph.SearchByTokenDistanceAsync` searches the in-memory token index attached to graphs built in Tiktoken mode.
+- `TokenDistanceSearchOptions.EnableFuzzyQueryCorrection` optionally expands absent query words with close corpus vocabulary terms before Tiktoken query encoding.
+- Fuzzy query correction is word-level and corpus-local; it does not compute edit distance over model-specific Tiktoken IDs.
+- Exact token-distance search remains the default.
 - Calling token-distance search on a non-Tiktoken graph fails explicitly.
 
 ## Research Summary
@@ -89,6 +95,8 @@ The flow tests use clean English, Ukrainian, French, and German Markdown bodies 
 | Non-ASCII topic graph | Ukrainian and French topic labels remain readable and distinct |
 | Headingless notes | document-title section node contains the loose text segments |
 | Explicit entity hints | `entity_hints` preserve label, type, `sameAs`, and non-ASCII hash IDs |
+| Fuzzy query correction | typo-heavy queries and corpus-side misspellings improve over exact token-distance search while remaining opt-in |
+| Fuzzy query performance | long corpus vocabulary correction stays below the local regression budget |
 
 These thresholds intentionally validate lexical language dependence instead of semantic translation ability.
 

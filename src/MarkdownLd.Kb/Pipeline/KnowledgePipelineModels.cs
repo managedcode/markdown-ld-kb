@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using ManagedCode.MarkdownLd.Kb.Query;
+using Microsoft.Extensions.AI;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 using RootMarkdownChunk = ManagedCode.MarkdownLd.Kb.MarkdownChunk;
 
@@ -46,6 +47,7 @@ public sealed record KnowledgeEntityFact
     public List<string> SameAs { get; init; } = [];
     public double Confidence { get; init; } = 0.8;
     public string Source { get; init; } = string.Empty;
+    public List<string> Sources { get; init; } = [];
 }
 
 public sealed record KnowledgeAssertionFact
@@ -55,6 +57,7 @@ public sealed record KnowledgeAssertionFact
     public string ObjectId { get; init; } = string.Empty;
     public double Confidence { get; init; } = 0.8;
     public string Source { get; init; } = string.Empty;
+    public List<string> Sources { get; init; } = [];
 }
 
 public sealed record KnowledgeExtractionResult
@@ -82,6 +85,28 @@ public sealed record MarkdownKnowledgeBuildResult(
     {
         return Graph.ValidateShacl(shapesTurtle);
     }
+
+    public Task<KnowledgeGraphSemanticIndex> BuildSemanticIndexAsync(
+        IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(embeddingGenerator);
+        return MarkdownKnowledgeBuildResultRankedSearch.BuildSemanticIndexAsync(this, embeddingGenerator, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<KnowledgeGraphRankedSearchMatch>> SearchRankedAsync(
+        string query,
+        KnowledgeGraphRankedSearchOptions? options = null,
+        KnowledgeGraphSemanticIndex? semanticIndex = null,
+        CancellationToken cancellationToken = default)
+    {
+        return MarkdownKnowledgeBuildResultRankedSearch.SearchRankedAsync(
+            this,
+            query,
+            options,
+            semanticIndex,
+            cancellationToken);
+    }
 }
 
 public sealed record MarkdownKnowledgeIncrementalBuildResult(
@@ -89,7 +114,10 @@ public sealed record MarkdownKnowledgeIncrementalBuildResult(
     KnowledgeGraphSourceManifest Manifest,
     IReadOnlyList<string> ChangedPaths,
     IReadOnlyList<string> RemovedPaths,
-    KnowledgeGraphDiff Diff);
+    KnowledgeGraphDiff Diff)
+{
+    public IReadOnlyList<string> UnchangedPaths { get; init; } = [];
+}
 
 public sealed partial record KnowledgeGraphSourceManifest(
     IReadOnlyList<KnowledgeGraphSourceManifestEntry> Entries)

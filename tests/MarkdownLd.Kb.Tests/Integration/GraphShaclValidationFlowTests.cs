@@ -125,6 +125,12 @@ ASK WHERE {
                     },
                     new KnowledgeGraphEntityRule
                     {
+                        Id = ExternalSameAsUri,
+                        Label = "RDF",
+                        Type = "schema:Thing",
+                    },
+                    new KnowledgeGraphEntityRule
+                    {
                         Id = RdfQueryingUri,
                         Label = "RDF Querying",
                         Type = "schema:DefinedTerm",
@@ -145,6 +151,7 @@ ASK WHERE {
         merged.Id.ShouldBe(CanonicalEntityUri);
         merged.Type.ShouldBe("schema:SoftwareApplication");
         result.Facts.Entities.Select(static entity => entity.Id).ShouldNotContain(DuplicateEntityUri);
+        result.Facts.Entities.Select(static entity => entity.Id).ShouldNotContain(ExternalSameAsUri);
         result.Facts.Assertions.Single().SubjectId.ShouldBe(CanonicalEntityUri);
 
         var canonicalGraphExists = await result.Graph.ExecuteAskAsync("""

@@ -30,6 +30,8 @@ Use explicit extraction modes in `MarkdownKnowledgePipeline`:
 
 The Tiktoken mode uses `Microsoft.ML.Tokenizers` and `Microsoft.ML.Tokenizers.Data.O200kBase`. It segments Markdown through heading or loose document sections and paragraph/line blocks, encodes each segment with Tiktoken, fits a corpus-local sparse vector space, calculates Euclidean distance, creates segment entities, links the source document to each segment with `schema:mentions`, and links near segments with `kb:relatedTo`.
 
+`SearchByTokenDistanceAsync` remains exact by default. Callers can pass `TokenDistanceSearchOptions` with `EnableFuzzyQueryCorrection = true` to expand absent query words with close corpus vocabulary terms before Tiktoken query encoding. This uses bounded word-level edit distance as a query-normalization step; it does not compute edit distance over Tiktoken IDs.
+
 The local fallback also creates graph structure:
 
 - section and segment nodes are `schema:CreativeWork`
@@ -73,7 +75,9 @@ flowchart LR
     HintFacts --> Builder
     Builder --> Graph["In-memory RDF graph"]
     Token --> Index["TokenizedKnowledgeIndex"]
-    Index --> Search["SearchByTokenDistanceAsync"]
+    Query["Search query"] --> Fuzzy["Optional corpus-word\nfuzzy correction"]
+    Fuzzy --> Search["SearchByTokenDistanceAsync"]
+    Index --> Search
 ```
 
 ## Consequences
@@ -86,6 +90,7 @@ flowchart LR
 - Subword TF-IDF downweights corpus-common tokens without manually curated language rules.
 - Tiktoken mode now produces named topic vertices and typed `schema:hasPart` / `schema:about` edges, not only segment similarity edges.
 - Tiktoken mode preserves explicit front matter entity hints without reintroducing Markdown link, wikilink, or arrow scanner heuristics.
+- Fuzzy query correction improves typo-heavy same-language token-distance search without changing the default exact behavior.
 - Raw term frequency and binary weighting remain testable baselines.
 - The core library still avoids concrete LLM and embedding providers.
 
@@ -94,6 +99,7 @@ flowchart LR
 - Tiktoken token vectors are lexical and do not provide semantic embeddings.
 - Abstract questions can miss even in the same language.
 - Cross-language queries generally do not match translated content because token IDs differ.
+- Fuzzy query correction is lexical and corpus-local; it does not add semantic understanding or cross-language translation.
 - IDF over small Markdown corpora can be noisy.
 - Local keyphrase topic labels are lexical and can be noisy on short documents.
 - Removing heuristic extraction is a breaking pre-release API and behavior change.
@@ -105,6 +111,7 @@ Testing methodology:
 - Default mode without chat builds document metadata, no extracted facts, and a diagnostic.
 - Chat mode builds graph facts only from `IChatClient` output and does not use Markdown link heuristics.
 - Tiktoken mode builds graph nodes/edges and supports `SearchByTokenDistanceAsync`.
+- Fuzzy query correction tests cover query-side typos, corpus-side misspellings, distractor-biased exact tokens, invalid options, opt-in behavior, and long-vocabulary performance.
 - Focused vector tests verify L2 normalization, binary count suppression, TF-IDF common-token downweighting, and Euclidean distance behavior.
 - English, Ukrainian, French, and German same-language sources with 10 same-language queries each must hit at least 8 top matches.
 - Cross-language translated-topic checks must stay low because no embedding or translation model is present.

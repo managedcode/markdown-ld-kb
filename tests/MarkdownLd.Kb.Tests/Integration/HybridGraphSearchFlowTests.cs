@@ -134,6 +134,45 @@ Use this page to review account dashboard details.
     }
 
     [Test]
+    public async Task Hybrid_mode_can_use_reciprocal_rank_fusion_without_changing_default_strategy()
+    {
+        var graph = await BuildGraphAsync(
+            new MarkdownSourceDocument(NotificationsPath, NotificationsMarkdown),
+            new MarkdownSourceDocument(AlertsGuidePath, AlertsGuideMarkdown));
+        var semanticIndex = await graph.BuildSemanticIndexAsync(new TestEmbeddingGenerator());
+
+        var defaultResults = await graph.SearchRankedAsync(
+            "app alerts",
+            new KnowledgeGraphRankedSearchOptions
+            {
+                Mode = KnowledgeGraphSearchMode.Hybrid,
+                MaxResults = 2,
+                MaxSemanticResults = 2,
+            },
+            semanticIndex);
+        var rrfResults = await graph.SearchRankedAsync(
+            "app alerts",
+            new KnowledgeGraphRankedSearchOptions
+            {
+                Mode = KnowledgeGraphSearchMode.Hybrid,
+                MaxResults = 2,
+                MaxSemanticResults = 2,
+                HybridFusionStrategy = KnowledgeGraphHybridFusionStrategy.ReciprocalRank,
+            },
+            semanticIndex);
+
+        defaultResults[0].Label.ShouldBe(AlertsGuideTitle);
+        defaultResults[0].Score.ShouldBeGreaterThan(1);
+        rrfResults[0].Label.ShouldBe(AlertsGuideTitle);
+        rrfResults[0].Source.ShouldBe(KnowledgeGraphRankedSearchSource.Merged);
+        rrfResults[0].CanonicalScore.ShouldNotBeNull();
+        rrfResults[0].SemanticScore.ShouldNotBeNull();
+        rrfResults[0].CanonicalScore.GetValueOrDefault().ShouldBeGreaterThan(0);
+        rrfResults[0].SemanticScore.GetValueOrDefault().ShouldBeGreaterThan(0);
+        rrfResults[0].Score.ShouldBeLessThan(defaultResults[0].Score);
+    }
+
+    [Test]
     public async Task Semantic_mode_requires_a_semantic_index()
     {
         var graph = await BuildGraphAsync(new MarkdownSourceDocument(NotificationsPath, NotificationsMarkdown));
@@ -170,7 +209,33 @@ Use this page to review account dashboard details.
         result.PrimaryMatches[0].Label.ShouldBe(NotificationsTitle);
     }
 
+    [Test]
+    public async Task Build_result_creates_optional_semantic_index_with_embedding_generator_boundary()
+    {
+        var build = await BuildAsync(
+            new MarkdownSourceDocument(NotificationsPath, NotificationsMarkdown),
+            new MarkdownSourceDocument(TreePath, TreeMarkdown));
+
+        var semanticIndex = await build.BuildSemanticIndexAsync(new TestEmbeddingGenerator());
+        var results = await build.Graph.SearchRankedAsync(
+            UkrainianNotificationsQuery,
+            new KnowledgeGraphRankedSearchOptions
+            {
+                Mode = KnowledgeGraphSearchMode.Semantic,
+                MaxResults = 1,
+            },
+            semanticIndex);
+
+        semanticIndex.Count.ShouldBeGreaterThan(0);
+        results.Single().Label.ShouldBe(NotificationsTitle);
+    }
+
     private static async Task<KnowledgeGraph> BuildGraphAsync(params MarkdownSourceDocument[] documents)
+    {
+        return (await BuildAsync(documents)).Graph;
+    }
+
+    private static async Task<MarkdownKnowledgeBuildResult> BuildAsync(params MarkdownSourceDocument[] documents)
     {
         var pipeline = new MarkdownKnowledgePipeline(
             BaseUri,
@@ -178,6 +243,6 @@ Use this page to review account dashboard details.
         var result = await pipeline.BuildAsync(documents);
 
         result.ExtractionMode.ShouldBe(MarkdownKnowledgeExtractionMode.None);
-        return result.Graph;
+        return result;
     }
 }

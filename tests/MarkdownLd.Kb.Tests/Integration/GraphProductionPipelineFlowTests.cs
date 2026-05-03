@@ -302,6 +302,7 @@ Approve generated graph artifacts.
 
         baseline.ChangedPaths.ShouldBe(["docs/cache.md", "docs/release.md"], ignoreOrder: true);
         next.ChangedPaths.ShouldBe(["docs/cache.md"]);
+        next.UnchangedPaths.ShouldBe(["docs/release.md"]);
         next.RemovedPaths.ShouldBeEmpty();
         next.Diff.ChangedLiteralEdges.ShouldContain(edge => edge.PredicateId == "https://schema.org/description");
         next.BuildResult.Contract.Validation.IsValid.ShouldBeTrue();
@@ -328,6 +329,7 @@ Approve generated graph artifacts.
         ], next.Manifest, next.BuildResult.Graph);
 
         removed.ChangedPaths.ShouldBeEmpty();
+        removed.UnchangedPaths.ShouldBe(["docs/cache.md"]);
         removed.RemovedPaths.ShouldBe(["docs/release.md"]);
         removed.Diff.RemovedNodes.ShouldContain(node => node.Id == ReleaseDocumentUri);
     }

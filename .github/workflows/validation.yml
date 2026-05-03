@@ -41,6 +41,9 @@ jobs:
     - name: Test with coverage
       run: dotnet test --solution MarkdownLd.Kb.slnx --configuration Release --verbosity normal -- --coverage --coverage-output-format cobertura --coverage-output "${{ github.workspace }}/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "${{ github.workspace }}/CodeCoverage.runsettings"
 
+    - name: Benchmark smoke
+      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*"
+
     - name: Pack
       run: dotnet pack MarkdownLd.Kb.slnx --configuration Release -p:IncludeSymbols=false -p:SymbolPackageFormat=snupkg --output ./artifacts
 
@@ -49,6 +52,14 @@ jobs:
       with:
         name: coverage
         path: TestResults/TUnitCoverage/coverage.cobertura.xml
+        retention-days: 5
+
+    - name: Upload benchmark artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: benchmark-smoke
+        path: artifacts/benchmarks/results
+        if-no-files-found: error
         retention-days: 5
 
     - name: Upload package artifact

@@ -4,7 +4,7 @@ using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappingOptions? documentRdfMappingOptions = null)
+public sealed partial class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappingOptions? documentRdfMappingOptions = null)
 {
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
     private readonly DocumentRdfFrontMatterMapper _documentRdfMapper = new(documentRdfMappingOptions);
@@ -204,70 +204,7 @@ public sealed class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappin
             graph.Assert(new Triple(subject, schemaSameAs, context.UriOrLiteralNode(sameAs)));
         }
 
-        AddSourceTriple(context, subject, provWasDerivedFrom, entity.Source);
-    }
-
-    private static void AddAssertion(
-        KnowledgeGraphMaterializationContext context,
-        KnowledgeAssertionFact assertion,
-        bool includeAssertionReification)
-    {
-        if (!Uri.TryCreate(assertion.SubjectId, UriKind.Absolute, out var subjectUri) ||
-            !Uri.TryCreate(assertion.ObjectId, UriKind.Absolute, out var objectUri) ||
-            string.IsNullOrWhiteSpace(assertion.Predicate))
-        {
-            return;
-        }
-
-        var predicateUri = context.ResolvePredicateUri(assertion.Predicate);
-        if (predicateUri is null)
-        {
-            return;
-        }
-
-        var graph = context.Graph;
-        var subject = context.UriNode(subjectUri);
-        graph.Assert(
-            new Triple(
-                subject,
-                context.UriNode(predicateUri),
-                context.UriNode(objectUri)));
-        if (includeAssertionReification)
-        {
-            AddReifiedAssertion(context, subjectUri, predicateUri, objectUri, assertion);
-        }
-
-        if (!string.IsNullOrWhiteSpace(assertion.Source))
-        {
-            AddSourceTriple(context, subject, context.UriNode(ProvWasDerivedFromUri), assertion.Source);
-        }
-    }
-
-    private static void AddReifiedAssertion(
-        KnowledgeGraphMaterializationContext context,
-        Uri subjectUri,
-        Uri predicateUri,
-        Uri objectUri,
-        KnowledgeAssertionFact assertion)
-    {
-        var graph = context.Graph;
-        var statement = graph.CreateBlankNode();
-        graph.Assert(new Triple(statement, context.UriNode(RdfTypeUri), context.UriNode(RdfStatementUri)));
-        graph.Assert(new Triple(statement, context.UriNode(RdfSubjectUri), context.UriNode(subjectUri)));
-        graph.Assert(new Triple(statement, context.UriNode(RdfPredicateUri), context.UriNode(predicateUri)));
-        graph.Assert(new Triple(statement, context.UriNode(RdfObjectUri), context.UriNode(objectUri)));
-        graph.Assert(new Triple(statement, context.UriNode(KbConfidenceUri), context.ConfidenceLiteral(assertion.Confidence)));
-        AddSourceTriple(context, statement, context.UriNode(ProvWasDerivedFromUri), assertion.Source);
-    }
-
-    private static void AddSourceTriple(KnowledgeGraphMaterializationContext context, INode subject, INode predicate, string source)
-    {
-        if (string.IsNullOrWhiteSpace(source))
-        {
-            return;
-        }
-
-        context.Graph.Assert(new Triple(subject, predicate, context.UriOrLiteralNode(source)));
+        AddSourceTriples(context, subject, provWasDerivedFrom, entity);
     }
 
     private static Uri? ResolveArticleType(string entryType)

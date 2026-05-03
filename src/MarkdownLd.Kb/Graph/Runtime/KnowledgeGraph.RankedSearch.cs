@@ -27,18 +27,49 @@ public sealed partial class KnowledgeGraph
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
         cancellationToken.ThrowIfCancellationRequested();
 
+        return await SearchRankedCandidatesAsync(
+                query,
+                CreateSearchCandidates(ToSnapshot()),
+                options,
+                semanticIndex,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    internal static async Task<IReadOnlyList<KnowledgeGraphRankedSearchMatch>> SearchRankedCandidatesAsync(
+        string query,
+        IReadOnlyList<KnowledgeGraphSearchCandidate> candidates,
+        KnowledgeGraphRankedSearchOptions? options = null,
+        KnowledgeGraphSemanticIndex? semanticIndex = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(query);
+        ArgumentNullException.ThrowIfNull(candidates);
+        cancellationToken.ThrowIfCancellationRequested();
+
         var effectiveOptions = options ?? new KnowledgeGraphRankedSearchOptions();
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(effectiveOptions.MaxResults);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(effectiveOptions.MaxSemanticResults);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(effectiveOptions.ReciprocalRankFusionRankOffset);
+        ArgumentOutOfRangeException.ThrowIfNegative(effectiveOptions.MaxFuzzyEditDistance);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(effectiveOptions.MinimumFuzzyTokenLength);
+        ValidateCandidateNodeIds(effectiveOptions.CandidateNodeIds);
 
-        var candidates = CreateSearchCandidates(ToSnapshot());
-        var candidatesById = candidates.ToDictionary(static candidate => candidate.NodeId, StringComparer.Ordinal);
+        var filteredCandidates = FilterSearchCandidates(
+            candidates,
+            effectiveOptions.CandidateNodeIds);
+        var candidatesById = filteredCandidates.ToDictionary(static candidate => candidate.NodeId, StringComparer.Ordinal);
         var canonicalMatches = effectiveOptions.Mode is KnowledgeGraphSearchMode.Graph or KnowledgeGraphSearchMode.Hybrid
-            ? SearchCanonical(candidates, query, effectiveOptions.MaxResults)
+            ? SearchCanonical(filteredCandidates, query, effectiveOptions.MaxResults)
             : [];
         if (effectiveOptions.Mode == KnowledgeGraphSearchMode.Graph)
         {
             return canonicalMatches;
+        }
+
+        if (effectiveOptions.Mode == KnowledgeGraphSearchMode.Bm25)
+        {
+            return KnowledgeGraphBm25Search.Search(filteredCandidates, query, effectiveOptions);
         }
 
         if (semanticIndex is null)
@@ -59,7 +90,7 @@ public sealed partial class KnowledgeGraph
 
         return effectiveOptions.Mode == KnowledgeGraphSearchMode.Semantic
             ? semanticMatches.Take(effectiveOptions.MaxResults).ToArray()
-            : MergeHybridMatches(canonicalMatches, semanticMatches, effectiveOptions.MaxResults);
+            : MergeHybridMatches(canonicalMatches, semanticMatches, effectiveOptions);
     }
 
     private static IReadOnlyList<KnowledgeGraphRankedSearchMatch> SearchCanonical(
@@ -74,6 +105,29 @@ public sealed partial class KnowledgeGraph
             .OrderByDescending(static match => match.Score)
             .ThenBy(static match => match.Label, StringComparer.OrdinalIgnoreCase)
             .Take(limit)
+            .ToArray();
+    }
+
+    private static void ValidateCandidateNodeIds(IReadOnlyCollection<string>? candidateNodeIds)
+    {
+        if (candidateNodeIds?.Any(static id => string.IsNullOrWhiteSpace(id)) == true)
+        {
+            throw new ArgumentException(KnowledgeGraphRankedSearchDefaults.CandidateNodeIdsCannotContainEmptyMessage);
+        }
+    }
+
+    private static IReadOnlyList<KnowledgeGraphSearchCandidate> FilterSearchCandidates(
+        IReadOnlyList<KnowledgeGraphSearchCandidate> candidates,
+        IReadOnlyCollection<string>? candidateNodeIds)
+    {
+        if (candidateNodeIds is null)
+        {
+            return candidates;
+        }
+
+        var allowedNodeIds = candidateNodeIds.ToHashSet(StringComparer.Ordinal);
+        return candidates
+            .Where(candidate => allowedNodeIds.Contains(candidate.NodeId))
             .ToArray();
     }
 
@@ -123,6 +177,16 @@ public sealed partial class KnowledgeGraph
     private static IReadOnlyList<KnowledgeGraphRankedSearchMatch> MergeHybridMatches(
         IReadOnlyList<KnowledgeGraphRankedSearchMatch> canonicalMatches,
         IReadOnlyList<KnowledgeGraphRankedSearchMatch> semanticMatches,
+        KnowledgeGraphRankedSearchOptions options)
+    {
+        return options.HybridFusionStrategy == KnowledgeGraphHybridFusionStrategy.ReciprocalRank
+            ? MergeHybridMatchesByReciprocalRank(canonicalMatches, semanticMatches, options)
+            : MergeHybridMatchesCanonicalFirst(canonicalMatches, semanticMatches, options.MaxResults);
+    }
+
+    private static IReadOnlyList<KnowledgeGraphRankedSearchMatch> MergeHybridMatchesCanonicalFirst(
+        IReadOnlyList<KnowledgeGraphRankedSearchMatch> canonicalMatches,
+        IReadOnlyList<KnowledgeGraphRankedSearchMatch> semanticMatches,
         int maxResults)
     {
         var results = new List<KnowledgeGraphRankedSearchMatch>(maxResults);
@@ -160,6 +224,42 @@ public sealed partial class KnowledgeGraph
         return results;
     }
 
+    private static IReadOnlyList<KnowledgeGraphRankedSearchMatch> MergeHybridMatchesByReciprocalRank(
+        IReadOnlyList<KnowledgeGraphRankedSearchMatch> canonicalMatches,
+        IReadOnlyList<KnowledgeGraphRankedSearchMatch> semanticMatches,
+        KnowledgeGraphRankedSearchOptions options)
+    {
+        var accumulators = new Dictionary<string, ReciprocalRankFusionAccumulator>(StringComparer.Ordinal);
+        AddReciprocalRankScores(accumulators, canonicalMatches, options.ReciprocalRankFusionRankOffset, true);
+        AddReciprocalRankScores(accumulators, semanticMatches, options.ReciprocalRankFusionRankOffset, false);
+
+        return accumulators.Values
+            .Select(static accumulator => accumulator.ToMatch())
+            .OrderByDescending(static match => match.Score)
+            .ThenBy(static match => match.Label, StringComparer.OrdinalIgnoreCase)
+            .Take(options.MaxResults)
+            .ToArray();
+    }
+
+    private static void AddReciprocalRankScores(
+        IDictionary<string, ReciprocalRankFusionAccumulator> accumulators,
+        IReadOnlyList<KnowledgeGraphRankedSearchMatch> matches,
+        int rankOffset,
+        bool isCanonical)
+    {
+        for (var index = 0; index < matches.Count; index++)
+        {
+            var match = matches[index];
+            if (!accumulators.TryGetValue(match.NodeId, out var accumulator))
+            {
+                accumulator = new ReciprocalRankFusionAccumulator(match);
+                accumulators.Add(match.NodeId, accumulator);
+            }
+
+            accumulator.Add(match, 1d / (rankOffset + index + 1), isCanonical);
+        }
+    }
+
     private static KnowledgeGraphRankedSearchMatch OverrideCandidateMetadata(
         KnowledgeGraphRankedSearchMatch match,
         KnowledgeGraphSearchCandidate candidate)
@@ -171,7 +271,7 @@ public sealed partial class KnowledgeGraph
         };
     }
 
-    private static IReadOnlyList<KnowledgeGraphSearchCandidate> CreateSearchCandidates(KnowledgeGraphSnapshot snapshot)
+    internal static IReadOnlyList<KnowledgeGraphSearchCandidate> CreateSearchCandidates(KnowledgeGraphSnapshot snapshot)
     {
         var nodesById = snapshot.Nodes.ToDictionary(static node => node.Id, StringComparer.Ordinal);
         var edgesBySubject = snapshot.Edges

@@ -100,6 +100,20 @@ public sealed partial class KnowledgeGraph : IDisposable
         return Task.FromResult(_tokenIndex.Search(query, limit));
     }
 
+    public Task<IReadOnlyList<TokenDistanceSearchResult>> SearchByTokenDistanceAsync(
+        string query,
+        TokenDistanceSearchOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_tokenIndex is null)
+        {
+            throw new InvalidOperationException(TokenDistanceSearchUnavailableMessage);
+        }
+
+        return Task.FromResult(_tokenIndex.Search(query, options));
+    }
+
     public KnowledgeGraphSnapshot ToSnapshot()
     {
         _graphLock.EnterReadLock();

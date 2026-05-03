@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/MarkdownLd.Kb.Benchmarks/MarkdownLd.Kb.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/MarkdownLd.Kb/MarkdownLd.Kb.csproj" />
   </Folder>

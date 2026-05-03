@@ -115,6 +115,13 @@ public sealed class DeterministicSectionMarkdownChunkerTests
         ```
         """;
 
+    private const string CjkTokenMarkdown = "# CJK\n\n\u77E5\u8B58\u5EAB\u5716\u8B5C\n";
+
+    private const string CjkSplitMarkdown = "# CJK Split\n\n\u77E5\u8B58\u5EAB\u5716\u8B5C\n\n\u8CC7\u6599\u6D41\u7A0B\u5716\n";
+
+    private const int ExpectedFiveCjkCharacterTokenEstimate = 7;
+    private const int ExpectedFourCjkCharacterTokenEstimate = 6;
+
     [Test]
     public async Task Chunker_keeps_mermaid_fence_intact_when_blank_lines_exist_inside_block()
     {
@@ -217,6 +224,42 @@ public sealed class DeterministicSectionMarkdownChunkerTests
         listChunk.Markdown.ShouldContain("```mermaid");
         listChunk.Markdown.ShouldContain("A[Chunk] --> B[Entity]");
         document.Chunks.Any(chunk => chunk.Markdown == "After list.").ShouldBeTrue();
+
+        await Task.CompletedTask;
+    }
+
+    [Test]
+    public async Task Chunker_uses_cjk_aware_token_estimation()
+    {
+        var document = Parse(CjkTokenMarkdown);
+
+        var chunk = document.Chunks.Single();
+
+        chunk.EstimatedTokenCount.ShouldBe(ExpectedFiveCjkCharacterTokenEstimate);
+
+        await Task.CompletedTask;
+    }
+
+    [Test]
+    public async Task Chunker_applies_cjk_aware_estimate_to_split_budget()
+    {
+        var document = Parse(CjkSplitMarkdown);
+
+        document.Chunks.Count.ShouldBe(2);
+        document.Chunks.Select(static chunk => chunk.EstimatedTokenCount).ShouldAllBe(
+            tokenCount => tokenCount == ExpectedFiveCjkCharacterTokenEstimate);
+
+        await Task.CompletedTask;
+    }
+
+    [Test]
+    public async Task Chunker_counts_japanese_kana_and_korean_hangul_as_cjk_tokens()
+    {
+        var kana = Parse("# Kana\n\n\u304B\u306A\u30AB\u30CA\n");
+        var hangul = Parse("# Hangul\n\n\uD55C\uAE00\uC9C0\uC2DD\n");
+
+        kana.Chunks.Single().EstimatedTokenCount.ShouldBe(ExpectedFourCjkCharacterTokenEstimate);
+        hangul.Chunks.Single().EstimatedTokenCount.ShouldBe(ExpectedFourCjkCharacterTokenEstimate);
 
         await Task.CompletedTask;
     }

@@ -10,16 +10,19 @@ The upstream reference repository is kept as a read-only submodule at `external/
 
 The core runtime has no localhost, HTTP server, background service, database server, or hosted API dependency. Callers pass files, directories, or in-memory document content into the library, and the library returns in-memory graph/search/query results.
 
-The graph/search model does not require semantic embeddings. The AI boundary in the core pipeline is `Microsoft.Extensions.AI.IChatClient` for entity/assertion extraction. The library also exposes an explicit experimental Tiktoken mode that creates lexical sparse vectors from `Microsoft.ML.Tokenizers` token IDs and builds a local corpus graph. Its default weighting is corpus-fitted subword TF-IDF, with raw term frequency and binary presence kept as experimental baselines. Tiktoken mode also creates section/segment structure, local TF-IDF keyphrase topics, and explicit front matter entity hint nodes, but it is not a semantic embedding model. Capability graph rules add deterministic caller-authored entities and edges for groups, related nodes, and next-step nodes so applications can build workflow/capability graphs without relying on a flat document-topic graph. `KnowledgeGraphBuilder` now materializes three additive semantic layers in one graph: instance/document triples, a SKOS concept layer, and repository-owned ontology declarations over `kb:` terms using `dotNetRdf.Ontology` and `dotNetRdf.Skos`. `KnowledgeGraph` also exposes explicit runtime adapters for graph-store persistence/load, schema-aware SPARQL search, federated schema-aware SPARQL search, RDFS/SKOS/N3 materialized inference, Lucene-backed full-text indexing, dynamic graph access, and Linked Data Fragments materialization through `dotNetRdf.Inferencing`, `dotNetRdf.Query.FullText`, `dotNetRdf.Dynamic`, and `dotNetRdf.Ldf`. Linked Data Fragments transport stays caller-owned: hosts pass an already configured `HttpClient` when they need custom transport behavior, including clients created through `IHttpClientFactory`, but the core library does not depend on `IHttpClientFactory`. RDF serialization remains repository-owned, while filesystem/blob access is delegated to `ManagedCode.Storage` through `IKnowledgeGraphStore`, `StorageKnowledgeGraphStore`, `FileSystemKnowledgeGraphStore`, and `InMemoryKnowledgeGraphStore`. Cross-language retrieval can now use an optional semantic ranked-search adapter over `Microsoft.Extensions.AI.IEmbeddingGenerator<,>` that builds an in-memory semantic index from graph-native labels, descriptions, and related labels. The graph remains canonical; semantic hits are fallback or merge inputs rather than the source of truth. Chat-based fact extraction is chunk-oriented and may optionally reuse caller-selected cache storage, but cache and natural-language query translation remain adapters around the in-memory graph rather than hosted services. Document metadata mapping keeps article-friendly defaults, but it also supports generic front matter-driven RDF prefixes, types, and predicate/value mappings so callers are not locked to a fixed `schema:Article` subtype list.
+The graph/search model does not require semantic embeddings. `MarkdownKnowledgeBank` is the high-level facade over the normal build/search/answer/evaluation flow, while `MarkdownKnowledgePipeline` and `KnowledgeGraph` remain the lower-level contracts for advanced hosts. The AI boundary in the core pipeline is `Microsoft.Extensions.AI.IChatClient` for entity/assertion extraction. The library also exposes an explicit experimental Tiktoken mode that creates lexical sparse vectors from `Microsoft.ML.Tokenizers` token IDs and builds a local corpus graph. Its default weighting is corpus-fitted subword TF-IDF, with raw term frequency and binary presence kept as experimental baselines. Tiktoken mode also creates section/segment structure, local TF-IDF keyphrase topics, and explicit front matter entity hint nodes, but it is not a semantic embedding model. Token-distance search can opt into corpus-word fuzzy query correction before Tiktoken query encoding; it does not compute edit distance over model-specific token IDs. The default Markdig chunker uses a Han, Japanese kana, Korean Hangul, CJK-symbol, and fullwidth-aware token estimate for chunk-budget decisions while keeping complex Markdown block boundaries intact, source-relative links are resolved from the current document path, opt-in chunk overlap carries whole trailing blocks into the next chunk, and `MarkdownChunkEvaluator` gives deterministic chunk-size, answer-coverage, and review-sample feedback for chunking options. Capability graph rules add deterministic caller-authored entities and edges for groups, related nodes, and next-step nodes so applications can build workflow/capability graphs without relying on a flat document-topic graph. `KnowledgeFactMerger` merges sameAs-linked entities even when the shared external target appears as another entity's direct ID, and it preserves multi-source assertion provenance before graph materialization. `KnowledgeGraphBuilder` now materializes three additive semantic layers in one graph: instance/document triples, a SKOS concept layer, and repository-owned ontology declarations over `kb:` terms using `dotNetRdf.Ontology` and `dotNetRdf.Skos`. `KnowledgeGraph` also exposes explicit runtime adapters for graph-store persistence/load, schema-aware SPARQL search, federated schema-aware SPARQL search, RDFS/SKOS/N3 materialized inference, Lucene-backed full-text indexing, dynamic graph access, and Linked Data Fragments materialization through `dotNetRdf.Inferencing`, `dotNetRdf.Query.FullText`, `dotNetRdf.Dynamic`, and `dotNetRdf.Ldf`. Linked Data Fragments transport stays caller-owned: hosts pass an already configured `HttpClient` when they need custom transport behavior, including clients created through `IHttpClientFactory`, but the core library does not depend on `IHttpClientFactory`. RDF serialization remains repository-owned, while filesystem/blob access is delegated to `ManagedCode.Storage` through `IKnowledgeGraphStore`, `StorageKnowledgeGraphStore`, `FileSystemKnowledgeGraphStore`, and `InMemoryKnowledgeGraphStore`. Ranked search can use graph-native exact matching, in-memory BM25 lexical ranking, opt-in bounded fuzzy token matching for BM25 typo tolerance with a bit-vector short-token path and dynamic-programming long-token fallback, or an optional semantic adapter over `Microsoft.Extensions.AI.IEmbeddingGenerator<string, Embedding<float>>`. Graph-only ranked search uses graph-native labels, descriptions, and related labels. Build-result/facade ranked search and cited answering add parsed Markdown body chunks to document candidates so body-only evidence can be retrieved without storing raw body text in RDF. Hybrid ranked search keeps graph-native results first by default and can opt into reciprocal-rank fusion when callers want rank-fused graph and semantic evidence. The graph remains canonical; semantic hits are fallback or merge inputs rather than the source of truth. Chat-based fact extraction, natural-language query translation, and cited knowledge answering are adapters around the in-memory graph and `IChatClient`, not hosted services. Document metadata mapping keeps article-friendly defaults, but it also supports generic front matter-driven RDF prefixes, types, and predicate/value mappings so callers are not locked to a fixed `schema:Article` subtype list. Performance analysis lives in a separate BenchmarkDotNet project that measures fuzzy edit distance, graph build/search, Tiktoken search, and local federated search without adding benchmark dependencies to the production library.
 
 ## System Boundaries
 
 ```mermaid
 flowchart LR
     Author["Markdown author"] --> MarkdownFiles["Markdown files"]
-    MarkdownFiles --> Loader["In-memory document converter and loader"]
+    MarkdownFiles --> Facade["MarkdownKnowledgeBank facade"]
+    Facade --> ChangePlan["Source manifest change planner"]
+    Facade --> Loader["In-memory document converter and loader"]
     Loader --> Parser["Markdown parser"]
     Parser --> Chunker["Pluggable markdown chunker"]
+    Chunker --> ChunkEval["Markdown chunk evaluator"]
     Parser --> Router["Extraction mode router"]
     Parser --> Rules["Capability graph rules"]
     Parser --> Metadata["Document RDF front matter mapper"]
@@ -35,12 +38,15 @@ flowchart LR
     TokenExtractor --> Builder
     NoExtractor --> Builder
     Builder --> Graph["In-memory knowledge graph"]
-    Graph --> Sparql["In-memory SPARQL executor API"]
+    Graph --> BuildFacade["MarkdownKnowledgeBankBuild"]
+    Parser --> Links["Source-relative link resolver"]
+    BuildFacade --> Sparql["In-memory SPARQL executor API"]
     Graph --> Federated["Explicit federated SPARQL adapter"]
     Graph --> Contract["Graph contract and schema introspection API"]
     Graph --> Search["Schema-aware SPARQL search API"]
     Graph --> LegacySearch["Compatibility graph search API"]
-    Graph --> Ranked["Graph / semantic / hybrid ranked search API"]
+    BuildFacade --> Ranked["Document-aware graph / BM25 / semantic / hybrid ranked search API"]
+    BuildFacade --> Answer["Cited knowledge answer adapter"]
     Graph --> Focused["Focused graph search API"]
     Graph --> Shacl["SHACL validation API"]
     Graph --> Persistence["Graph store persistence / load API"]
@@ -54,9 +60,11 @@ flowchart LR
     Federated --> RemoteSparql["Allowlisted remote SPARQL endpoints"]
     LdfSource["Optional Linked Data Fragments source"] --> Ldf["LDF materialization adapter"]
     Ldf --> Graph
+    Documents["Parsed Markdown chunks"] --> Ranked
     Embedder["Optional IEmbeddingGenerator semantic index"] --> Ranked
     IChatClient["Microsoft.Extensions.AI IChatClient"] --> ChatExtractor
     IChatClient --> NlToSparql
+    IChatClient --> Answer
     Tokenizer["Microsoft.ML.Tokenizers Tiktoken"] --> TokenExtractor
     AgentFramework["Future Microsoft Agent Framework orchestration"] -. "wraps IChatClient" .-> IChatClient
 ```
@@ -66,6 +74,7 @@ flowchart LR
 ```mermaid
 sequenceDiagram
     participant Caller
+    participant Bank as MarkdownKnowledgeBank
     participant Pipeline as MarkdownKnowledgePipeline
     participant Parser as MarkdownDocumentParser
     participant Chunker as IMarkdownChunker
@@ -85,8 +94,14 @@ sequenceDiagram
     participant Inference as Materialized inference adapter
     participant FullText as Full-text adapter
     participant Embedder as Optional IEmbeddingGenerator
+    participant Answer as Cited answer adapter
 
-    Caller->>Pipeline: BuildAsync(documents, options)
+    Caller->>Bank: PlanChanges(documents, previous manifest)
+    Bank-->>Caller: Changed, unchanged, and removed paths
+    Caller->>Bank: EvaluateChunks(markdown, expectations)
+    Bank-->>Caller: Chunk size, coverage, and quality samples
+    Caller->>Bank: BuildAsync(documents, options)
+    Bank->>Pipeline: BuildAsync(documents, options)
     Pipeline->>Parser: Parse Markdown and front matter
     Parser-->>Pipeline: Parsed document and sections
     Pipeline->>Chunker: Build deterministic chunks
@@ -114,17 +129,27 @@ sequenceDiagram
     Pipeline->>Graph: Add facts as RDF triples
     Graph->>Graph: Add ontology declarations and SKOS concepts
     Graph-->>Pipeline: In-memory KnowledgeGraph
-    Pipeline-->>Caller: MarkdownKnowledgeBuildResult
+    Pipeline-->>Bank: MarkdownKnowledgeBuildResult
+    Bank-->>Caller: MarkdownKnowledgeBankBuild
     Caller->>Persistence: SaveToStoreAsync / SaveToFileAsync
     Persistence-->>Caller: File / blob / memory-backed KnowledgeGraph
     Caller->>Inference: MaterializeInferenceAsync
     Inference-->>Caller: Inferred KnowledgeGraph
     Caller->>FullText: BuildFullTextIndexAsync
     FullText-->>Caller: Full-text matches
+    Caller->>Bank: BuildIncrementalAsync(documents, manifest, previous graph)
+    Bank->>Pipeline: BuildIncrementalAsync(documents, manifest, previous graph)
+    Pipeline-->>Bank: Build result, manifest, diff
+    Bank-->>Caller: MarkdownKnowledgeBankIncrementalBuild
     Caller->>BuiltGraph: BuildSemanticIndexAsync(embedder)
-    BuiltGraph->>Embedder: Generate graph-node embeddings
+    BuiltGraph->>Embedder: Generate document-aware graph-node embeddings
     Embedder-->>BuiltGraph: Semantic index
-    Caller->>BuiltGraph: SearchRankedAsync(query, Graph | Semantic | Hybrid)
+    Caller->>BuiltGraph: SearchRankedAsync(query, Graph | BM25 | Semantic | Hybrid)
+    Caller->>Answer: AnswerAsync(build result, question, optional history)
+    Answer->>BuiltGraph: SearchRankedAsync(search query)
+    Answer->>Chat: Optional rewrite and cited answer prompt
+    Chat-->>Answer: Grounded answer text
+    Answer-->>Caller: Answer, search query, citations
     Caller->>BuiltGraph: DescribeSchema / ValidateSchemaSearchProfile
     BuiltGraph-->>Caller: Graph contract diagnostics
     Caller->>SchemaSearch: SearchBySchemaAsync(query, profile)
@@ -161,12 +186,13 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     subgraph Core["src/MarkdownLd.Kb"]
+        Facade["MarkdownKnowledgeBank*: high-level facade"]
         Documents["Documents/*: models, parsing, chunking"]
         Extraction["Extraction/*: chat contracts, cache, merge"]
         Pipeline["Pipeline/*: orchestration and pipeline-facing models"]
         Graph["Graph/*: build rules, metadata mapping, runtime graph APIs, storage adapters"]
         Tokens["Tokenization/*: local token graph extraction"]
-        Query["Query/*: search, SPARQL, NL-to-SPARQL"]
+        Query["Query/*: search, SPARQL, NL-to-SPARQL, cited answering"]
         Rdf["Rdf/*: low-level RDF helpers and serialization"]
     end
 
@@ -176,7 +202,17 @@ flowchart TB
         Coverage["Coverage gate"]
     end
 
+    subgraph Benchmarks["benchmarks/MarkdownLd.Kb.Benchmarks"]
+        BenchRunner["BenchmarkDotNet runner"]
+        BenchCorpus["Generated Markdown corpora"]
+        BenchReports["artifacts/benchmarks reports"]
+    end
+
     Fixtures --> FlowTests
+    FlowTests --> Facade
+    Facade --> Pipeline
+    Facade --> Query
+    Facade --> Documents
     FlowTests --> Documents
     FlowTests --> Tokens
     FlowTests --> Extraction
@@ -184,12 +220,19 @@ flowchart TB
     FlowTests --> Graph
     FlowTests --> Query
     FlowTests --> Rdf
+    BenchCorpus --> BenchRunner
+    BenchRunner --> Facade
+    BenchRunner --> Pipeline
+    BenchRunner --> Graph
+    BenchRunner --> Tokens
+    BenchRunner --> BenchReports
 ```
 
 ## Folder Layout
 
 The production source tree now follows feature-oriented slices instead of a mostly flat technical grouping:
 
+- `MarkdownKnowledgeBank*` for the high-level facade and build-session wrappers
 - `Documents/Models`, `Documents/Parsing`, `Documents/Chunking`
 - `Extraction/Chat`, `Extraction/Cache`, `Extraction/Processing`
 - `Pipeline/` for orchestration-only files
@@ -197,6 +240,7 @@ The production source tree now follows feature-oriented slices instead of a most
 - `Tokenization/`
 - `Query/Search`, `Query/Sparql`, `Query/NaturalLanguage`
 - `Rdf/` for the lower-level RDF helper surface
+- `benchmarks/MarkdownLd.Kb.Benchmarks` for BenchmarkDotNet performance runs and optional profiler traces
 
 ## Parsing, Chunking, And Extraction Boundaries
 
@@ -208,12 +252,14 @@ flowchart LR
     Parser --> Parsed["Parsed document"]
     Parsed --> Chunker["IMarkdownChunker"]
     Chunker --> Chunks["MarkdownChunk[]"]
+    Chunks --> Evaluation["MarkdownChunkEvaluator"]
     Chunks --> Extractor["Chunk-based fact extractor"]
     Parsed --> Builder["KnowledgeGraphBuilder"]
     Extractor --> Builder
+    Evaluation --> Metrics["Size, coverage, quality samples"]
 ```
 
-The default chunker is deterministic and section-aware. Alternative chunkers may change chunk shape or token budgets, but they must preserve stable ordering and deterministic chunk identifiers for the same input and options.
+The default chunker is deterministic and section-aware. Alternative chunkers may change chunk shape or token budgets, but they must preserve stable ordering and deterministic chunk identifiers for the same input and options. `ChunkOverlapTokenTarget` is opt-in and carries whole trailing Markdig blocks into the next chunk without splitting code fences, tables, HTML blocks, or nested list blocks. Markdown links, image links, and same-document fragment links resolve relative targets from the current source path before base URI composition, so nested documents keep stable document/image references.
 
 ## Document Metadata Mapping
 
@@ -246,7 +292,7 @@ flowchart LR
     Chat --> Merge
 ```
 
-Natural-language query support is also an adapter. The canonical graph remains RDF/SPARQL-first, and NL-to-SPARQL translation can be disabled without changing graph construction or search APIs.
+Natural-language query support is also an adapter. The canonical graph remains RDF/SPARQL-first, and NL-to-SPARQL translation can be disabled without changing graph construction or search APIs. Cited knowledge answering follows the same boundary: it uses ranked graph retrieval, resolves source Markdown chunks from the build result, and calls `IChatClient` for the final answer without owning provider SDKs, session storage, web endpoints, or background jobs.
 
 ## Schema-Aware Search Boundary
 
@@ -278,9 +324,18 @@ Production graph handoff is handled by library contracts, not by a hosted servic
 
 ```mermaid
 flowchart LR
-    Sources["Markdown sources"] --> Build["MarkdownKnowledgePipeline"]
-    Ai["Optional IChatClient adapter"] --> Build
+    Sources["Markdown sources"] --> Bank["MarkdownKnowledgeBank"]
+    Ai["Optional IChatClient adapter"] --> Bank
+    Embedder["Optional IEmbeddingGenerator adapter"] --> Bank
+    Bank --> Plan["PlanChanges"]
+    Bank --> Eval["EvaluateChunks"]
+    Bank --> Build["MarkdownKnowledgePipeline"]
     Build --> Graph["KnowledgeGraph"]
+    Graph --> BankBuild["MarkdownKnowledgeBankBuild"]
+    Build --> Documents["Parsed Markdown chunks"]
+    Documents --> Ranked["Document-aware SearchAsync"]
+    BankBuild --> Ranked
+    BankBuild --> Answer["AnswerAsync with citations"]
     External["External JSON-LD"] --> Load["LoadJsonLd"]
     Load --> Graph
     Graph --> Contract["KnowledgeGraphContract"]
@@ -293,7 +348,7 @@ flowchart LR
     Build --> Manifest["Incremental source manifest"]
 ```
 
-`SearchBySchemaAsync` now returns both generated SPARQL and a structured `Explain` object. Match evidence can include source context from `prov:wasDerivedFrom` triples, which lets callers show the document or preprocessing artifact behind a result. `BuildIncrementalAsync` remains in-memory and deterministic: it returns changed paths, removed paths, a current manifest, the rebuilt graph, and an optional diff against the previous graph.
+`SearchBySchemaAsync` now returns both generated SPARQL and a structured `Explain` object. Match evidence can include source context from `prov:wasDerivedFrom` triples, which lets callers show the document or preprocessing artifact behind a result. `MarkdownKnowledgeBank` exposes `PlanChanges`, `EvaluateChunks`, `BuildAsync`, `BuildIncrementalAsync`, `SearchAsync`, `BuildSemanticIndexAsync`, and `AnswerAsync` as the convenient library-first path. `BuildIncrementalAsync` remains in-memory and deterministic: it returns changed paths, unchanged paths, removed paths, a current manifest, the rebuilt graph, and an optional diff against the previous graph. `KnowledgeGraphSourceManifest.CreateChangeSet` exposes the same fingerprint comparison before a build so host adapters can skip unchanged expensive work without adding a database or background indexer to the core library.
 
 ## Graph Store Boundary
 
@@ -353,8 +408,10 @@ flowchart LR
 
 ## Dependency Direction
 
+- `MarkdownKnowledgeBank` depends on pipeline, query answering, ranked search, chunk evaluation, and optional `Microsoft.Extensions.AI` abstractions; it does not introduce provider SDKs, hosted services, or persistence infrastructure.
 - Parsing depends on Markdig and YamlDotNet.
 - Chunking depends on parsed document models and stays deterministic.
+- Chunk evaluation depends only on parsed chunks and optional expected-answer text; it is not an embedding benchmark.
 - RDF graph building and SPARQL execution depend on dotNetRDF.
 - Schema-aware search depends on repository-owned profiles that compile into dotNetRDF read-only SPARQL execution.
 - Graph contracts and schema introspection depend on the same in-memory dotNetRDF graph and do not add a persistence or indexing dependency.
@@ -367,9 +424,10 @@ flowchart LR
 - SHACL validation depends on `dotNetRdf.Shacl` and runs against the in-memory graph through `VDS.RDF.Shacl.ShapesGraph`.
 - LLM extraction depends on `Microsoft.Extensions.AI.Abstractions` and accepts `IChatClient`.
 - Optional extraction cache depends on small library-owned contracts; file-backed cache adapters may live in the core library as local file-system helpers because they do not introduce hosted infrastructure.
-- Tiktoken extraction depends on `Microsoft.ML.Tokenizers` and the O200k data package. It uses tokenizer IDs and Unicode word n-gram keyphrase candidates only, and does not add an embedding provider. The default vector weighting is subword TF-IDF fitted over the current build corpus.
+- Tiktoken extraction depends on `Microsoft.ML.Tokenizers` and the O200k data package. It uses tokenizer IDs and Unicode word n-gram keyphrase candidates only, and does not add an embedding provider. The default vector weighting is subword TF-IDF fitted over the current build corpus. Optional fuzzy query correction is corpus-word based before tokenization, not token-ID edit distance.
 - Optional semantic ranked search depends only on `Microsoft.Extensions.AI.IEmbeddingGenerator<string, Embedding<float>>` and keeps the concrete embedding provider in the host application.
 - Embeddings are not required for the core graph build/query flow.
+- Cited knowledge answering depends on `IChatClient`, ranked graph search, and parsed Markdown documents from `MarkdownKnowledgeBuildResult`; it does not add provider SDKs, hosted APIs, persistent session state, or a vector database.
 - Public API should prefer repository types over raw dependency types when feasible.
 - AI adapters depend on the core extraction port. The core library must not depend on concrete provider packages or agent orchestration packages in the first slice.
 - NL-to-SPARQL translation depends on `IChatClient`, existing SPARQL safety enforcement, and graph schema summaries; it must remain read-only.
@@ -380,11 +438,18 @@ Tests are integration-style by default. They build realistic Markdown fixtures i
 
 Required first-slice scenarios:
 
+- `MarkdownKnowledgeBank` covers the unified caller flow: source-change planning, chunk evaluation, graph build, optional semantic index creation, BM25 ranked search, cited answers, incremental rebuild metadata, and explicit failures when optional AI services are missing.
 - Markdown with front matter and headings builds a queryable document metadata graph without requiring fact extraction.
 - Empty Markdown input produces an empty graph without throwing.
 - Explicit Tiktoken mode builds section/segment/topic/entity-hint nodes plus `schema:hasPart`, `schema:about`, `schema:mentions`, and token-distance `kb:relatedTo` edges without network access.
+- Tiktoken fuzzy query correction proves typo-heavy queries, corpus-side misspellings, and long-vocabulary correction improve over exact token-distance search while remaining opt-in.
 - Capability graph rules build `kb:memberOf`, `kb:relatedTo`, and `kb:nextStep` workflow edges from Markdown front matter or caller options, and focused search returns primary, related, and next-step result groups.
-- Ranked search supports `Graph`, `Semantic`, and `Hybrid` modes. Hybrid mode keeps canonical graph hits first, then appends semantic-only fallback hits when graph-native recall is insufficient.
+- Ranked search supports `Graph`, `Semantic`, and `Hybrid` modes. Hybrid mode keeps canonical graph hits first by default, then appends semantic-only fallback hits when graph-native recall is insufficient. Opt-in reciprocal-rank fusion combines graph and semantic ranks while retaining component scores for diagnostics.
+- Ranked search also supports `Bm25` mode for in-memory lexical ranking without a semantic index or hosted full-text service.
+- Build-result and facade ranked search include parsed Markdown body chunks in document candidate text, so body-only evidence is covered without adding raw body triples to the RDF graph.
+- Cited knowledge answering builds an answer from a real Markdown build result, returns source citations for graph/BM25/semantic/hybrid matches including body-only BM25 matches, intersects source scopes with existing candidate filters, chooses the best Markdown evidence across duplicate document URIs and multi-source entity/assertion provenance edges, requires stronger context overlap before body snippets override graph labels, focuses snippets around deep body evidence, rewrites follow-up queries through the local test `IChatClient`, returns empty citations for no-match context, and fails explicitly on an empty rewritten query.
+- Source-relative Markdown links, image links, and same-document fragment links resolve from the current source path before base URI composition.
+- Opt-in chunk overlap carries whole trailing blocks into the next chunk while default chunking remains non-overlapping.
 - SHACL validation uses default Markdown-LD Knowledge Bank shapes or caller-supplied shapes, and assertion confidence/provenance metadata is represented as RDF statements so validation remains RDF-native.
 - English, Ukrainian, French, and German queries over same-language token graphs produce a higher hit rate than cross-language translated-topic queries.
 - Term frequency, binary presence, and subword TF-IDF token weighting modes are covered by focused and flow tests.
@@ -429,11 +494,14 @@ Coverage requirement: 95%+ line coverage for changed production code.
 - MiniLM: `https://arxiv.org/abs/2002.10957`
 - Language-agnostic BERT Sentence Embedding: `https://arxiv.org/abs/2007.01852`
 - TextRank: `https://aclanthology.org/W04-3252/`
+- Myers bit-vector approximate matching: `https://doi.org/10.1145/316542.316550`
+- Ukkonen bounded approximate matching: `https://doi.org/10.1016/S0019-9958(85)80046-2`
 - RDF/SPARQL dependency decision: `docs/ADR/ADR-0001-rdf-sparql-library.md`
 - LLM extraction dependency decision: `docs/ADR/ADR-0002-llm-extraction-ichatclient.md`
 - Capability graph rules decision: `docs/ADR/ADR-0004-capability-graph-rules.md`
 - Capability graph rules feature: `docs/Features/CapabilityGraphRules.md`
 - Hybrid ranked search feature: `docs/Features/HybridGraphSearch.md`
+- Cited knowledge answering feature: `docs/Features/CitedKnowledgeAnswering.md`
 - SHACL validation feature: `docs/Features/GraphShaclValidation.md`
 - Graph runtime lifecycle feature: `docs/Features/GraphRuntimeLifecycle.md`
 - Federated SPARQL feature: `docs/Features/FederatedSparqlExecution.md`
