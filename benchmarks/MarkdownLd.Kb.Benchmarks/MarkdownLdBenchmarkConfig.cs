@@ -16,12 +16,14 @@ public sealed class MarkdownLdBenchmarkConfig : ManualConfig
     private const string CpuProfileValue = "cpu";
     private const string GcProfileValue = "gc";
     private const string JitProfileValue = "jit";
+    private const string JobLongOption = "--job";
+    private const string JobShortOption = "-j";
 
-    public MarkdownLdBenchmarkConfig()
+    public MarkdownLdBenchmarkConfig(IReadOnlyList<string> args)
     {
         AddLogger(ConsoleLogger.Default);
         AddColumnProvider(DefaultColumnProviders.Instance);
-        AddJob(Job.ShortRun.WithId("ShortRun"));
+        AddDefaultJob(args);
         AddExporter(MarkdownExporter.GitHub);
         AddExporter(CsvExporter.Default);
         AddExporter(JsonExporter.Full);
@@ -29,6 +31,23 @@ public sealed class MarkdownLdBenchmarkConfig : ManualConfig
         AddDiagnoser(ThreadingDiagnoser.Default);
         AddOptionalProfiler();
         ArtifactsPath = Path.Combine(Directory.GetCurrentDirectory(), ArtifactsDirectory);
+    }
+
+    private void AddDefaultJob(IReadOnlyList<string> args)
+    {
+        if (args.Any(IsJobOption))
+        {
+            return;
+        }
+
+        AddJob(Job.ShortRun.WithId("ShortRun"));
+    }
+
+    private static bool IsJobOption(string arg)
+    {
+        return arg.Equals(JobLongOption, StringComparison.OrdinalIgnoreCase)
+            || arg.StartsWith(JobLongOption + "=", StringComparison.OrdinalIgnoreCase)
+            || arg.Equals(JobShortOption, StringComparison.OrdinalIgnoreCase);
     }
 
     private void AddOptionalProfiler()

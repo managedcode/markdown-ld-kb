@@ -2,7 +2,6 @@ using ManagedCode.MarkdownLd.Kb.Query;
 using VDS.RDF;
 using VDS.RDF.Parsing;
 using VDS.RDF.Query;
-using VDS.RDF.Query.Datasets;
 
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
@@ -52,12 +51,11 @@ internal sealed class LocalKnowledgeGraphSparqlQueryClient(
             throw new ReadOnlySparqlQueryException(SelectAskOnlyMessagePrefix + query.QueryType);
         }
 
-        var snapshot = _graph.CreateSnapshot();
-        var processor = new KnowledgeGraphFederatedQueryProcessor(
-            new InMemoryDataset(snapshot),
-            _registry,
-            options => options.QueryExecutionTimeout = _queryExecutionTimeoutMilliseconds);
-        if (processor.ProcessQuery(query) is not SparqlResultSet resultSet)
+        if (_graph.ProcessFederatedLocalQuery(
+                query,
+                _registry,
+                cancellationToken,
+                _queryExecutionTimeoutMilliseconds) is not SparqlResultSet resultSet)
         {
             throw new InvalidOperationException(FederatedLocalResultSetExpectedMessage);
         }

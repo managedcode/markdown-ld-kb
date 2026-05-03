@@ -279,6 +279,30 @@ public sealed partial class KnowledgeGraph : IDisposable
         }
     }
 
+    internal object ProcessFederatedLocalQuery(
+        SparqlQuery query,
+        KnowledgeGraphFederatedLocalServiceRegistry localServices,
+        CancellationToken cancellationToken,
+        int queryExecutionTimeoutMilliseconds)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _graphLock.EnterReadLock();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var dataset = new InMemoryDataset(_graph);
+            var processor = new KnowledgeGraphFederatedQueryProcessor(
+                dataset,
+                localServices,
+                options => options.QueryExecutionTimeout = queryExecutionTimeoutMilliseconds);
+            return processor.ProcessQuery(query);
+        }
+        finally
+        {
+            _graphLock.ExitReadLock();
+        }
+    }
+
     private static SparqlQueryResult ToResult(SparqlResultSet resultSet)
     {
         var variables = resultSet.Variables.Select(variable => variable.ToString()).ToArray();

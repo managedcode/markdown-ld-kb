@@ -6,22 +6,21 @@ internal static class BenchmarkCorpusFactory
 {
     private const string BaseUriText = "https://bench.example/";
     private const string LocalFederatedEndpointText = "https://bench.example/sparql/local";
-    private const string CacheTitlePrefix = "Cache restore runbook";
-    private const string BillingTitlePrefix = "Billing export guide";
-    private const string ReleaseTitlePrefix = "Release evidence checklist";
     private const string CacheQuery = "cache restore manifest evidence";
+    private const string LongQuery = "incident escalation recovery dependency timeline checkpoint";
+    private const string TokenizedQuery = "cache restore manifest token 実行 evidence";
+    private const string FederatedQuery = "federated sparql service binding runbook evidence";
     private const string TypoQuery = "cach restre manifst evidnce";
+    private const string LongTypoQuery = "incidnt escalaton recovry depndency chekpoint";
+    private const string TokenizedTypoQuery = "cach restore manifst tokne 実行 evidnce";
+    private const string FederatedTypoQuery = "federatd sparq servce bindng evidnce";
     private const string NoMatchQuery = "satellite coffee roasting";
     private static readonly Uri BaseUri = new(BaseUriText);
     private static readonly Uri LocalFederatedEndpoint = new(LocalFederatedEndpointText);
 
-    public static MarkdownSourceDocument[] CreateSources(int documentCount)
+    public static MarkdownSourceDocument[] CreateSources(BenchmarkCorpusProfile profile)
     {
-        return Enumerable.Range(0, documentCount)
-            .Select(index => new MarkdownSourceDocument(
-                $"content/bench/doc-{index:D5}.md",
-                CreateMarkdown(index)))
-            .ToArray();
+        return BenchmarkMarkdownCorpus.CreateSources(profile);
     }
 
     public static MarkdownKnowledgeBuildResult BuildNone(
@@ -46,13 +45,13 @@ internal static class BenchmarkCorpusFactory
         return pipeline.BuildAsync(sources).GetAwaiter().GetResult();
     }
 
-    public static string GetQuery(BenchmarkQueryScenario scenario)
+    public static string GetQuery(BenchmarkCorpusProfile profile, BenchmarkQueryScenario scenario)
     {
         return scenario switch
         {
-            BenchmarkQueryScenario.Typo => TypoQuery,
+            BenchmarkQueryScenario.Typo => GetTypoQuery(profile),
             BenchmarkQueryScenario.NoMatch => NoMatchQuery,
-            _ => CacheQuery,
+            _ => GetExactQuery(profile),
         };
     }
 
@@ -95,54 +94,25 @@ internal static class BenchmarkCorpusFactory
         };
     }
 
-    private static string CreateMarkdown(int index)
+    private static string GetExactQuery(BenchmarkCorpusProfile profile)
     {
-        var family = index % 3;
-        var title = CreateTitle(family, index);
-        var topic = CreateTopic(family);
-        var body = CreateBody(family, index);
-        return $$"""
-            ---
-            title: {{title}}
-            summary: {{topic}} summary for benchmark document {{index}}.
-            tags:
-              - benchmark
-              - {{topic}}
-            ---
-            # {{title}}
-
-            {{body}}
-            """;
-    }
-
-    private static string CreateTitle(int family, int index)
-    {
-        return family switch
+        return profile switch
         {
-            1 => $"{BillingTitlePrefix} {index:D5}",
-            2 => $"{ReleaseTitlePrefix} {index:D5}",
-            _ => $"{CacheTitlePrefix} {index:D5}",
+            BenchmarkCorpusProfile.LongDocuments => LongQuery,
+            BenchmarkCorpusProfile.TokenizedMultilingual => TokenizedQuery,
+            BenchmarkCorpusProfile.FederatedRunbooks => FederatedQuery,
+            _ => CacheQuery,
         };
     }
 
-    private static string CreateTopic(int family)
+    private static string GetTypoQuery(BenchmarkCorpusProfile profile)
     {
-        return family switch
+        return profile switch
         {
-            1 => "billing invoice export payment checkpoint",
-            2 => "release gate approval evidence checklist",
-            _ => "cache restore manifest rollback evidence",
-        };
-    }
-
-    private static string CreateBody(int family, int index)
-    {
-        var identifier = $"validationfingerprintcheckpointtoken{index:D5}manifestwindowrollbackevidence";
-        return family switch
-        {
-            1 => $"Billing export verifies invoice payment checkpoint evidence with marker {identifier}.",
-            2 => $"Release evidence checklist confirms approval gates and deployment notes with marker {identifier}.",
-            _ => $"Cache restore validates manifest rollback evidence and runbook recovery with marker {identifier}.",
+            BenchmarkCorpusProfile.LongDocuments => LongTypoQuery,
+            BenchmarkCorpusProfile.TokenizedMultilingual => TokenizedTypoQuery,
+            BenchmarkCorpusProfile.FederatedRunbooks => FederatedTypoQuery,
+            _ => TypoQuery,
         };
     }
 }

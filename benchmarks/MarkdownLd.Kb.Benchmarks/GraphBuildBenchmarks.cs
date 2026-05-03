@@ -8,13 +8,17 @@ public class GraphBuildBenchmarks
 {
     private MarkdownSourceDocument[] _sources = [];
 
-    [Params(25, 250, 1000)]
-    public int DocumentCount { get; set; }
+    [Params(
+        BenchmarkCorpusProfile.ShortDocuments,
+        BenchmarkCorpusProfile.LongDocuments,
+        BenchmarkCorpusProfile.LargeCorpus,
+        BenchmarkCorpusProfile.TokenizedMultilingual)]
+    public BenchmarkCorpusProfile CorpusProfile { get; set; }
 
     [GlobalSetup]
     public void Setup()
     {
-        _sources = BenchmarkCorpusFactory.CreateSources(DocumentCount);
+        _sources = BenchmarkCorpusFactory.CreateSources(CorpusProfile);
     }
 
     [Benchmark]

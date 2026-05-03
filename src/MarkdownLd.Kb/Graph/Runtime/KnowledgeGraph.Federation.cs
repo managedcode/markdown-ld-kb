@@ -1,7 +1,6 @@
 using ManagedCode.MarkdownLd.Kb.Query;
 using VDS.RDF.Parsing;
 using VDS.RDF.Query;
-using VDS.RDF.Query.Datasets;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
@@ -141,14 +140,11 @@ public sealed partial class KnowledgeGraph
             return ProcessQuery(query, cancellationToken, queryExecutionTimeoutMilliseconds);
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        var snapshot = CreateSnapshot();
-        var dataset = new InMemoryDataset(snapshot);
-        var processor = new KnowledgeGraphFederatedQueryProcessor(
-            dataset,
+        return ProcessFederatedLocalQuery(
+            query,
             localServices,
-            options => options.QueryExecutionTimeout = queryExecutionTimeoutMilliseconds);
-        return processor.ProcessQuery(query);
+            cancellationToken,
+            queryExecutionTimeoutMilliseconds);
     }
 
     private sealed record FederatedPreparedQuery(

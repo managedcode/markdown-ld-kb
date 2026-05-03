@@ -7,17 +7,19 @@ Markdown-LD Knowledge Bank keeps correctness tests and performance measurements 
 ```mermaid
 flowchart LR
     Developer["Developer"] --> Runner["BenchmarkDotNet runner"]
-    Runner --> Config["ShortRun config, exporters, diagnosers"]
+    Runner --> Config["jobs, exporters, diagnosers"]
     Config --> Results["artifacts/benchmarks"]
     Config --> Profilers["optional EventPipe profiler"]
-    Runner --> Corpus["deterministic Markdown corpus"]
+    Runner --> Corpus["deterministic Markdown workload profiles"]
     Corpus --> Pipeline["MarkdownKnowledgePipeline"]
     Runner --> Fuzzy["bounded fuzzy distance"]
     Runner --> Graph["ranked graph and BM25 search"]
     Runner --> Tokens["Tiktoken token-distance search"]
     Runner --> Federation["local federated SPARQL binding"]
+    Runner --> Persistence["snapshot, serialization, save, load, export"]
     Pipeline --> Graph
     Pipeline --> Tokens
+    Graph --> Persistence
 ```
 
 The benchmark project is `benchmarks/MarkdownLd.Kb.Benchmarks`. It references the production library, but production and test projects do not reference it.
@@ -27,9 +29,23 @@ The benchmark project is `benchmarks/MarkdownLd.Kb.Benchmarks`. It references th
 | Suite | Measures |
 | --- | --- |
 | `FuzzyEditDistanceBenchmarks` | Bounded bit-vector/banded edit distance against a naive Levenshtein baseline for short typo and long affix-heavy tokens. |
-| `GraphBuildBenchmarks` | Markdown source to in-memory graph build time across generated corpus sizes. |
+| `GraphBuildBenchmarks` | Markdown source to in-memory graph build time across named workload profiles. |
 | `GraphSearchBenchmarks` | Graph-ranked search, BM25, BM25 fuzzy matching, schema search, focused search, and local federated schema search. |
-| `TiktokenSearchBenchmarks` | Exact token-distance search and fuzzy query correction over Tiktoken-built corpus graphs. |
+| `TiktokenSearchBenchmarks` | Exact token-distance search and fuzzy query correction over long-document and multilingual token-heavy graphs. |
+| `GraphPersistenceBenchmarks` | Snapshot creation, Turtle/JSON-LD serialization, Mermaid/DOT export, in-memory store save/load, and file save/load. |
+| `GraphLifecycleSmokeBenchmarks` | One broad build/search/save/load/export lifecycle benchmark for quick sanity checks. |
+
+## Workload Profiles
+
+Benchmark parameters use named workload profiles instead of raw document-count ranges.
+
+| Profile | Shape | Why it exists |
+| --- | --- | --- |
+| `ShortDocuments` | 250 compact runbook-like Markdown documents. | Normal knowledge-base retrieval and persistence pressure. |
+| `LongDocuments` | 80 long recovery playbooks with repeated sections. | Long body and chunk-scan pressure without pretending the main variable is file count. |
+| `LargeCorpus` | 1000 compact documents. | Scale pressure for graph build, snapshot, serialization, save, and load paths. |
+| `TokenizedMultilingual` | 250 token-heavy multilingual/CJK documents. | Tiktoken and fuzzy query-correction behaviour on non-trivial tokenization input. |
+| `FederatedRunbooks` | 250 SPARQL/service/runbook documents. | Local federated schema-search and service-binding query plans. |
 
 ## Commands
 
@@ -39,9 +55,23 @@ dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter 
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphBuildBenchmarks*"
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphSearchBenchmarks*"
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenSearchBenchmarks*"
+dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphPersistenceBenchmarks*"
+dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphLifecycleSmokeBenchmarks*" --job Dry
 ```
 
-`MarkdownLdBenchmarkConfig` writes Markdown, CSV, and full JSON reports to `artifacts/benchmarks/results`. Those files are machine-specific and intentionally ignored by git.
+`MarkdownLdBenchmarkConfig` writes Markdown, CSV, and full JSON reports to `artifacts/benchmarks/results`. Those files are machine-specific and intentionally ignored by git. If the command does not pass a BenchmarkDotNet job option, the config adds one local diagnostic `ShortRun` job. If the command passes `--job`, `--job=...`, or `-j`, the config does not add another job, so `--job Dry` remains one dry job rather than a duplicated dry-plus-short run.
+
+## Measured Metrics
+
+The benchmark configuration is intentionally diagnostic, not just a stopwatch. The default reports collect:
+
+| Metric group | BenchmarkDotNet data | Why it matters |
+| --- | --- | --- |
+| Latency | `Mean`, `Error`, `StdDev`, `Ratio`, `RatioSD`; full JSON also keeps min, quartiles, max, percentiles, and raw measurements | Shows the cost and distribution of each public path under the same deterministic workload. |
+| Allocation and GC | `Allocated`, `Alloc Ratio`, `Gen0`, `Gen1`, `Gen2` | Catches search paths that look acceptable once but become expensive under repeated calls. |
+| Threading and contention | `Completed Work Items`, `Lock Contentions` | Highlights SPARQL and federation paths that schedule work or contend while executing query plans. |
+| Benchmark shape | corpus profile, query scenario, runtime, platform, JIT, job, iteration counts | Keeps runs explainable and comparable without turning local numbers into a cross-machine contract. |
+| Optional profiler traces | EventPipe CPU, GC, or JIT files | Gives the next level of evidence when a benchmark result points at a hot path. |
 
 The PR validation workflow runs `FuzzyEditDistanceBenchmarks` as a mandatory smoke benchmark and uploads `artifacts/benchmarks/results` as the `benchmark-smoke` artifact. The dedicated benchmark workflow runs the full suite manually or on the weekly schedule and uploads the complete `benchmarkdotnet-results` artifact. Broader graph, Tiktoken, and federation runs stay outside mandatory PR validation because they are intentionally heavier and machine-sensitive.
 
@@ -55,19 +85,80 @@ MARKDOWN_LD_KB_BENCHMARK_PROFILE=jit dotnet run --project benchmarks/MarkdownLd.
 
 ## Current Results
 
-On May 3, 2026, the local ShortRun pass completed 83 BenchmarkDotNet cases and wrote Markdown, CSV, and JSON reports to `artifacts/benchmarks/results`.
+On May 3, 2026, local BenchmarkDotNet runs on Apple M2 Pro with .NET 10.0.5 wrote Markdown, CSV, and JSON reports to `artifacts/benchmarks/results`.
 
-| Suite | Cases | Result files |
-| --- | ---: | --- |
-| `FuzzyEditDistanceBenchmarks` | 8 | Markdown, CSV, JSON |
-| `GraphBuildBenchmarks` | 3 | Markdown, CSV, JSON |
-| `GraphSearchBenchmarks` | 54 | Markdown, CSV, JSON |
-| `TiktokenSearchBenchmarks` | 18 | Markdown, CSV, JSON |
+| Suite | Job | Cases | Result files |
+| --- | --- | ---: | --- |
+| `FuzzyEditDistanceBenchmarks` | ShortRun | 8 | Markdown, CSV, JSON |
+| `GraphBuildBenchmarks` | ShortRun | 4 | Markdown, CSV, JSON |
+| `GraphSearchBenchmarks` | ShortRun | 54 | Markdown, CSV, JSON |
+| `TiktokenSearchBenchmarks` | ShortRun | 12 | Markdown, CSV, JSON |
+| `GraphPersistenceBenchmarks` | ShortRun | 39 | Markdown, CSV, JSON |
+| `GraphLifecycleSmokeBenchmarks` | Dry | 1 | Markdown, CSV, JSON |
 
-The graph build suite measured 1.169 ms for 25 generated documents, 9.873 ms for 250 documents, and 70.672 ms for 1000 documents on the local Apple M2 Pro run.
+Graph build now reports named workload profiles:
 
-The graph search suite measured exact-query ranked graph search at 0.111 ms for 25 documents, 1.225 ms for 250 documents, and 8.907 ms for 1000 documents. Exact-query BM25 measured 0.197 ms, 2.251 ms, and 16.187 ms for the same sizes; opt-in BM25 fuzzy measured 0.234 ms, 2.663 ms, and 17.939 ms.
+| Profile | Mean | StdDev | Allocated |
+| --- | ---: | ---: | ---: |
+| `ShortDocuments` | 9.548 ms | 0.0298 ms | 14.70 MB |
+| `LongDocuments` | 7.544 ms | 0.0149 ms | 14.35 MB |
+| `LargeCorpus` | 59.453 ms | 12.7272 ms | 58.08 MB |
+| `TokenizedMultilingual` | 12.433 ms | 0.0508 ms | 17.77 MB |
 
-The Tiktoken search suite measured exact token-distance search at 15.04 us for 25 documents, 61.65 us for 100 documents, and 146.74 us for 250 documents. Fuzzy-corrected typo queries measured 24.99 us, 75.74 us, and 184.64 us for the same sizes.
+Graph search exact-query mean time:
+
+| Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ShortDocuments` | 1.200 ms | 2.018 ms | 2.627 ms | 2.053 ms | 46.034 ms | 49.615 ms |
+| `LongDocuments` | 0.480 ms | 3.577 ms | 3.574 ms | 0.642 ms | 12.819 ms | 14.561 ms |
+| `FederatedRunbooks` | 1.334 ms | 2.723 ms | 2.720 ms | 2.271 ms | 45.981 ms | 55.269 ms |
+
+Graph search exact-query allocated memory per operation:
+
+| Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ShortDocuments` | 2.37 MB | 4.83 MB | 7.22 MB | 3.27 MB | 60.34 MB | 62.33 MB |
+| `LongDocuments` | 1.91 MB | 10.67 MB | 10.67 MB | 1.21 MB | 20.22 MB | 22.21 MB |
+| `FederatedRunbooks` | 2.54 MB | 6.80 MB | 6.80 MB | 3.48 MB | 60.75 MB | 62.61 MB |
+
+The `ShortDocuments` exact-query diagnostic slice shows the current hot paths:
+
+| Method | Mean | Allocated | Alloc ratio | Gen0 | Gen1 | Gen2 | Work items | Lock contentions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Ranked graph | 1.200 ms | 2.37 MB | 1.00x | 296.8750 | 107.4219 | 0 | 0 | 0 |
+| BM25 | 2.018 ms | 4.83 MB | 2.04x | 601.5625 | 210.9375 | 0 | 0 | 0 |
+| BM25 fuzzy | 2.627 ms | 7.22 MB | 3.04x | 902.3438 | 230.4688 | 0 | 0 | 0 |
+| Focused | 2.053 ms | 3.27 MB | 1.38x | 406.2500 | 179.6875 | 0 | 0 | 0 |
+| Schema SPARQL | 46.034 ms | 60.34 MB | 25.44x | 8500.0000 | 1833.3333 | 500.0000 | 551 | 325 |
+| Local federated | 49.615 ms | 62.33 MB | 26.27x | 8666.6667 | 2166.6667 | 500.0000 | 552 | 315.1667 |
+
+Allocation, GC, work-item, and lock-contention columns come directly from BenchmarkDotNet diagnosers. Treat ratios and relative pressure inside the same run as the useful signal; ShortRun is a fast diagnostic pass, not a release-grade SLA measurement.
+
+Persistence and export on the `LargeCorpus` profile:
+
+| Method | Mean | StdDev | Allocated |
+| --- | ---: | ---: | ---: |
+| `CreateSnapshot` | 4.527 ms | 0.008 ms | 5.31 MB |
+| `SerializeTurtle` | 9.203 ms | 0.088 ms | 18.07 MB |
+| `SerializeJsonLd` | 13.157 ms | 0.086 ms | 20.31 MB |
+| `ExportMermaidFlowchart` | 5.850 ms | 0.006 ms | 7.15 MB |
+| `ExportDotGraph` | 6.351 ms | 0.066 ms | 7.55 MB |
+| `SaveTurtleToFile` | 29.853 ms | 0.122 ms | 34.74 MB |
+| `SaveJsonLdToFile` | 38.144 ms | 1.436 ms | 37.02 MB |
+| `LoadTurtleFromFile` | 35.983 ms | 0.373 ms | 28.10 MB |
+| `LoadJsonLdFromFile` | 99.980 ms | 2.262 ms | 75.32 MB |
+
+Tiktoken token-distance search over the semantic profiles:
+
+| Profile | Query | Exact | Fuzzy-corrected | Exact allocated | Fuzzy allocated |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `LongDocuments` | Exact | 955.1 us | 952.7 us | 2.38 MB | 2.38 MB |
+| `LongDocuments` | Typo | 1.112 ms | 1.291 ms | 2.78 MB | 3.73 MB |
+| `LongDocuments` | NoMatch | 891.0 us | 902.5 us | 2.25 MB | 2.27 MB |
+| `TokenizedMultilingual` | Exact | 680.8 us | 690.5 us | 1.81 MB | 1.81 MB |
+| `TokenizedMultilingual` | Typo | 811.3 us | 861.2 us | 1.81 MB | 1.82 MB |
+| `TokenizedMultilingual` | NoMatch | 634.1 us | 634.7 us | 1.81 MB | 1.82 MB |
+
+Interpretation: ranked graph, BM25, BM25 fuzzy, and focused search are the low-latency retrieval paths. BM25 fuzzy deliberately spends more time and allocation on typo-heavy queries and should stay opt-in. Schema-aware SPARQL and local federation are explainable RDF query paths, but dotNetRDF query-plan execution keeps them materially heavier for repeated low-latency calls. JSON-LD load is the highest persistence cost in the current local run; Turtle load and snapshot/serialization are cheaper. Use ranked graph or BM25 search when the caller needs low-latency retrieval, and use schema/federation when caller-visible evidence and graph-shape constraints matter more than raw latency.
 
 The fuzzy edit-distance suite measured the bounded bit-vector/banded path faster than the naive Levenshtein baseline in every measured scenario, including 363.53x faster for the long-insertion case and 127.92x faster for the long no-match case.

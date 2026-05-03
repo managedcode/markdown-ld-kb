@@ -8,6 +8,6 @@ internal static class Program
     {
         BenchmarkSwitcher
             .FromAssembly(typeof(Program).Assembly)
-            .Run(args, new MarkdownLdBenchmarkConfig());
+            .Run(args, new MarkdownLdBenchmarkConfig(args));
     }
 }

@@ -14,8 +14,11 @@ public class GraphSearchBenchmarks
     private FederatedSparqlExecutionOptions _federatedOptions = null!;
     private string _query = string.Empty;
 
-    [Params(25, 250, 1000)]
-    public int DocumentCount { get; set; }
+    [Params(
+        BenchmarkCorpusProfile.ShortDocuments,
+        BenchmarkCorpusProfile.LongDocuments,
+        BenchmarkCorpusProfile.FederatedRunbooks)]
+    public BenchmarkCorpusProfile CorpusProfile { get; set; }
 
     [Params(BenchmarkQueryScenario.Exact, BenchmarkQueryScenario.Typo, BenchmarkQueryScenario.NoMatch)]
     public BenchmarkQueryScenario QueryScenario { get; set; }
@@ -23,9 +26,9 @@ public class GraphSearchBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var sources = BenchmarkCorpusFactory.CreateSources(DocumentCount);
+        var sources = BenchmarkCorpusFactory.CreateSources(CorpusProfile);
         _build = BenchmarkCorpusFactory.BuildNone(sources);
-        _query = BenchmarkCorpusFactory.GetQuery(QueryScenario);
+        _query = BenchmarkCorpusFactory.GetQuery(CorpusProfile, QueryScenario);
         _graphOptions = BenchmarkCorpusFactory.CreateRankedOptions(KnowledgeGraphSearchMode.Graph);
         _bm25Options = BenchmarkCorpusFactory.CreateRankedOptions(KnowledgeGraphSearchMode.Bm25);
         _bm25FuzzyOptions = BenchmarkCorpusFactory.CreateRankedOptions(KnowledgeGraphSearchMode.Bm25, fuzzy: true);

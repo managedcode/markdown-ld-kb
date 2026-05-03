@@ -11,8 +11,10 @@ public class TiktokenSearchBenchmarks
     private TokenDistanceSearchOptions _fuzzyOptions = null!;
     private string _query = string.Empty;
 
-    [Params(25, 100, 250)]
-    public int DocumentCount { get; set; }
+    [Params(
+        BenchmarkCorpusProfile.TokenizedMultilingual,
+        BenchmarkCorpusProfile.LongDocuments)]
+    public BenchmarkCorpusProfile CorpusProfile { get; set; }
 
     [Params(BenchmarkQueryScenario.Exact, BenchmarkQueryScenario.Typo, BenchmarkQueryScenario.NoMatch)]
     public BenchmarkQueryScenario QueryScenario { get; set; }
@@ -20,9 +22,9 @@ public class TiktokenSearchBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        var sources = BenchmarkCorpusFactory.CreateSources(DocumentCount);
+        var sources = BenchmarkCorpusFactory.CreateSources(CorpusProfile);
         _build = BenchmarkCorpusFactory.BuildTiktoken(sources);
-        _query = BenchmarkCorpusFactory.GetQuery(QueryScenario);
+        _query = BenchmarkCorpusFactory.GetQuery(CorpusProfile, QueryScenario);
         _exactOptions = BenchmarkCorpusFactory.CreateTokenDistanceOptions(fuzzy: false);
         _fuzzyOptions = BenchmarkCorpusFactory.CreateTokenDistanceOptions(fuzzy: true);
     }
