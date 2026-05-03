@@ -58,7 +58,6 @@ public sealed partial class KnowledgeGraph
         var filteredCandidates = FilterSearchCandidates(
             candidates,
             effectiveOptions.CandidateNodeIds);
-        var candidatesById = filteredCandidates.ToDictionary(static candidate => candidate.NodeId, StringComparer.Ordinal);
         var canonicalMatches = effectiveOptions.Mode is KnowledgeGraphSearchMode.Graph or KnowledgeGraphSearchMode.Hybrid
             ? SearchCanonical(filteredCandidates, query, effectiveOptions.MaxResults)
             : [];
@@ -77,6 +76,7 @@ public sealed partial class KnowledgeGraph
             throw new InvalidOperationException(SemanticSearchRequiresIndexMessage);
         }
 
+        var candidatesById = filteredCandidates.ToDictionary(static candidate => candidate.NodeId, StringComparer.Ordinal);
         var semanticMatches = (await semanticIndex
                 .SearchAsync(
                     query,
@@ -99,13 +99,19 @@ public sealed partial class KnowledgeGraph
         int limit)
     {
         var normalizedQuery = query.Trim();
-        return candidates
-            .Select(candidate => CreateCanonicalMatch(candidate, normalizedQuery))
-            .Where(match => match.Score > ZeroConfidence)
-            .OrderByDescending(static match => match.Score)
-            .ThenBy(static match => match.Label, StringComparer.OrdinalIgnoreCase)
-            .Take(limit)
-            .ToArray();
+        var matches = new List<KnowledgeGraphRankedSearchMatch>(Math.Min(candidates.Count, limit));
+        foreach (var candidate in candidates)
+        {
+            var match = CreateCanonicalMatch(candidate, normalizedQuery);
+            if (match.Score <= ZeroConfidence)
+            {
+                continue;
+            }
+
+            KnowledgeGraphBm25SearchResults.AddBoundedMatch(matches, match, limit);
+        }
+
+        return KnowledgeGraphBm25SearchResults.ToArray(matches);
     }
 
     private static void ValidateCandidateNodeIds(IReadOnlyCollection<string>? candidateNodeIds)

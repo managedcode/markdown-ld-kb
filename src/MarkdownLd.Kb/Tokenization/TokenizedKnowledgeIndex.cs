@@ -76,43 +76,21 @@ public sealed class TokenizedKnowledgeIndex
                 continue;
             }
 
-            foreach (var correction in FindCorrections(queryTerm, fuzzyOptions, options.MaxFuzzyCorrectionsPerToken))
-            {
-                corrections.Add(correction);
-            }
+            AddCorrections(corrections, queryTerm, fuzzyOptions, options.MaxFuzzyCorrectionsPerToken);
         }
 
         return corrections.ToArray();
     }
 
-    private string[] FindCorrections(
+    private void AddCorrections(
+        HashSet<string> corrections,
         string queryTerm,
         KnowledgeGraphFuzzyTokenMatchingOptions fuzzyOptions,
         int maxCorrections)
     {
         var candidates = new List<FuzzyCorrectionCandidate>(maxCorrections);
-        foreach (var corpusTerm in EnumerateLengthCompatibleTerms(queryTerm.Length, fuzzyOptions.MaxEditDistance))
-        {
-            if (KnowledgeGraphFuzzyTokenMatcher.TryComputeSimilarity(
-                    queryTerm,
-                    corpusTerm.Value,
-                    fuzzyOptions,
-                    out var similarity))
-            {
-                TokenizedKnowledgeSearchRanking.AddCorrectionCandidate(
-                    candidates,
-                    new FuzzyCorrectionCandidate(corpusTerm, similarity),
-                    maxCorrections);
-            }
-        }
-
-        return TokenizedKnowledgeSearchRanking.CreateCorrectionValues(candidates);
-    }
-
-    private IEnumerable<FuzzyCorpusTerm> EnumerateLengthCompatibleTerms(int queryTermLength, int maxEditDistance)
-    {
-        var minimumLength = Math.Max(0, queryTermLength - maxEditDistance);
-        var maximumLength = queryTermLength + maxEditDistance;
+        var minimumLength = Math.Max(0, queryTerm.Length - fuzzyOptions.MaxEditDistance);
+        var maximumLength = queryTerm.Length + fuzzyOptions.MaxEditDistance;
         for (var length = minimumLength; length <= maximumLength; length++)
         {
             if (!_corpusTermsByLength.TryGetValue(length, out var terms))
@@ -120,10 +98,27 @@ public sealed class TokenizedKnowledgeIndex
                 continue;
             }
 
-            foreach (var term in terms)
+            foreach (var corpusTerm in terms)
             {
-                yield return term;
+                if (!KnowledgeGraphFuzzyTokenMatcher.TryComputeSimilarity(
+                        queryTerm,
+                        corpusTerm.Value,
+                        fuzzyOptions,
+                        out var similarity))
+                {
+                    continue;
+                }
+
+                TokenizedKnowledgeSearchRanking.AddCorrectionCandidate(
+                    candidates,
+                    new FuzzyCorrectionCandidate(corpusTerm, similarity),
+                    maxCorrections);
             }
+        }
+
+        foreach (var candidate in candidates)
+        {
+            corrections.Add(candidate.Term.Value);
         }
     }
 

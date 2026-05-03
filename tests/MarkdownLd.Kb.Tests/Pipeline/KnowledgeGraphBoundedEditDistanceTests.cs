@@ -31,4 +31,16 @@ public sealed class KnowledgeGraphBoundedEditDistanceTests
         rejected.ShouldBe(KnowledgeGraphBoundedEditDistance.NoMatchDistance);
         accepted.ShouldBe(2);
     }
+
+    [Test]
+    public void Bounded_distance_handles_long_residual_tokens_with_small_banded_rows()
+    {
+        var middle = new string('m', 70);
+        var left = "A" + middle + "Z";
+        var right = "B" + middle + "Y";
+
+        var distance = KnowledgeGraphBoundedEditDistance.Compute(left, right, maxDistance: 2);
+
+        distance.ShouldBe(2);
+    }
 }

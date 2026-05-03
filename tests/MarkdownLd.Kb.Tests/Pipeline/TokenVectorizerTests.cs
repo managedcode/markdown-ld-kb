@@ -89,6 +89,20 @@ public sealed class TokenVectorizerTests
         query.EuclideanDistanceTo(matching).ShouldBeLessThan(query.EuclideanDistanceTo(distractor));
     }
 
+    [Test]
+    public void Euclidean_distance_handles_empty_sparse_vectors_after_dot_product_shortcut()
+    {
+        var vectorSpace = TokenVectorSpace.Fit(
+            Corpus([], [TopicToken]),
+            TokenVectorWeighting.TermFrequency);
+        var empty = vectorSpace.CreateVector([]);
+        var topic = vectorSpace.CreateVector([TopicToken]);
+
+        empty.EuclideanDistanceTo(empty).ShouldBe(0, Tolerance);
+        empty.EuclideanDistanceTo(topic).ShouldBe(1, Tolerance);
+        topic.EuclideanDistanceTo(empty).ShouldBe(1, Tolerance);
+    }
+
     private static IReadOnlyList<IReadOnlyList<int>> Corpus(params int[][] documents)
     {
         return documents.Select(static document => (IReadOnlyList<int>)document).ToArray();

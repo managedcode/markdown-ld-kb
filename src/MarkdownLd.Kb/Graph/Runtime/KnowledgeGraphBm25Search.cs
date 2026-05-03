@@ -4,11 +4,6 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal static class KnowledgeGraphBm25Search
 {
-    private const double K1 = 1.2d;
-    private const double B = 0.75d;
-    private const double Half = 0.5d;
-    private const double IdfOffset = 1d;
-
     public static IReadOnlyList<KnowledgeGraphRankedSearchMatch> Search(
         IReadOnlyList<KnowledgeGraphSearchCandidate> candidates,
         string query,
@@ -20,16 +15,18 @@ internal static class KnowledgeGraphBm25Search
             return [];
         }
 
-        var documents = CreateDocuments(candidates, out var averageDocumentLength);
         var fuzzyOptions = KnowledgeGraphFuzzyTokenMatchingOptions.FromRankedSearch(options);
-        var documentFrequency = CreateDocumentFrequency(documents, queryTerms, fuzzyOptions);
-        return CreateMatches(
-            documents,
-            queryTerms,
-            documentFrequency,
-            averageDocumentLength,
-            options.MaxResults,
-            fuzzyOptions);
+        if (!fuzzyOptions.Enabled)
+        {
+            return KnowledgeGraphExactBm25Search.Search(
+                candidates,
+                queryTerms,
+                options.MaxResults);
+        }
+
+        var documents = CreateDocuments(candidates, out var averageDocumentLength);
+        using var statistics = CreateTermStatistics(documents, queryTerms, fuzzyOptions);
+        return CreateMatches(documents, queryTerms, statistics, averageDocumentLength, options.MaxResults);
     }
 
     private static Bm25Document[] CreateDocuments(
@@ -55,44 +52,47 @@ internal static class KnowledgeGraphBm25Search
         return new Bm25Document(candidate, frequencies, length);
     }
 
-    private static Dictionary<string, int> CreateDocumentFrequency(
+    private static KnowledgeGraphBm25TermStatistics CreateTermStatistics(
         IReadOnlyList<Bm25Document> documents,
         IReadOnlyList<string> queryTerms,
         KnowledgeGraphFuzzyTokenMatchingOptions fuzzyOptions)
     {
-        var frequency = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var term in queryTerms)
+        var statistics = KnowledgeGraphBm25TermStatistics.Rent(documents.Count, queryTerms.Count);
+        for (var termIndex = 0; termIndex < queryTerms.Count; termIndex++)
         {
+            var term = queryTerms[termIndex];
             var matchingDocuments = 0;
-            foreach (var document in documents)
+            for (var documentIndex = 0; documentIndex < documents.Count; documentIndex++)
             {
-                matchingDocuments += TryFindTermFrequency(document, term, fuzzyOptions, out _) ? 1 : 0;
+                var matched = TryFindTermFrequency(documents[documentIndex], term, fuzzyOptions, out var frequency);
+                statistics.SetTermFrequency(documentIndex, termIndex, matched ? frequency : ZeroConfidence);
+                matchingDocuments += matched ? 1 : 0;
             }
 
-            frequency[term] = matchingDocuments;
+            statistics.SetDocumentFrequency(termIndex, matchingDocuments);
         }
 
-        return frequency;
+        return statistics;
     }
 
     private static KnowledgeGraphRankedSearchMatch[] CreateMatches(
         IReadOnlyList<Bm25Document> documents,
         IReadOnlyList<string> queryTerms,
-        IReadOnlyDictionary<string, int> documentFrequency,
+        KnowledgeGraphBm25TermStatistics statistics,
         double averageDocumentLength,
-        int maxResults,
-        KnowledgeGraphFuzzyTokenMatchingOptions fuzzyOptions)
+        int maxResults)
     {
         var matches = new List<KnowledgeGraphRankedSearchMatch>(Math.Min(documents.Count, maxResults));
-        foreach (var document in documents)
+        for (var documentIndex = 0; documentIndex < documents.Count; documentIndex++)
         {
+            var document = documents[documentIndex];
             var score = ScoreDocument(
                 document,
-                queryTerms,
-                documentFrequency,
+                documentIndex,
+                queryTerms.Count,
+                statistics,
                 documents.Count,
-                averageDocumentLength,
-                fuzzyOptions);
+                averageDocumentLength);
             if (score <= ZeroConfidence)
             {
                 continue;
@@ -114,48 +114,24 @@ internal static class KnowledgeGraphBm25Search
 
     private static double ScoreDocument(
         Bm25Document document,
-        IReadOnlyList<string> queryTerms,
-        IReadOnlyDictionary<string, int> documentFrequency,
+        int documentIndex,
+        int termCount,
+        KnowledgeGraphBm25TermStatistics statistics,
         int documentCount,
-        double averageDocumentLength,
-        KnowledgeGraphFuzzyTokenMatchingOptions fuzzyOptions)
+        double averageDocumentLength)
     {
         var score = ZeroConfidence;
-        foreach (var term in queryTerms)
+        for (var termIndex = 0; termIndex < termCount; termIndex++)
         {
-            score += ScoreTerm(
-                document,
-                term,
-                documentFrequency.GetValueOrDefault(term),
+            score += KnowledgeGraphBm25Scoring.ScoreTerm(
+                document.Length,
+                statistics.GetTermFrequency(documentIndex, termIndex),
+                statistics.GetDocumentFrequency(termIndex),
                 documentCount,
-                averageDocumentLength,
-                fuzzyOptions);
+                averageDocumentLength);
         }
 
         return score;
-    }
-
-    private static double ScoreTerm(
-        Bm25Document document,
-        string term,
-        int documentFrequency,
-        int documentCount,
-        double averageDocumentLength,
-        KnowledgeGraphFuzzyTokenMatchingOptions fuzzyOptions)
-    {
-        if (documentFrequency == 0 || document.Length == 0)
-        {
-            return ZeroConfidence;
-        }
-
-        if (!TryFindTermFrequency(document, term, fuzzyOptions, out var frequency))
-        {
-            return ZeroConfidence;
-        }
-
-        var idf = Math.Log(IdfOffset + ((documentCount - documentFrequency + Half) / (documentFrequency + Half)));
-        var denominator = frequency + K1 * (IdfOffset - B + (B * document.Length / averageDocumentLength));
-        return idf * ((frequency * (K1 + IdfOffset)) / denominator);
     }
 
     private static bool TryFindTermFrequency(

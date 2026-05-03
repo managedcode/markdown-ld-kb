@@ -12,6 +12,7 @@ public sealed class Bm25GraphSearchFlowTests
     private const string ArchivePath = "content/runbooks/archive-policy.md";
     private const string CacheTitle = "Cache restore runbook";
     private const string Query = "cache restore";
+    private const string MissingCandidateNodeId = "https://bm25-search.example/missing";
     private const string DeletionTypoQuery = "cach restre";
     private const string SubstitutionTypoQuery = "kache restpre";
     private const string InsertionTypoQuery = "ccache restorre";
@@ -126,6 +127,25 @@ Use this policy for archive retention reviews.
         result.Citations.Single().SourcePath.ShouldBe(CachePath);
         result.Citations.Single().SearchSource.ShouldBe(KnowledgeGraphRankedSearchSource.Bm25);
         result.Citations.Single().Snippet.ShouldContain("cache restore verification");
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Bm25_mode_returns_empty_when_candidate_filter_matches_no_nodes(bool fuzzy)
+    {
+        var build = await BuildAsync();
+
+        var results = await build.SearchRankedAsync(
+            Query,
+            new KnowledgeGraphRankedSearchOptions
+            {
+                Mode = KnowledgeGraphSearchMode.Bm25,
+                EnableFuzzyTokenMatching = fuzzy,
+                CandidateNodeIds = [MissingCandidateNodeId],
+            });
+
+        results.ShouldBeEmpty();
     }
 
     [Test]

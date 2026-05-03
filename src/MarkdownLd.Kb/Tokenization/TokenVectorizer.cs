@@ -122,6 +122,7 @@ internal sealed class TokenVectorSpace
         foreach (var tokenIds in corpusTokenIds)
         {
             seen.Clear();
+            seen.EnsureCapacity(tokenIds.Count);
             foreach (var tokenId in tokenIds)
             {
                 if (!seen.Add(tokenId))
@@ -143,41 +144,63 @@ internal sealed class TokenVectorSpace
     }
 }
 
-internal sealed record TokenVector(IReadOnlyDictionary<int, double> Weights)
+internal sealed record TokenVector
 {
+    private const double NormalizedSquaredDistanceScale = 2d;
+
+    private TokenVector(IReadOnlyDictionary<int, double> weights, double squaredMagnitude)
+    {
+        Weights = weights;
+        SquaredMagnitude = squaredMagnitude;
+    }
+
+    public IReadOnlyDictionary<int, double> Weights { get; }
+
+    private double SquaredMagnitude { get; }
+
     public static TokenVector Create(IReadOnlyDictionary<int, double> weights)
     {
         if (weights.Count == 0)
         {
-            return new TokenVector(new Dictionary<int, double>(0));
+            return new TokenVector(new Dictionary<int, double>(0), ZeroConfidence);
         }
 
         var magnitude = Math.Sqrt(CalculateSquaredMagnitude(weights));
-        return new TokenVector(NormalizeWeights(weights, magnitude));
+        var normalized = NormalizeWeights(weights, magnitude);
+        return new TokenVector(normalized, CalculateSquaredMagnitude(normalized));
     }
 
     public double EuclideanDistanceTo(TokenVector other)
     {
         ArgumentNullException.ThrowIfNull(other);
 
-        var sum = ZeroConfidence;
-        foreach (var pair in Weights)
+        if (Weights.Count == 0 || other.Weights.Count == 0)
         {
-            var difference = pair.Value - other.Weights.GetValueOrDefault(pair.Key);
-            sum += difference * difference;
+            return Weights.Count == other.Weights.Count ? ZeroConfidence : FullConfidence;
         }
 
-        foreach (var pair in other.Weights)
+        var dotProduct = CalculateDotProduct(Weights, other.Weights);
+        return Math.Sqrt(Math.Max(ZeroConfidence, SquaredMagnitude + other.SquaredMagnitude - (NormalizedSquaredDistanceScale * dotProduct)));
+    }
+
+    private static double CalculateDotProduct(
+        IReadOnlyDictionary<int, double> left,
+        IReadOnlyDictionary<int, double> right)
+    {
+        var smaller = left.Count <= right.Count ? left : right;
+        var larger = left.Count <= right.Count ? right : left;
+        var dotProduct = ZeroConfidence;
+        foreach (var pair in smaller)
         {
-            if (Weights.ContainsKey(pair.Key))
+            if (!larger.TryGetValue(pair.Key, out var otherWeight))
             {
                 continue;
             }
 
-            sum += pair.Value * pair.Value;
+            dotProduct += pair.Value * otherWeight;
         }
 
-        return Math.Sqrt(sum);
+        return dotProduct;
     }
 
     private static double CalculateSquaredMagnitude(IReadOnlyDictionary<int, double> weights)

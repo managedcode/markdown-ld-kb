@@ -46,17 +46,6 @@ internal static class TokenizedKnowledgeSearchRanking
         AddBoundedCandidate(candidates, candidate, limit, CorrectionCandidateComparison);
     }
 
-    internal static string[] CreateCorrectionValues(IReadOnlyList<FuzzyCorrectionCandidate> candidates)
-    {
-        var values = new string[candidates.Count];
-        for (var index = 0; index < candidates.Count; index++)
-        {
-            values[index] = candidates[index].Term.Value;
-        }
-
-        return values;
-    }
-
     private static void AddDistanceCandidate(
         List<TokenDistanceCandidate> candidates,
         TokenDistanceCandidate candidate,

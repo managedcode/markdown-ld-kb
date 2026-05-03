@@ -36,17 +36,14 @@ internal static class KnowledgeGraphFuzzyTokenMatcher
         var bestDistance = KnowledgeGraphBoundedEditDistance.NoMatchDistance;
         foreach (var (candidateTerm, candidateFrequency) in candidateTermFrequency)
         {
-            if (!IsLengthCompatible(queryTerm.Length, candidateTerm.Length, options.MaxEditDistance))
+            if (candidateTerm.Length < options.MinimumTokenLength ||
+                !IsLengthCompatible(queryTerm.Length, candidateTerm.Length, options.MaxEditDistance))
             {
                 continue;
             }
 
-            if (!TryComputeSimilarityAndDistance(
-                    queryTerm,
-                    candidateTerm,
-                    options,
-                    out var similarityWeight,
-                    out var distance) ||
+            var currentMaxDistance = Math.Min(options.MaxEditDistance, bestDistance);
+            if (!TryComputeSimilarityAndDistance(queryTerm, candidateTerm, currentMaxDistance, out var distance) ||
                 distance > bestDistance)
             {
                 continue;
@@ -58,6 +55,7 @@ internal static class KnowledgeGraphFuzzyTokenMatcher
                 frequency = ZeroConfidence;
             }
 
+            var similarityWeight = CreateSimilarityWeight(queryTerm.Length, distance);
             frequency += candidateFrequency * similarityWeight;
         }
 
@@ -95,6 +93,17 @@ internal static class KnowledgeGraphFuzzyTokenMatcher
 
         similarity = CreateSimilarityWeight(queryTerm.Length, distance);
         return similarity > ZeroConfidence;
+    }
+
+    private static bool TryComputeSimilarityAndDistance(
+        string queryTerm,
+        string candidateTerm,
+        int maxEditDistance,
+        out int distance)
+    {
+        distance = KnowledgeGraphBoundedEditDistance.Compute(queryTerm, candidateTerm, maxEditDistance);
+        return distance != KnowledgeGraphBoundedEditDistance.NoMatchDistance &&
+               CreateSimilarityWeight(queryTerm.Length, distance) > ZeroConfidence;
     }
 
     private static bool CanFuzzyMatch(string term, KnowledgeGraphFuzzyTokenMatchingOptions options)

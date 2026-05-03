@@ -6,22 +6,36 @@ internal static class KnowledgeGraphBandedEditDistance
 {
     private const int ExactDistance = 0;
     private const int UnitDistance = 1;
+    private const int StackRowLengthLimit = 256;
 
     internal static int Compute(ReadOnlySpan<char> left, ReadOnlySpan<char> right, int maxDistance)
     {
         var sentinel = maxDistance + UnitDistance;
         var rowLength = right.Length + 1;
-        var previous = ArrayPool<int>.Shared.Rent(rowLength);
-        var current = ArrayPool<int>.Shared.Rent(rowLength);
+        if (rowLength <= StackRowLengthLimit)
+        {
+            Span<int> stackPrevious = stackalloc int[rowLength];
+            Span<int> stackCurrent = stackalloc int[rowLength];
+            return ComputeWithRows(left, right, maxDistance, stackPrevious, stackCurrent, sentinel);
+        }
+
+        var pooledPrevious = ArrayPool<int>.Shared.Rent(rowLength);
+        var pooledCurrent = ArrayPool<int>.Shared.Rent(rowLength);
 
         try
         {
-            return ComputeWithRows(left, right, maxDistance, previous, current, sentinel);
+            return ComputeWithRows(
+                left,
+                right,
+                maxDistance,
+                pooledPrevious.AsSpan(0, rowLength),
+                pooledCurrent.AsSpan(0, rowLength),
+                sentinel);
         }
         finally
         {
-            ArrayPool<int>.Shared.Return(previous);
-            ArrayPool<int>.Shared.Return(current);
+            ArrayPool<int>.Shared.Return(pooledPrevious);
+            ArrayPool<int>.Shared.Return(pooledCurrent);
         }
     }
 
@@ -29,13 +43,12 @@ internal static class KnowledgeGraphBandedEditDistance
         ReadOnlySpan<char> left,
         ReadOnlySpan<char> right,
         int maxDistance,
-        int[] previous,
-        int[] current,
+        Span<int> previous,
+        Span<int> current,
         int sentinel)
     {
-        var rowLength = right.Length + 1;
-        var previousRow = previous.AsSpan(0, rowLength);
-        var currentRow = current.AsSpan(0, rowLength);
+        var previousRow = previous;
+        var currentRow = current;
         FillInitialRow(previousRow, right.Length, maxDistance, sentinel);
 
         for (var row = 1; row <= left.Length; row++)
