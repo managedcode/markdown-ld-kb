@@ -1319,117 +1319,18 @@ MARKDOWN_LD_KB_BENCHMARK_PROFILE=cpu dotnet run --project benchmarks/MarkdownLd.
 
 Benchmark reports are written to `artifacts/benchmarks/results` as Markdown, CSV, and full JSON. The reports are intentionally ignored by git because they depend on the local machine and current system load. PR validation and the dedicated workflow in `.github/workflows/benchmarks.yml` both run the complete BenchmarkDotNet suite and upload the `benchmarkdotnet-results` artifact. The benchmark config adds one `Default` job only when the command does not already pass `--job`, `--job=...`, or `-j`.
 
-The exported BenchmarkDotNet reports include the diagnostic columns that matter for this library:
+The full metric definitions, workload profiles, and current result tables are maintained in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md). The README keeps only the current headline numbers from the May 3, 2026 local BenchmarkDotNet 0.15.8 run on Apple M2 Pro with .NET 10.0.5:
 
-| Area | Report data | Used for |
-| --- | --- | --- |
-| Latency | `Mean`, `Error`, `StdDev`, `Ratio`, `RatioSD`; full JSON also keeps min, quartiles, max, percentiles, and raw measurements | compare retrieval paths under the same generated workload |
-| Allocation and GC | `Allocated`, `Alloc Ratio`, `Gen0`, `Gen1`, `Gen2` | find APIs that allocate enough to hurt repeated search calls |
-| Threading | `Completed Work Items`, `Lock Contentions` | identify SPARQL and federation paths that schedule work or contend on locks |
-| Repro metadata | runtime, JIT, platform, job, iteration counts, corpus profile, query scenario | keep local runs comparable without pretending they are machine-independent |
-| Optional profiles | EventPipe `cpu`, `gc`, or `jit` artifacts when `MARKDOWN_LD_KB_BENCHMARK_PROFILE` is set | inspect hot methods after a suspicious benchmark result |
-
-Benchmark workload profiles are named by shape instead of using unexplained document-count params:
-
-| Profile | Shape |
+| Area | Current local result |
 | --- | --- |
-| `ShortDocuments` | 250 compact runbook-like Markdown documents |
-| `LongDocuments` | 80 long recovery playbooks with repeated sections |
-| `LargeCorpus` | 1000 compact documents for scale, persistence, and build pressure |
-| `TokenizedMultilingual` | 250 multilingual/CJK/token-heavy documents |
-| `FederatedRunbooks` | 250 SPARQL/service/runbook documents for local federation paths |
+| Full suite | 118 BenchmarkDotNet cases using the `Default` job |
+| Graph build | `LargeCorpus` builds in 45.457 ms with 57.74 MB allocated |
+| Low-latency search | `ShortDocuments` exact ranked graph search is 1.195 ms / 2.37 MB; BM25 is 1.659 ms / 3.07 MB |
+| Typo-tolerant search | BM25 fuzzy stays opt-in; `ShortDocuments` exact fuzzy search is 1.979 ms / 3.07 MB |
+| RDF query paths | `ShortDocuments` exact schema SPARQL is 41.078 ms / 60.33 MB; local federated schema search is 39.410 ms / 62.31 MB |
+| Tiktoken search | `LongDocuments` exact token-distance search is 298.1 us / 212.24 KB; typo correction is 391.5 us / 216.30 KB |
+| Persistence | `LargeCorpus` Turtle file load is 35.708 ms / 28.10 MB; JSON-LD file load is 90.663 ms / 75.32 MB |
+| Lifecycle | Build/search/save/load/export is 55.35 ms / 54.44 MB |
+| Fuzzy edit distance | Long insertion is 376.58x faster than naive Levenshtein; long no-match is 172.88x faster, both with 0 B allocated |
 
-Latest local benchmark run, executed on May 3, 2026 with BenchmarkDotNet 0.15.8, .NET 10.0.5, Apple M2 Pro, exported these reports:
-
-| Suite | Job | Benchmarks executed | Export prefix |
-| --- | --- | ---: | --- |
-| Fuzzy edit distance | Default | 8 | `ManagedCode.MarkdownLd.Kb.Benchmarks.FuzzyEditDistanceBenchmarks-report` |
-| Graph build | Default | 4 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphBuildBenchmarks-report` |
-| Graph search | Default | 54 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphSearchBenchmarks-report` |
-| Tiktoken search | Default | 12 | `ManagedCode.MarkdownLd.Kb.Benchmarks.TiktokenSearchBenchmarks-report` |
-| Graph persistence | Default | 39 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphPersistenceBenchmarks-report` |
-| Graph lifecycle | Default | 1 | `ManagedCode.MarkdownLd.Kb.Benchmarks.GraphLifecycleBenchmarks-report` |
-
-The full local pass executed 118 BenchmarkDotNet cases.
-
-Graph build:
-
-| Profile | Mean | StdDev | Allocated |
-| --- | ---: | ---: | ---: |
-| `ShortDocuments` | 9.462 ms | 0.0324 ms | 14.61 MB |
-| `LongDocuments` | 7.509 ms | 0.0127 ms | 14.35 MB |
-| `LargeCorpus` | 45.457 ms | 0.5488 ms | 57.74 MB |
-| `TokenizedMultilingual` | 12.206 ms | 0.2035 ms | 17.77 MB |
-
-Graph search exact-query mean time:
-
-| Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ShortDocuments` | 1.195 ms | 1.659 ms | 1.979 ms | 2.036 ms | 41.078 ms | 39.410 ms |
-| `LongDocuments` | 0.460 ms | 1.989 ms | 1.984 ms | 0.634 ms | 13.007 ms | 14.030 ms |
-| `FederatedRunbooks` | 1.317 ms | 2.022 ms | 2.041 ms | 2.244 ms | 41.528 ms | 44.219 ms |
-
-Graph search exact-query allocated memory per operation:
-
-| Profile | Ranked graph | BM25 | BM25 fuzzy | Focused | Schema SPARQL | Local federated |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ShortDocuments` | 2.37 MB | 3.07 MB | 3.07 MB | 3.27 MB | 60.33 MB | 62.31 MB |
-| `LongDocuments` | 1.91 MB | 3.46 MB | 3.46 MB | 1.21 MB | 20.22 MB | 22.22 MB |
-| `FederatedRunbooks` | 2.54 MB | 3.52 MB | 3.52 MB | 3.48 MB | 61.10 MB | 62.65 MB |
-
-The `ShortDocuments` exact-query diagnostic slice shows the current hot paths:
-
-| Method | Mean | Allocated | Alloc ratio | Gen0 | Gen1 | Gen2 | Work items | Lock contentions |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Ranked graph | 1.195 ms | 2.37 MB | 1.00x | 296.8750 | 101.5625 | 0 | 0 | 0 |
-| BM25 | 1.659 ms | 3.07 MB | 1.29x | 384.7656 | 142.5781 | 0 | 0 | 0 |
-| BM25 fuzzy | 1.979 ms | 3.07 MB | 1.29x | 375.0000 | 125.0000 | 0 | 0 | 0 |
-| Focused | 2.036 ms | 3.27 MB | 1.38x | 406.2500 | 179.6875 | 0 | 0 | 0 |
-| Schema SPARQL | 41.078 ms | 60.33 MB | 25.43x | 8400.0000 | 1800.0000 | 400.0000 | 551 | 300.6000 |
-| Local federated | 39.410 ms | 62.31 MB | 26.27x | 8600.0000 | 1800.0000 | 400.0000 | 552 | 326.0000 |
-
-Allocation, GC, work-item, and lock-contention columns come directly from BenchmarkDotNet diagnosers. Treat ratios and relative pressure inside the same run as the useful signal; local numbers are diagnostics, not release-grade SLA measurements.
-
-Persistence and export on the `LargeCorpus` profile:
-
-| Method | Mean | StdDev | Allocated |
-| --- | ---: | ---: | ---: |
-| `CreateSnapshot` | 4.494 ms | 0.0045 ms | 5.18 MB |
-| `SerializeTurtle` | 9.249 ms | 0.0436 ms | 18.07 MB |
-| `SerializeJsonLd` | 12.371 ms | 0.0586 ms | 20.31 MB |
-| `ExportMermaidFlowchart` | 5.884 ms | 0.0899 ms | 7.15 MB |
-| `ExportDotGraph` | 6.039 ms | 0.0050 ms | 7.55 MB |
-| `SaveTurtleToFile` | 29.641 ms | 0.1868 ms | 34.74 MB |
-| `SaveJsonLdToFile` | 38.491 ms | 1.5349 ms | 37.02 MB |
-| `LoadTurtleFromFile` | 35.708 ms | 0.8051 ms | 28.10 MB |
-| `LoadJsonLdFromFile` | 90.663 ms | 2.9780 ms | 75.32 MB |
-
-Broad graph lifecycle:
-
-| Method | Mean | StdDev | Allocated | Gen0 | Gen1 | Gen2 | Work items |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `BuildSearchSaveLoadAndExport` | 55.35 ms | 3.571 ms | 54.44 MB | 6750.0000 | 2250.0000 | 750.0000 | 52.0000 |
-
-Tiktoken token-distance search:
-
-| Profile | Query | Exact | Fuzzy-corrected | Exact allocated | Fuzzy allocated |
-| --- | --- | ---: | ---: | ---: | ---: |
-| `LongDocuments` | Exact | 298.1 us | 300.2 us | 212.24 KB | 213.16 KB |
-| `LongDocuments` | Typo | 334.8 us | 391.5 us | 212.88 KB | 216.30 KB |
-| `LongDocuments` | NoMatch | 254.1 us | 257.1 us | 212.19 KB | 213.49 KB |
-| `TokenizedMultilingual` | Exact | 219.8 us | 221.4 us | 139.18 KB | 140.30 KB |
-| `TokenizedMultilingual` | Typo | 245.2 us | 267.6 us | 139.59 KB | 142.20 KB |
-| `TokenizedMultilingual` | NoMatch | 182.7 us | 183.1 us | 138.91 KB | 140.15 KB |
-
-Fuzzy edit-distance mean time:
-
-| Scenario | Bounded bit-vector/banded | Naive Levenshtein | Speedup vs naive | Bounded allocation | Naive allocation |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Short deletion | 6.726 ns | 94.380 ns | 14.03x | 0 B | 112 B |
-| Short substitution | 33.756 ns | 82.509 ns | 2.44x | 0 B | 112 B |
-| Long insertion | 21.894 ns | 8,244.786 ns | 376.58x | 0 B | 640 B |
-| Long no-match | 53.268 ns | 9,208.866 ns | 172.88x | 0 B | 672 B |
-
-This run reflects the allocation-focused search hot-path pass: BM25 now uses the shared allocation-aware tokenizer, direct scoring loops, and bounded top-N match retention; fuzzy edit distance uses stack-backed bit-vector masks for short residual tokens and pooled rows for the long-token fallback; and Tiktoken search keeps only bounded top-N candidates while TF-IDF weighting updates dictionary values without temporary key arrays.
-
-These numbers are local measurements, not a cross-machine performance contract. The README keeps compact slices only; [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md) and the full Markdown, CSV, and JSON BenchmarkDotNet reports remain the source for detailed diagnostics.
+These numbers are local diagnostics, not a cross-machine performance contract. The full Markdown, CSV, and JSON BenchmarkDotNet reports remain the source for raw measurements.
