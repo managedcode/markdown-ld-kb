@@ -51,7 +51,7 @@ flowchart LR
 ## Intended Library Boundary
 
 - The library owns the graph-native candidate extraction and merge policy.
-- BM25 ranking is in-memory and uses the same candidate text as semantic indexing for the selected boundary: graph-native for graph-only callers, document-aware for build-result/facade callers. Exact BM25 keeps the allocation profile close to ranked graph search by avoiding full per-document dictionaries. Optional fuzzy token matching is implemented inside this library, does not add an external package dependency, and does not copy AGPL-licensed code from reviewed prior-art projects.
+- BM25 ranking is in-memory and uses the same candidate text as semantic indexing for the selected boundary: graph-native for graph-only callers, document-aware for build-result/facade callers. Exact BM25 keeps the allocation profile close to ranked graph search by avoiding full per-document dictionaries. Optional fuzzy token matching is implemented inside this library, does not add an external package dependency, and follows public bounded edit-distance algorithms with our own implementation.
 - The host application owns the concrete embedding provider and supplies it as `Microsoft.Extensions.AI.IEmbeddingGenerator<string, Embedding<float>>`.
 - The library does not own a vector database, gateway endpoint, or hosted ranking infrastructure.
 

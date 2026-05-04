@@ -75,8 +75,9 @@ internal sealed class TokenVectorSpace
     private static Dictionary<int, double> BuildBinaryWeights(IReadOnlyList<int> tokenIds)
     {
         var weights = new Dictionary<int, double>(tokenIds.Count);
-        foreach (var tokenId in tokenIds)
+        for (var index = 0; index < tokenIds.Count; index++)
         {
+            var tokenId = tokenIds[index];
             weights[tokenId] = FullConfidence;
         }
 
@@ -86,8 +87,9 @@ internal sealed class TokenVectorSpace
     private static Dictionary<int, double> BuildTermFrequencyWeights(IReadOnlyList<int> tokenIds)
     {
         var weights = new Dictionary<int, double>(tokenIds.Count);
-        foreach (var tokenId in tokenIds)
+        for (var index = 0; index < tokenIds.Count; index++)
         {
+            var tokenId = tokenIds[index];
             ref var weight = ref CollectionsMarshal.GetValueRefOrAddDefault(weights, tokenId, out _);
             weight += TokenCountIncrement;
         }
@@ -127,8 +129,9 @@ internal sealed class TokenVectorSpace
         {
             seen.Clear();
             seen.EnsureCapacity(tokenIds.Count);
-            foreach (var tokenId in tokenIds)
+            for (var index = 0; index < tokenIds.Count; index++)
             {
+                var tokenId = tokenIds[index];
                 if (!seen.Add(tokenId))
                 {
                     continue;

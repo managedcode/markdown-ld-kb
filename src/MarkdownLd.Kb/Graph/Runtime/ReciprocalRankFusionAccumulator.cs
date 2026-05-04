@@ -1,8 +1,8 @@
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-internal sealed class ReciprocalRankFusionAccumulator(KnowledgeGraphRankedSearchMatch initialMatch)
+internal struct ReciprocalRankFusionAccumulator
 {
-    private KnowledgeGraphRankedSearchMatch _match = initialMatch;
+    private KnowledgeGraphRankedSearchMatch? _match;
 
     public double Score { get; private set; }
 
@@ -33,9 +33,10 @@ internal sealed class ReciprocalRankFusionAccumulator(KnowledgeGraphRankedSearch
         }
     }
 
-    public KnowledgeGraphRankedSearchMatch ToMatch()
+    public readonly KnowledgeGraphRankedSearchMatch ToMatch()
     {
-        return _match with
+        var match = _match ?? throw new InvalidOperationException(PipelineConstants.ReciprocalRankAccumulatorEmptyMessage);
+        return match with
         {
             Source = ResolveSource(),
             Score = Score,
@@ -44,7 +45,7 @@ internal sealed class ReciprocalRankFusionAccumulator(KnowledgeGraphRankedSearch
         };
     }
 
-    private KnowledgeGraphRankedSearchSource ResolveSource()
+    private readonly KnowledgeGraphRankedSearchSource ResolveSource()
     {
         if (HasCanonical && HasSemantic)
         {

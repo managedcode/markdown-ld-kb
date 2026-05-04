@@ -18,6 +18,7 @@ internal static partial class PipelineConstants
     internal const string TokenDistanceSearchUnavailableMessage = "Token distance search requires a graph built with Tiktoken extraction mode.";
     internal const string SemanticSearchRequiresIndexMessage = "Semantic search requires a semantic index built from an embedding generator.";
     internal const string SemanticSearchEmbeddingCountMismatchMessage = "Embedding generation returned an unexpected result count.";
+    internal const string ReciprocalRankAccumulatorEmptyMessage = "Reciprocal rank fusion accumulator has no match.";
     internal const string SchemaSearchTextPredicatesRequiredMessage = "Schema-aware search requires at least one text predicate.";
     internal const string SchemaSearchFederatedEndpointsRequiredMessage = "Federated schema-aware search requires at least one service endpoint.";
     internal const string SchemaSearchUnknownPrefixMessagePrefix = "Schema-aware search prefix could not be resolved: ";

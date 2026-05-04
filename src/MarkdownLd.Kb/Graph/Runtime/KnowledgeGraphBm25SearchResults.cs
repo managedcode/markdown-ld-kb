@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal static class KnowledgeGraphBm25SearchResults
@@ -44,12 +46,13 @@ internal static class KnowledgeGraphBm25SearchResults
     }
 
     private static int FindInsertIndex(
-        IReadOnlyList<KnowledgeGraphRankedSearchMatch> matches,
+        List<KnowledgeGraphRankedSearchMatch> matches,
         KnowledgeGraphRankedSearchMatch match)
     {
-        for (var index = 0; index < matches.Count; index++)
+        var matchSpan = CollectionsMarshal.AsSpan(matches);
+        for (var index = 0; index < matchSpan.Length; index++)
         {
-            if (CompareMatches(match, matches[index]) < 0)
+            if (CompareMatches(match, matchSpan[index]) < 0)
             {
                 return index;
             }

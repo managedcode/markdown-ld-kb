@@ -5,9 +5,8 @@ using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-internal sealed class TokenKeyphraseCandidateBuilder
+internal sealed partial class TokenKeyphraseCandidateBuilder
 {
-    private static readonly Regex WordRegex = new(TopicWordPattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private readonly TiktokenKnowledgeGraphOptions _options;
 
     public TokenKeyphraseCandidateBuilder(TiktokenKnowledgeGraphOptions options)
@@ -41,9 +40,9 @@ internal sealed class TokenKeyphraseCandidateBuilder
         return candidates.ToArray();
     }
 
-    private void AddCandidatesFromStart(ICollection<KeyphraseCandidate> candidates, IReadOnlyList<string> words, int start)
+    private void AddCandidatesFromStart(List<KeyphraseCandidate> candidates, string[] words, int start)
     {
-        var maxLength = Math.Min(_options.MaxTopicPhraseWords, words.Count - start);
+        var maxLength = Math.Min(_options.MaxTopicPhraseWords, words.Length - start);
         for (var length = 1; length <= maxLength; length++)
         {
             if (!HasMinimumTopicWordLength(words, start, length, _options.MinimumTopicWordLength))
@@ -62,7 +61,7 @@ internal sealed class TokenKeyphraseCandidateBuilder
 
     private static string[] ReadWords(string text)
     {
-        var matches = WordRegex.Matches(text);
+        var matches = WordRegex().Matches(text);
         var words = new List<string>(matches.Count);
         foreach (Match match in matches)
         {
@@ -77,7 +76,7 @@ internal sealed class TokenKeyphraseCandidateBuilder
     }
 
     private static bool HasMinimumTopicWordLength(
-        IReadOnlyList<string> words,
+        string[] words,
         int start,
         int length,
         int minimumLength)
@@ -93,7 +92,7 @@ internal sealed class TokenKeyphraseCandidateBuilder
         return false;
     }
 
-    private static string CreatePhraseLabel(IReadOnlyList<string> words, int start, int length)
+    private static string CreatePhraseLabel(string[] words, int start, int length)
     {
         if (length == 1)
         {
@@ -130,7 +129,10 @@ internal sealed class TokenKeyphraseCandidateBuilder
         return label.Normalize(NormalizationForm.FormC).ToLower(CultureInfo.InvariantCulture);
     }
 
-    private readonly record struct PhraseSource(IReadOnlyList<string> Words, int Start, int Length);
+    [GeneratedRegex(TopicWordPattern, RegexOptions.CultureInvariant)]
+    private static partial Regex WordRegex();
+
+    private readonly record struct PhraseSource(string[] Words, int Start, int Length);
 }
 
 internal sealed record KeyphraseCandidateGroup(

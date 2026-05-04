@@ -6,6 +6,7 @@ using BenchmarkDotNet.Exporters.Csv;
 using BenchmarkDotNet.Exporters.Json;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Loggers;
+using Perfolizer.Horology;
 
 namespace ManagedCode.MarkdownLd.Kb.Benchmarks;
 
@@ -18,12 +19,16 @@ public sealed class MarkdownLdBenchmarkConfig : ManualConfig
     private const string JitProfileValue = "jit";
     private const string JobLongOption = "--job";
     private const string JobShortOption = "-j";
+    private const int RequiredLaunchCount = 1;
+    private const int RequiredWarmupCount = 2;
+    private const int RequiredIterationCount = 5;
+    private static readonly TimeInterval RequiredMinIterationTime = TimeInterval.FromMilliseconds(100);
 
     public MarkdownLdBenchmarkConfig(IReadOnlyList<string> args)
     {
         AddLogger(ConsoleLogger.Default);
         AddColumnProvider(DefaultColumnProviders.Instance);
-        AddDefaultJob(args);
+        AddRequiredJob(args);
         AddExporter(MarkdownExporter.GitHub);
         AddExporter(CsvExporter.Default);
         AddExporter(JsonExporter.Full);
@@ -33,14 +38,20 @@ public sealed class MarkdownLdBenchmarkConfig : ManualConfig
         ArtifactsPath = Path.Combine(Directory.GetCurrentDirectory(), ArtifactsDirectory);
     }
 
-    private void AddDefaultJob(IReadOnlyList<string> args)
+    private void AddRequiredJob(IReadOnlyList<string> args)
     {
         if (args.Any(IsJobOption))
         {
             return;
         }
 
-        AddJob(Job.Default.WithId("Default"));
+        AddJob(
+            Job.Default
+                .WithId("Required")
+                .WithLaunchCount(RequiredLaunchCount)
+                .WithWarmupCount(RequiredWarmupCount)
+                .WithIterationCount(RequiredIterationCount)
+                .WithMinIterationTime(RequiredMinIterationTime));
     }
 
     private static bool IsJobOption(string arg)

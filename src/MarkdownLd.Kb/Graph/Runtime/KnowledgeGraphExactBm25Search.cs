@@ -7,10 +7,10 @@ internal static class KnowledgeGraphExactBm25Search
 {
     public static IReadOnlyList<KnowledgeGraphRankedSearchMatch> Search(
         IReadOnlyList<KnowledgeGraphSearchCandidate> candidates,
-        IReadOnlyList<string> queryTerms,
+        string[] queryTerms,
         int maxResults)
     {
-        using var statistics = KnowledgeGraphBm25TermStatistics.Rent(candidates.Count, queryTerms.Count);
+        using var statistics = KnowledgeGraphBm25TermStatistics.Rent(candidates.Count, queryTerms.Length);
         statistics.Clear();
         var documentLengths = ArrayPool<int>.Shared.Rent(candidates.Count);
 
@@ -24,7 +24,7 @@ internal static class KnowledgeGraphExactBm25Search
 
             return CreateMatches(
                 candidates,
-                queryTerms.Count,
+                queryTerms.Length,
                 statistics,
                 documentLengths,
                 averageDocumentLength,
@@ -38,7 +38,7 @@ internal static class KnowledgeGraphExactBm25Search
 
     private static double CreateTermStatistics(
         IReadOnlyList<KnowledgeGraphSearchCandidate> candidates,
-        IReadOnlyList<string> queryTerms,
+        string[] queryTerms,
         KnowledgeGraphBm25TermStatistics statistics,
         int[] documentLengths)
     {
@@ -59,10 +59,10 @@ internal static class KnowledgeGraphExactBm25Search
         return (double)totalLength / candidates.Count;
     }
 
-    private static Dictionary<string, int> CreateQueryTermIndexes(IReadOnlyList<string> queryTerms)
+    private static Dictionary<string, int> CreateQueryTermIndexes(string[] queryTerms)
     {
-        var indexes = new Dictionary<string, int>(queryTerms.Count, StringComparer.Ordinal);
-        for (var index = 0; index < queryTerms.Count; index++)
+        var indexes = new Dictionary<string, int>(queryTerms.Length, StringComparer.Ordinal);
+        for (var index = 0; index < queryTerms.Length; index++)
         {
             indexes[queryTerms[index]] = index;
         }

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
@@ -46,10 +47,22 @@ public sealed partial class KnowledgeGraph
             .ConfigureAwait(false);
 
         return new KnowledgeGraphFocusedSearchResult(
-            schemaResult.Matches.Select(ConvertSchemaSearchMatch).ToArray(),
-            schemaResult.RelatedMatches.Select(ConvertSchemaSearchMatch).ToArray(),
-            schemaResult.NextStepMatches.Select(ConvertSchemaSearchMatch).ToArray(),
+            ConvertSchemaSearchMatches(schemaResult.Matches),
+            ConvertSchemaSearchMatches(schemaResult.RelatedMatches),
+            ConvertSchemaSearchMatches(schemaResult.NextStepMatches),
             schemaResult.FocusedGraph);
+    }
+
+    private static KnowledgeGraphFocusedSearchMatch[] ConvertSchemaSearchMatches(
+        IReadOnlyList<KnowledgeGraphSchemaSearchMatch> matches)
+    {
+        var converted = new KnowledgeGraphFocusedSearchMatch[matches.Count];
+        for (var index = 0; index < matches.Count; index++)
+        {
+            converted[index] = ConvertSchemaSearchMatch(matches[index]);
+        }
+
+        return converted;
     }
 
     private static KnowledgeGraphFocusedSearchMatch ConvertSchemaSearchMatch(KnowledgeGraphSchemaSearchMatch match)
@@ -92,25 +105,14 @@ public sealed partial class KnowledgeGraph
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            return rankedMatches
-                .Where(match => nodesById.ContainsKey(match.NodeId))
-                .Select(CreatePrimaryMatch)
-                .Take(Math.Max(1, options.MaxPrimaryResults))
-                .ToArray();
+            return CreatePrimaryMatchesFromRanked(rankedMatches, nodesById, options.MaxPrimaryResults);
         }
 
         if (_tokenIndex is not null)
         {
             var limit = Math.Max(options.MaxPrimaryResults * 4, options.MaxPrimaryResults);
             var tokenResults = await SearchByTokenDistanceAsync(query, limit, cancellationToken).ConfigureAwait(false);
-            return tokenResults
-                .Where(result => nodesById.ContainsKey(result.DocumentId))
-                .GroupBy(result => result.DocumentId, StringComparer.Ordinal)
-                .Select(group => CreatePrimaryMatch(nodesById[group.Key], group.Min(static item => item.Distance)))
-                .OrderByDescending(static match => match.Score)
-                .ThenBy(static match => match.Label, StringComparer.OrdinalIgnoreCase)
-                .Take(Math.Max(1, options.MaxPrimaryResults))
-                .ToArray();
+            return CreatePrimaryMatchesFromTokenDistance(tokenResults, nodesById, options.MaxPrimaryResults);
         }
 
         var rankedGraphMatches = await SearchRankedAsync(
@@ -123,11 +125,75 @@ public sealed partial class KnowledgeGraph
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
-        return rankedGraphMatches
-            .Where(match => nodesById.ContainsKey(match.NodeId))
-            .Select(CreatePrimaryMatch)
-            .Take(Math.Max(1, options.MaxPrimaryResults))
-            .ToArray();
+        return CreatePrimaryMatchesFromRanked(rankedGraphMatches, nodesById, options.MaxPrimaryResults);
+    }
+
+    private static KnowledgeGraphFocusedSearchMatch[] CreatePrimaryMatchesFromRanked(
+        IReadOnlyList<KnowledgeGraphRankedSearchMatch> rankedMatches,
+        IReadOnlyDictionary<string, KnowledgeGraphNode> nodesById,
+        int maxResults)
+    {
+        var limit = Math.Max(1, maxResults);
+        var matches = new List<KnowledgeGraphFocusedSearchMatch>(Math.Min(rankedMatches.Count, limit));
+        foreach (var rankedMatch in rankedMatches)
+        {
+            if (!nodesById.ContainsKey(rankedMatch.NodeId))
+            {
+                continue;
+            }
+
+            matches.Add(CreatePrimaryMatch(rankedMatch));
+            if (matches.Count >= limit)
+            {
+                break;
+            }
+        }
+
+        return matches.ToArray();
+    }
+
+    private static KnowledgeGraphFocusedSearchMatch[] CreatePrimaryMatchesFromTokenDistance(
+        IReadOnlyList<TokenDistanceSearchResult> tokenResults,
+        IReadOnlyDictionary<string, KnowledgeGraphNode> nodesById,
+        int maxResults)
+    {
+        var bestDistances = CreateBestTokenDistances(tokenResults, nodesById);
+        var limit = Math.Max(1, maxResults);
+        var matches = new List<KnowledgeGraphFocusedSearchMatch>(Math.Min(bestDistances.Count, limit));
+        foreach (var pair in bestDistances)
+        {
+            if (nodesById.TryGetValue(pair.Key, out var node))
+            {
+                AddBoundedFocusedMatch(matches, CreatePrimaryMatch(node, pair.Value), limit);
+            }
+        }
+
+        return matches.ToArray();
+    }
+
+    private static Dictionary<string, double> CreateBestTokenDistances(
+        IReadOnlyList<TokenDistanceSearchResult> tokenResults,
+        IReadOnlyDictionary<string, KnowledgeGraphNode> nodesById)
+    {
+        var bestDistances = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var result in tokenResults)
+        {
+            if (!nodesById.ContainsKey(result.DocumentId))
+            {
+                continue;
+            }
+
+            ref var distance = ref CollectionsMarshal.GetValueRefOrAddDefault(
+                bestDistances,
+                result.DocumentId,
+                out var exists);
+            if (!exists || result.Distance < distance)
+            {
+                distance = result.Distance;
+            }
+        }
+
+        return bestDistances;
     }
 
     private static KnowledgeGraphFocusedSearchMatch CreatePrimaryMatch(

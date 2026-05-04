@@ -30,7 +30,7 @@ public sealed class KnowledgeGraphSemanticIndex
         ArgumentNullException.ThrowIfNull(embeddingGenerator);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var candidateTexts = candidates.Select(static candidate => candidate.SearchText).ToArray();
+        var candidateTexts = CreateCandidateTexts(candidates);
         var embeddings = await embeddingGenerator.GenerateAsync(
                 candidateTexts,
                 new EmbeddingGenerationOptions(),
@@ -77,13 +77,36 @@ public sealed class KnowledgeGraphSemanticIndex
         }
 
         var queryVector = embeddings[0].Vector.ToArray();
-        return _entries
-            .Select(entry => CreateSemanticMatch(entry, queryVector))
-            .Where(match => match.Score >= minimumSemanticScore)
-            .OrderByDescending(static match => match.Score)
-            .ThenBy(static match => match.Label, StringComparer.OrdinalIgnoreCase)
-            .Take(limit)
-            .ToArray();
+        return SearchEntries(queryVector, minimumSemanticScore, limit);
+    }
+
+    private static string[] CreateCandidateTexts(IReadOnlyList<KnowledgeGraphSearchCandidate> candidates)
+    {
+        var candidateTexts = new string[candidates.Count];
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            candidateTexts[index] = candidates[index].SearchText;
+        }
+
+        return candidateTexts;
+    }
+
+    private KnowledgeGraphRankedSearchMatch[] SearchEntries(
+        float[] queryVector,
+        double minimumSemanticScore,
+        int limit)
+    {
+        var matches = new List<KnowledgeGraphRankedSearchMatch>(Math.Min(_entries.Count, limit));
+        for (var index = 0; index < _entries.Count; index++)
+        {
+            var match = CreateSemanticMatch(_entries[index], queryVector);
+            if (match.Score >= minimumSemanticScore)
+            {
+                KnowledgeGraphBm25SearchResults.AddBoundedMatch(matches, match, limit);
+            }
+        }
+
+        return KnowledgeGraphBm25SearchResults.ToArray(matches);
     }
 
     private static KnowledgeGraphRankedSearchMatch CreateSemanticMatch(

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
@@ -153,9 +154,10 @@ public sealed partial class KnowledgeGraph
         KnowledgeGraphFocusedSearchMatch match,
         int maxResults)
     {
-        for (var index = 0; index < matches.Count; index++)
+        var matchSpan = CollectionsMarshal.AsSpan(matches);
+        for (var index = 0; index < matchSpan.Length; index++)
         {
-            if (CompareFocusedMatches(match, matches[index]) < 0)
+            if (CompareFocusedMatches(match, matchSpan[index]) < 0)
             {
                 matches.Insert(index, match);
                 if (matches.Count > maxResults)

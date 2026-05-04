@@ -1305,20 +1305,20 @@ dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --coverage 
 
 Coverage is collected through `Microsoft.Testing.Extensions.CodeCoverage`. Cobertura is the XML output format used for line and branch reporting; the test project does not reference Coverlet.
 
-BenchmarkDotNet performance runs are separate from TUnit correctness tests. Commands, workload profiles, profiler options, and full result tables live in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md). PR validation and the dedicated benchmark workflow both run the complete BenchmarkDotNet suite and upload the `benchmarkdotnet-results` artifact.
+BenchmarkDotNet performance runs are separate from TUnit correctness tests. Commands, workload profiles, profiler options, and full result tables live in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md). The build/test/pack validation job stays separate; PR validation, release validation, and the dedicated benchmark workflow run the complete BenchmarkDotNet suite as parallel suite jobs and upload suite-specific `benchmarkdotnet-results-*` artifacts.
 
-Current local headline numbers from the May 3, 2026 BenchmarkDotNet 0.15.8 run on Apple M2 Pro with .NET 10.0.5:
+Current local headline numbers from the May 4, 2026 BenchmarkDotNet 0.15.8 run on Apple M2 Pro with .NET 10.0.5:
 
 | Area | Current local result |
 | --- | --- |
-| Full suite | 118 BenchmarkDotNet cases using the `Default` job |
-| Graph build | `LargeCorpus` builds in 47.851 ms with 57.73 MB allocated |
-| Low-latency search | `ShortDocuments` exact ranked graph search is 1.092 ms / 2.17 MB; BM25 is 1.309 ms / 2.14 MB |
-| Typo-tolerant search | BM25 fuzzy stays opt-in; `ShortDocuments` typo fuzzy search is 1.815 ms / 2.86 MB |
-| RDF query paths | `ShortDocuments` exact schema SPARQL is 49.212 ms / 60.32 MB; local federated schema search is 41.243 ms / 62.3 MB |
-| Tiktoken search | `LongDocuments` exact token-distance search is 159.8 us / 107.27 KB; typo correction is 225.7 us / 110.68 KB |
-| Persistence | `LargeCorpus` Turtle file load is 34.787 ms / 28.10 MB; JSON-LD file load is 98.267 ms / 75.32 MB |
-| Lifecycle | Build/search/save/load/export is 45.44 ms / 53.51 MB |
-| Fuzzy edit distance | Long insertion is 368.69x faster than naive Levenshtein; long no-match is 176.19x faster, both with 0 B allocated |
+| Full suite | 118 BenchmarkDotNet cases using the `Required` job; local sequential pass completed in 5 minutes 41 seconds (`real 341.12s`) |
+| Graph build | `LargeCorpus` builds in 151.12 ms with 58.75 MB allocated |
+| Low-latency search | `ShortDocuments` exact ranked graph search is 1.143 ms / 2.15 MB; BM25 is 2.503 ms / 2.14 MB |
+| Typo-tolerant search | BM25 fuzzy stays opt-in; `ShortDocuments` typo fuzzy search is 7.366 ms / 2.77 MB |
+| RDF query paths | `ShortDocuments` exact schema SPARQL is 94.422 ms / 61.25 MB; local federated schema search is 92.469 ms / 63.24 MB |
+| Tiktoken search | `LongDocuments` exact token-distance search is 145.52 μs / 107.23 KB; typo correction is 250.10 μs / 110.17 KB |
+| Persistence | `LargeCorpus` Turtle file load is 118.305 ms / 28.10 MB; JSON-LD file load is 163.824 ms / 75.51 MB |
+| Lifecycle | Build/search/save/load/export is 154.3 ms / 53.7 MB |
+| Fuzzy edit distance | Long insertion is 381.38x faster than naive Levenshtein; long no-match is 178.03x faster, both with 0 B allocated |
 
 These numbers are local diagnostics, not a cross-machine performance contract.

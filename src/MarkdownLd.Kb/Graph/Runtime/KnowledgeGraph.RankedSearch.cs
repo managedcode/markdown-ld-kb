@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.AI;
 using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
@@ -75,20 +76,18 @@ public sealed partial class KnowledgeGraph
             throw new InvalidOperationException(SemanticSearchRequiresIndexMessage);
         }
 
-        var candidatesById = filteredCandidates.ToDictionary(static candidate => candidate.NodeId, StringComparer.Ordinal);
-        var semanticMatches = (await semanticIndex
+        var candidatesById = CreateCandidatesById(filteredCandidates);
+        var searchedSemanticMatches = await semanticIndex
                 .SearchAsync(
                     query,
                     effectiveOptions.MaxSemanticResults,
                     effectiveOptions.MinimumSemanticScore,
                     cancellationToken)
-                .ConfigureAwait(false))
-            .Where(match => candidatesById.ContainsKey(match.NodeId))
-            .Select(match => OverrideCandidateMetadata(match, candidatesById[match.NodeId]))
-            .ToArray();
+                .ConfigureAwait(false);
+        var semanticMatches = CreateSemanticMatches(searchedSemanticMatches, candidatesById);
 
         return effectiveOptions.Mode == KnowledgeGraphSearchMode.Semantic
-            ? semanticMatches.Take(effectiveOptions.MaxResults).ToArray()
+            ? TakeRankedMatches(semanticMatches, effectiveOptions.MaxResults)
             : MergeHybridMatches(canonicalMatches, semanticMatches, effectiveOptions);
     }
 
@@ -115,8 +114,18 @@ public sealed partial class KnowledgeGraph
 
     private static void ValidateCandidateNodeIds(IReadOnlyCollection<string>? candidateNodeIds)
     {
-        if (candidateNodeIds?.Any(static id => string.IsNullOrWhiteSpace(id)) == true)
+        if (candidateNodeIds is null)
         {
+            return;
+        }
+
+        foreach (var nodeId in candidateNodeIds)
+        {
+            if (!string.IsNullOrWhiteSpace(nodeId))
+            {
+                continue;
+            }
+
             throw new ArgumentException(KnowledgeGraphRankedSearchDefaults.CandidateNodeIdsCannotContainEmptyMessage);
         }
     }
@@ -166,7 +175,7 @@ public sealed partial class KnowledgeGraph
     {
         var labelScore = GetTextMatchScore(candidate.Label, query, CanonicalLabelContainsScore);
         var descriptionScore = GetTextMatchScore(candidate.Description, query, CanonicalDescriptionContainsScore);
-        var relatedScore = candidate.RelatedLabels.Any(label => label.Contains(query, StringComparison.OrdinalIgnoreCase))
+        var relatedScore = ContainsRelatedLabel(candidate.RelatedLabels, query)
             ? CanonicalRelatedLabelContainsScore
             : ZeroConfidence;
 
@@ -208,7 +217,7 @@ public sealed partial class KnowledgeGraph
     {
         var results = new List<KnowledgeGraphRankedSearchMatch>(maxResults);
         var seenNodeIds = new HashSet<string>(StringComparer.Ordinal);
-        var semanticByNodeId = semanticMatches.ToDictionary(static match => match.NodeId, StringComparer.Ordinal);
+        var semanticByNodeId = CreateSemanticMatchesByNodeId(semanticMatches);
 
         foreach (var canonicalMatch in canonicalMatches)
         {
@@ -250,16 +259,11 @@ public sealed partial class KnowledgeGraph
         AddReciprocalRankScores(accumulators, canonicalMatches, options.ReciprocalRankFusionRankOffset, true);
         AddReciprocalRankScores(accumulators, semanticMatches, options.ReciprocalRankFusionRankOffset, false);
 
-        return accumulators.Values
-            .Select(static accumulator => accumulator.ToMatch())
-            .OrderByDescending(static match => match.Score)
-            .ThenBy(static match => match.Label, StringComparer.OrdinalIgnoreCase)
-            .Take(options.MaxResults)
-            .ToArray();
+        return CreateReciprocalRankMatches(accumulators, options.MaxResults);
     }
 
     private static void AddReciprocalRankScores(
-        IDictionary<string, ReciprocalRankFusionAccumulator> accumulators,
+        Dictionary<string, ReciprocalRankFusionAccumulator> accumulators,
         IReadOnlyList<KnowledgeGraphRankedSearchMatch> matches,
         int rankOffset,
         bool isCanonical)
@@ -267,14 +271,94 @@ public sealed partial class KnowledgeGraph
         for (var index = 0; index < matches.Count; index++)
         {
             var match = matches[index];
-            if (!accumulators.TryGetValue(match.NodeId, out var accumulator))
-            {
-                accumulator = new ReciprocalRankFusionAccumulator(match);
-                accumulators.Add(match.NodeId, accumulator);
-            }
-
+            ref var accumulator = ref CollectionsMarshal.GetValueRefOrAddDefault(
+                accumulators,
+                match.NodeId,
+                out _);
             accumulator.Add(match, 1d / (rankOffset + index + 1), isCanonical);
         }
+    }
+
+    private static Dictionary<string, KnowledgeGraphSearchCandidate> CreateCandidatesById(
+        IReadOnlyList<KnowledgeGraphSearchCandidate> candidates)
+    {
+        var candidatesById = new Dictionary<string, KnowledgeGraphSearchCandidate>(candidates.Count, StringComparer.Ordinal);
+        foreach (var candidate in candidates)
+        {
+            candidatesById[candidate.NodeId] = candidate;
+        }
+
+        return candidatesById;
+    }
+
+    private static KnowledgeGraphRankedSearchMatch[] CreateSemanticMatches(
+        IReadOnlyList<KnowledgeGraphRankedSearchMatch> searchedSemanticMatches,
+        IReadOnlyDictionary<string, KnowledgeGraphSearchCandidate> candidatesById)
+    {
+        var matches = new List<KnowledgeGraphRankedSearchMatch>(searchedSemanticMatches.Count);
+        foreach (var match in searchedSemanticMatches)
+        {
+            if (candidatesById.TryGetValue(match.NodeId, out var candidate))
+            {
+                matches.Add(OverrideCandidateMetadata(match, candidate));
+            }
+        }
+
+        return KnowledgeGraphBm25SearchResults.ToArray(matches);
+    }
+
+    private static KnowledgeGraphRankedSearchMatch[] TakeRankedMatches(
+        IReadOnlyList<KnowledgeGraphRankedSearchMatch> matches,
+        int maxResults)
+    {
+        var resultCount = Math.Min(matches.Count, maxResults);
+        var results = new KnowledgeGraphRankedSearchMatch[resultCount];
+        for (var index = 0; index < resultCount; index++)
+        {
+            results[index] = matches[index];
+        }
+
+        return results;
+    }
+
+    private static bool ContainsRelatedLabel(
+        IReadOnlyList<string> labels,
+        string query)
+    {
+        foreach (var label in labels)
+        {
+            if (label.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static Dictionary<string, KnowledgeGraphRankedSearchMatch> CreateSemanticMatchesByNodeId(
+        IReadOnlyList<KnowledgeGraphRankedSearchMatch> matches)
+    {
+        var matchesByNodeId = new Dictionary<string, KnowledgeGraphRankedSearchMatch>(matches.Count, StringComparer.Ordinal);
+        foreach (var match in matches)
+        {
+            matchesByNodeId[match.NodeId] = match;
+        }
+
+        return matchesByNodeId;
+    }
+
+    private static KnowledgeGraphRankedSearchMatch[] CreateReciprocalRankMatches(
+        Dictionary<string, ReciprocalRankFusionAccumulator> accumulators,
+        int maxResults)
+    {
+        var matches = new List<KnowledgeGraphRankedSearchMatch>(Math.Min(accumulators.Count, maxResults));
+        foreach (var accumulator in accumulators.Values)
+        {
+            KnowledgeGraphBm25SearchResults.AddBoundedMatch(matches, accumulator.ToMatch(), maxResults);
+        }
+
+        return KnowledgeGraphBm25SearchResults.ToArray(matches);
     }
 
     private static KnowledgeGraphRankedSearchMatch OverrideCandidateMetadata(

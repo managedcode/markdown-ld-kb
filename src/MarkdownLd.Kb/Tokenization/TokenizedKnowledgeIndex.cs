@@ -8,7 +8,7 @@ public sealed class TokenizedKnowledgeIndex
     private readonly TokenVectorSpace _vectorSpace;
     private readonly IReadOnlyList<TokenizedKnowledgeSegment> _segments;
     private readonly IReadOnlyDictionary<string, int> _corpusTermFrequency;
-    private readonly IReadOnlyDictionary<int, IReadOnlyList<FuzzyCorpusTerm>> _corpusTermsByLength;
+    private readonly IReadOnlyDictionary<int, FuzzyCorpusTerm[]> _corpusTermsByLength;
 
     internal TokenizedKnowledgeIndex(
         TokenVectorizer vectorizer,
@@ -139,7 +139,7 @@ public sealed class TokenizedKnowledgeIndex
         return frequencies;
     }
 
-    private static IReadOnlyDictionary<int, IReadOnlyList<FuzzyCorpusTerm>> CreateCorpusTermsByLength(
+    private static IReadOnlyDictionary<int, FuzzyCorpusTerm[]> CreateCorpusTermsByLength(
         IReadOnlyDictionary<string, int> corpusTermFrequency)
     {
         var termsByLength = new Dictionary<int, List<FuzzyCorpusTerm>>();
@@ -154,7 +154,7 @@ public sealed class TokenizedKnowledgeIndex
             terms.Add(new FuzzyCorpusTerm(pair.Key, pair.Value));
         }
 
-        var result = new Dictionary<int, IReadOnlyList<FuzzyCorpusTerm>>(termsByLength.Count);
+        var result = new Dictionary<int, FuzzyCorpusTerm[]>(termsByLength.Count);
         foreach (var pair in termsByLength)
         {
             pair.Value.Sort(CompareCorpusTerms);

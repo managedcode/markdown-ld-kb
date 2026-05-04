@@ -53,16 +53,16 @@ internal static class KnowledgeGraphBm25Search
     }
 
     private static KnowledgeGraphBm25TermStatistics CreateTermStatistics(
-        IReadOnlyList<Bm25Document> documents,
-        IReadOnlyList<string> queryTerms,
+        Bm25Document[] documents,
+        string[] queryTerms,
         KnowledgeGraphFuzzyTokenMatchingOptions fuzzyOptions)
     {
-        var statistics = KnowledgeGraphBm25TermStatistics.Rent(documents.Count, queryTerms.Count);
-        for (var termIndex = 0; termIndex < queryTerms.Count; termIndex++)
+        var statistics = KnowledgeGraphBm25TermStatistics.Rent(documents.Length, queryTerms.Length);
+        for (var termIndex = 0; termIndex < queryTerms.Length; termIndex++)
         {
             var term = queryTerms[termIndex];
             var matchingDocuments = 0;
-            for (var documentIndex = 0; documentIndex < documents.Count; documentIndex++)
+            for (var documentIndex = 0; documentIndex < documents.Length; documentIndex++)
             {
                 var matched = TryFindTermFrequency(documents[documentIndex], term, fuzzyOptions, out var frequency);
                 statistics.SetTermFrequency(documentIndex, termIndex, matched ? frequency : ZeroConfidence);
@@ -76,22 +76,22 @@ internal static class KnowledgeGraphBm25Search
     }
 
     private static KnowledgeGraphRankedSearchMatch[] CreateMatches(
-        IReadOnlyList<Bm25Document> documents,
-        IReadOnlyList<string> queryTerms,
+        Bm25Document[] documents,
+        string[] queryTerms,
         KnowledgeGraphBm25TermStatistics statistics,
         double averageDocumentLength,
         int maxResults)
     {
-        var matches = new List<KnowledgeGraphRankedSearchMatch>(Math.Min(documents.Count, maxResults));
-        for (var documentIndex = 0; documentIndex < documents.Count; documentIndex++)
+        var matches = new List<KnowledgeGraphRankedSearchMatch>(Math.Min(documents.Length, maxResults));
+        for (var documentIndex = 0; documentIndex < documents.Length; documentIndex++)
         {
             var document = documents[documentIndex];
             var score = ScoreDocument(
                 document,
                 documentIndex,
-                queryTerms.Count,
+                queryTerms.Length,
                 statistics,
-                documents.Count,
+                documents.Length,
                 averageDocumentLength);
             if (score <= ZeroConfidence)
             {

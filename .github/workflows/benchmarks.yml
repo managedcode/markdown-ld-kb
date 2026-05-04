@@ -10,11 +10,27 @@ env:
 
 jobs:
   benchmark:
-    name: BenchmarkDotNet full suite
+    name: BenchmarkDotNet (${{ matrix.suite }})
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: fuzzy-edit-distance
+            filter: '*FuzzyEditDistanceBenchmarks*'
+          - suite: graph-build
+            filter: '*GraphBuildBenchmarks*'
+          - suite: graph-search
+            filter: '*GraphSearchBenchmarks*'
+          - suite: tiktoken-search
+            filter: '*TiktokenSearchBenchmarks*'
+          - suite: graph-persistence
+            filter: '*GraphPersistenceBenchmarks*'
+          - suite: graph-lifecycle
+            filter: '*GraphLifecycleBenchmarks*'
 
     steps:
     - name: Checkout
@@ -33,28 +49,13 @@ jobs:
     - name: Build
       run: dotnet build MarkdownLd.Kb.slnx --configuration Release --no-restore
 
-    - name: Run fuzzy edit-distance benchmarks
-      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*"
-
-    - name: Run graph build benchmarks
-      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphBuildBenchmarks*"
-
-    - name: Run graph search benchmarks
-      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphSearchBenchmarks*"
-
-    - name: Run Tiktoken search benchmarks
-      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenSearchBenchmarks*"
-
-    - name: Run graph persistence benchmarks
-      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphPersistenceBenchmarks*"
-
-    - name: Run graph lifecycle benchmarks
-      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphLifecycleBenchmarks*"
+    - name: Run ${{ matrix.suite }} benchmarks
+      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "${{ matrix.filter }}"
 
     - name: Upload benchmark artifacts
       uses: actions/upload-artifact@v7
       with:
-        name: benchmarkdotnet-results
+        name: benchmarkdotnet-results-${{ matrix.suite }}
         path: artifacts/benchmarks/results
         if-no-files-found: error
         retention-days: 14

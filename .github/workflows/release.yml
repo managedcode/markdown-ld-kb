@@ -74,9 +74,60 @@ jobs:
         path: ${{ env.ARTIFACTS_DIR }}/*.nupkg
         retention-days: 5
 
+  benchmark:
+    name: BenchmarkDotNet (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: fuzzy-edit-distance
+            filter: '*FuzzyEditDistanceBenchmarks*'
+          - suite: graph-build
+            filter: '*GraphBuildBenchmarks*'
+          - suite: graph-search
+            filter: '*GraphSearchBenchmarks*'
+          - suite: tiktoken-search
+            filter: '*TiktokenSearchBenchmarks*'
+          - suite: graph-persistence
+            filter: '*GraphPersistenceBenchmarks*'
+          - suite: graph-lifecycle
+            filter: '*GraphLifecycleBenchmarks*'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        submodules: true
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION }}
+
+    - name: Build
+      run: dotnet build ${{ env.SOLUTION }} --configuration Release --no-restore
+
+    - name: Run ${{ matrix.suite }} benchmarks
+      run: dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "${{ matrix.filter }}"
+
+    - name: Upload benchmark artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: benchmarkdotnet-results-${{ matrix.suite }}
+        path: artifacts/benchmarks/results
+        if-no-files-found: error
+        retention-days: 5
+
   publish-nuget:
     name: Publish to NuGet
-    needs: build
+    needs: [build, benchmark]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:

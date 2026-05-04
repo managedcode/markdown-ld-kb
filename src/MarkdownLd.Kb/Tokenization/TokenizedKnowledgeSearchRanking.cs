@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal static class TokenizedKnowledgeSearchRanking
@@ -82,11 +84,12 @@ internal static class TokenizedKnowledgeSearchRanking
         }
     }
 
-    private static int FindInsertIndex<T>(IReadOnlyList<T> candidates, T candidate, Comparison<T> comparison)
+    private static int FindInsertIndex<T>(List<T> candidates, T candidate, Comparison<T> comparison)
     {
-        for (var index = 0; index < candidates.Count; index++)
+        var candidateSpan = CollectionsMarshal.AsSpan(candidates);
+        for (var index = 0; index < candidateSpan.Length; index++)
         {
-            if (comparison(candidate, candidates[index]) < 0)
+            if (comparison(candidate, candidateSpan[index]) < 0)
             {
                 return index;
             }
