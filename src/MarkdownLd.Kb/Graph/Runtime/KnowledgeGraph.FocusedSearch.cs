@@ -19,7 +19,7 @@ public sealed partial class KnowledgeGraph
             return await SearchFocusedBySchemaAsync(query, effectiveOptions, cancellationToken).ConfigureAwait(false);
         }
 
-        var snapshot = ToSnapshot();
+        var snapshot = ToSemanticSnapshot();
         var nodesById = CreateNodesById(snapshot.Nodes);
         var primary = await ResolvePrimaryMatchesAsync(query, effectiveOptions, nodesById, cancellationToken)
             .ConfigureAwait(false);
@@ -241,12 +241,19 @@ public sealed partial class KnowledgeGraph
     {
         foreach (var edge in snapshot.Edges)
         {
-            if (!primaryIds.Contains(edge.SubjectId) || edge.PredicateLabel != KbRelatedTo)
+            if (edge.PredicateLabel != KbRelatedTo)
             {
                 continue;
             }
 
-            AddMatch(nodesById, matches, edge.ObjectId, KnowledgeGraphFocusedSearchRole.Related, edge.SubjectId, edge.PredicateLabel, 0.9d);
+            if (primaryIds.Contains(edge.SubjectId))
+            {
+                AddMatch(nodesById, matches, edge.ObjectId, KnowledgeGraphFocusedSearchRole.Related, edge.SubjectId, edge.PredicateLabel, 0.9d);
+            }
+            else if (primaryIds.Contains(edge.ObjectId))
+            {
+                AddMatch(nodesById, matches, edge.SubjectId, KnowledgeGraphFocusedSearchRole.Related, edge.ObjectId, edge.PredicateLabel, 0.9d);
+            }
         }
     }
 

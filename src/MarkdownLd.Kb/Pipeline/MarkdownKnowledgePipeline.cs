@@ -6,7 +6,6 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 public sealed partial class MarkdownKnowledgePipeline
 {
     private readonly MarkdownDocumentParser _parser;
-    private readonly KnowledgeFactMerger _factMerger;
     private readonly KnowledgeGraphBuilder _graphBuilder;
     private readonly KnowledgeGraphRuleExtractor _ruleExtractor;
     private readonly KnowledgeSourceDocumentConverter _documentConverter;
@@ -41,7 +40,6 @@ public sealed partial class MarkdownKnowledgePipeline
         var effectiveBaseUri = KnowledgeNaming.NormalizeBaseUri(options.BaseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
         _chunker = options.MarkdownChunker ?? DeterministicSectionMarkdownChunker.Default;
         _parser = new MarkdownDocumentParser(effectiveBaseUri, _chunker, options.ChunkingOptions);
-        _factMerger = new KnowledgeFactMerger(effectiveBaseUri);
         _graphBuilder = new KnowledgeGraphBuilder(effectiveBaseUri, options.DocumentRdfMapping);
         _ruleExtractor = new KnowledgeGraphRuleExtractor(effectiveBaseUri);
         _documentConverter = new KnowledgeSourceDocumentConverter();
@@ -168,20 +166,35 @@ public sealed partial class MarkdownKnowledgePipeline
         var ruleResult = _ruleExtractor.Extract(documents, buildOptions);
         extractionResults.Add(ruleResult.Facts);
 
-        var mergedFacts = _factMerger.Merge(extractionResults.ToArray());
+        var rawFacts = CombineExtractionResults(extractionResults);
         var tokenIndex = effectiveMode == MarkdownKnowledgeExtractionMode.Tiktoken
             ? _tiktokenExtractor!.CreateIndex(tokenResult!.Segments, tokenResult.VectorSpace)
             : null;
-        var graph = _graphBuilder.Build(documents, mergedFacts, buildOptions, tokenIndex);
+        var materialization = _graphBuilder.BuildNormalized(documents, rawFacts, buildOptions, tokenIndex);
+        var graph = materialization.Graph;
         var searchProfile = buildOptions.SchemaSearchProfile ?? _searchProfile;
-        return new MarkdownKnowledgeBuildResult(documents, mergedFacts, graph)
+        return new MarkdownKnowledgeBuildResult(documents, materialization.Facts, graph)
         {
             Contract = graph.CreateContract(
                 _buildProfile?.Name ?? DefaultGraphBuildProfileName,
                 searchProfile,
                 _buildProfile?.ShaclShapesTurtle),
             ExtractionMode = effectiveMode,
-            Diagnostics = CreateDiagnostics(effectiveMode).Concat(ruleResult.Diagnostics).ToArray(),
+            Diagnostics = CreateDiagnostics(effectiveMode)
+                .Concat(ruleResult.Diagnostics)
+                .Concat(materialization.Normalization.Warnings.Select(static warning => warning.Message))
+                .ToArray(),
+            Normalization = materialization.Normalization,
+        };
+    }
+
+    private static KnowledgeExtractionResult CombineExtractionResults(
+        IReadOnlyList<KnowledgeExtractionResult> results)
+    {
+        return new KnowledgeExtractionResult
+        {
+            Entities = results.SelectMany(static result => result.Entities).ToList(),
+            Assertions = results.SelectMany(static result => result.Assertions).ToList(),
         };
     }
 

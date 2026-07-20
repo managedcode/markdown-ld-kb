@@ -4,16 +4,22 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 {
-    private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
+    private readonly KnowledgeFactCanonicalizer _canonicalizer = new(baseUri);
 
     public KnowledgeExtractionResult Merge(params KnowledgeExtractionResult[] results)
     {
+        return MergeWithReport(results).Facts;
+    }
+
+    internal KnowledgeFactMergeResult MergeWithReport(params KnowledgeExtractionResult[] results)
+    {
         ArgumentNullException.ThrowIfNull(results);
 
-        var entities = new Dictionary<string, KnowledgeEntityFact>(StringComparer.OrdinalIgnoreCase);
-        var assertions = new Dictionary<string, KnowledgeAssertionFact>(StringComparer.OrdinalIgnoreCase);
+        var entities = new Dictionary<string, KnowledgeEntityFact>(StringComparer.Ordinal);
+        var assertions = new Dictionary<(string SubjectId, string PredicateId, string ObjectId), KnowledgeAssertionFact>();
         var aliases = new KnowledgeFactAliasIndex();
         var pendingAssertions = new List<KnowledgeAssertionFact>();
+        var warnings = new List<KnowledgeGraphNormalizationWarning>();
 
         foreach (var result in results)
         {
@@ -21,7 +27,25 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 
             foreach (var entity in result.Entities)
             {
-                UpsertEntity(entities, aliases, CanonicalizeEntity(entity));
+                var canonical = _canonicalizer.CanonicalizeEntity(entity);
+                if (!KnowledgeFactCanonicalizer.IsValidEntity(canonical))
+                {
+                    warnings.Add(KnowledgeGraphNormalizationWarningFactory.CreateForEntity(
+                        KnowledgeGraphNormalizationWarningCode.InvalidNodeRemoved,
+                        canonical));
+                    continue;
+                }
+
+                if (canonical.Confidence > FullConfidence)
+                {
+                    warnings.Add(KnowledgeGraphNormalizationWarningFactory.CreateForEntity(
+                        KnowledgeGraphNormalizationWarningCode.ConfidenceNormalized,
+                        canonical));
+                    canonical = canonical with { Confidence = FullConfidence };
+                }
+
+                var normalized = KnowledgeGraphEntityRelationshipNormalizer.Normalize([canonical], warnings).Single();
+                UpsertEntity(entities, aliases, normalized);
             }
 
             pendingAssertions.AddRange(result.Assertions);
@@ -29,75 +53,38 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
 
         foreach (var assertion in pendingAssertions)
         {
-            var canonical = RewriteAssertionAliases(CanonicalizeAssertion(assertion), aliases.EntityAliases);
-            if (IsValidAssertion(canonical))
+            if (KnowledgeFactCanonicalizer.HasMalformedAbsoluteIdentifier(assertion.SubjectId) ||
+                KnowledgeFactCanonicalizer.HasMalformedAbsoluteIdentifier(assertion.ObjectId))
             {
-                UpsertAssertion(assertions, canonical);
+                warnings.Add(KnowledgeGraphNormalizationWarningFactory.Create(
+                    KnowledgeGraphNormalizationWarningCode.InvalidEdgeRemoved,
+                    assertion));
+                continue;
+            }
+
+            var canonical = RewriteAssertionAliases(_canonicalizer.CanonicalizeAssertion(assertion), aliases.EntityAliases);
+            if (KnowledgeFactCanonicalizer.IsValidAssertion(canonical))
+            {
+                UpsertAssertion(assertions, canonical, warnings);
+            }
+            else
+            {
+                warnings.Add(KnowledgeGraphNormalizationWarningFactory.Create(
+                    KnowledgeGraphNormalizationWarningCode.InvalidEdgeRemoved,
+                    canonical));
             }
         }
 
-        return new KnowledgeExtractionResult
+        var normalizedEntities = KnowledgeGraphEntityRelationshipNormalizer.Normalize(
+            entities.Values.ToList(),
+            warnings);
+        var facts = new KnowledgeExtractionResult
         {
-            Entities = entities.Values.OrderBy(entity => entity.Label, StringComparer.OrdinalIgnoreCase).ToList(),
-            Assertions = assertions.Values
-                .OrderBy(assertion => assertion.SubjectId, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(assertion => assertion.Predicate, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(assertion => assertion.ObjectId, StringComparer.OrdinalIgnoreCase)
-                .ToList(),
+            Entities = normalizedEntities.OrderBy(entity => entity.Label, StringComparer.OrdinalIgnoreCase).ToList(),
+            Assertions = assertions.Values.ToList(),
         };
-    }
 
-    private KnowledgeEntityFact CanonicalizeEntity(KnowledgeEntityFact entity)
-    {
-        var label = entity.Label.Trim();
-        var canonicalId = CanonicalizeNodeId(entity.Id ?? label);
-        return entity with
-        {
-            Id = canonicalId,
-            Label = label,
-            Type = string.IsNullOrWhiteSpace(entity.Type) ? DefaultSchemaThing : entity.Type.Trim(),
-            SameAs = entity.SameAs.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-            Source = entity.Source,
-            Sources = KnowledgeFactSourceCollector.MergeEntitySources(entity),
-        };
-    }
-
-    private KnowledgeAssertionFact CanonicalizeAssertion(KnowledgeAssertionFact assertion)
-    {
-        return assertion with
-        {
-            SubjectId = CanonicalizeNodeId(assertion.SubjectId),
-            ObjectId = CanonicalizeNodeId(assertion.ObjectId),
-            Predicate = KnowledgeNaming.NormalizePredicate(assertion.Predicate),
-            Sources = KnowledgeFactSourceCollector.MergeAssertionSources(assertion),
-        };
-    }
-
-    private string CanonicalizeNodeId(string nodeId)
-    {
-        if (string.IsNullOrWhiteSpace(nodeId))
-        {
-            return nodeId;
-        }
-
-        if (Uri.TryCreate(nodeId, UriKind.Absolute, out var absolute))
-        {
-            return absolute.AbsoluteUri;
-        }
-
-        if (nodeId.StartsWith(UriSchemePrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return nodeId;
-        }
-
-        return KnowledgeNaming.CreateEntityId(_baseUri, nodeId);
-    }
-
-    private static bool IsValidAssertion(KnowledgeAssertionFact assertion)
-    {
-        return !string.IsNullOrWhiteSpace(assertion.SubjectId) &&
-               !string.IsNullOrWhiteSpace(assertion.Predicate) &&
-               !string.IsNullOrWhiteSpace(assertion.ObjectId);
+        return new KnowledgeFactMergeResult(facts, warnings);
     }
 
     private static KnowledgeAssertionFact RewriteAssertionAliases(
@@ -142,7 +129,7 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
         {
             Label = existing.Label.Length >= entity.Label.Length ? existing.Label : entity.Label,
             Type = KnowledgeFactTypeSelector.PreferHigherPriority(existing.Type, entity.Type),
-            SameAs = existing.SameAs.Concat(entity.SameAs).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            SameAs = existing.SameAs.Concat(entity.SameAs).ToList(),
             Confidence = Math.Max(existing.Confidence, entity.Confidence),
             Source = string.IsNullOrWhiteSpace(existing.Source) ? entity.Source : existing.Source,
             Sources = KnowledgeFactSourceCollector.MergeEntitySources(existing, entity),
@@ -151,19 +138,26 @@ public sealed class KnowledgeFactMerger(Uri? baseUri = null)
         aliases.Index(key, entity);
     }
 
-    private static void UpsertAssertion(IDictionary<string, KnowledgeAssertionFact> assertions, KnowledgeAssertionFact assertion)
+    private static void UpsertAssertion(
+        IDictionary<(string SubjectId, string PredicateId, string ObjectId), KnowledgeAssertionFact> assertions,
+        KnowledgeAssertionFact assertion,
+        ICollection<KnowledgeGraphNormalizationWarning> warnings)
     {
-        var key = assertion.SubjectId + AssertionKeySeparator + assertion.Predicate + AssertionKeySeparator + assertion.ObjectId;
+        var predicateId = KnowledgeGraphPredicateResolver.Resolve(assertion.Predicate)?.AbsoluteUri ?? assertion.Predicate;
+        var key = (assertion.SubjectId, predicateId, assertion.ObjectId);
         if (!assertions.TryGetValue(key, out var existing))
         {
             assertions[key] = assertion;
             return;
         }
 
+        warnings.Add(KnowledgeGraphNormalizationWarningFactory.Create(
+            KnowledgeGraphNormalizationWarningCode.DuplicateEdgeRemoved,
+            assertion));
         assertions[key] = existing with
         {
             Confidence = Math.Max(existing.Confidence, assertion.Confidence),
-            Source = string.IsNullOrWhiteSpace(existing.Source) ? assertion.Source : existing.Source,
+            Source = KnowledgeFactSourceCollector.SelectPrimaryAssertionSource(existing, assertion),
             Sources = KnowledgeFactSourceCollector.MergeAssertionSources(existing, assertion),
         };
     }

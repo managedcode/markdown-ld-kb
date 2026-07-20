@@ -9,6 +9,7 @@ public sealed partial class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentR
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
     private readonly DocumentRdfFrontMatterMapper _documentRdfMapper = new(documentRdfMappingOptions);
     private readonly KnowledgeGraphSemanticLayerBuilder _semanticLayerBuilder = new(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
+    private readonly KnowledgeGraphNormalizer _normalizer = new(baseUri);
 
     public KnowledgeGraph Build(
         IReadOnlyList<MarkdownDocument> documents,
@@ -16,6 +17,21 @@ public sealed partial class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentR
         KnowledgeGraphBuildOptions buildOptions,
         TokenizedKnowledgeIndex? tokenIndex = null)
     {
+        return BuildNormalized(documents, facts, buildOptions, tokenIndex).Graph;
+    }
+
+    public KnowledgeGraphMaterializationResult BuildNormalized(
+        IReadOnlyList<MarkdownDocument> documents,
+        KnowledgeExtractionResult facts,
+        KnowledgeGraphBuildOptions buildOptions,
+        TokenizedKnowledgeIndex? tokenIndex = null)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+        ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(buildOptions);
+        ArgumentNullException.ThrowIfNull(buildOptions.Normalization);
+
+        var normalization = _normalizer.Normalize(facts, buildOptions.Normalization);
         var graph = new Graph();
         RegisterNamespaces(graph);
         var context = new KnowledgeGraphMaterializationContext(graph);
@@ -25,18 +41,22 @@ public sealed partial class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentR
             AddDocument(context, document);
         }
 
-        foreach (var entity in facts.Entities)
+        foreach (var entity in normalization.Facts.Entities)
         {
             AddEntity(context, entity);
         }
 
-        foreach (var assertion in facts.Assertions)
+        foreach (var assertion in normalization.Facts.Assertions)
         {
             AddAssertion(context, assertion, buildOptions.IncludeAssertionReification);
         }
 
         _semanticLayerBuilder.Apply(graph, documents, buildOptions);
-        return new KnowledgeGraph(graph, tokenIndex);
+        var knowledgeGraph = new KnowledgeGraph(graph, tokenIndex, normalization.Report);
+        return new KnowledgeGraphMaterializationResult(
+            normalization.Facts,
+            knowledgeGraph,
+            normalization.Report);
     }
 
     private static void RegisterNamespaces(IGraph graph)
@@ -199,7 +219,7 @@ public sealed partial class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentR
         graph.Assert(new Triple(subject, rdfType, context.UriNode(context.ResolveTypeUri(entity.Type))));
         graph.Assert(new Triple(subject, schemaName, context.LiteralNode(entity.Label)));
         graph.Assert(new Triple(subject, kbConfidence, context.ConfidenceLiteral(entity.Confidence)));
-        foreach (var sameAs in entity.SameAs.Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var sameAs in entity.SameAs.Distinct(StringComparer.Ordinal))
         {
             graph.Assert(new Triple(subject, schemaSameAs, context.UriOrLiteralNode(sameAs)));
         }

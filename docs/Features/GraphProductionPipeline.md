@@ -198,7 +198,7 @@ foreach (var changedPath in changeSet.ChangedPaths)
 
 The planner uses the same path, canonical URI, and content fingerprint semantics as `BuildIncrementalAsync`; it does not introduce a database, background indexer, or provider dependency.
 
-Entity and assertion de-duplication happen before graph materialization. Entities merge through shared `schema:sameAs` targets, including direct-ID aliases to those targets, and duplicate assertions preserve all source provenance so search evidence and cited answers can choose the best supporting Markdown source.
+Entity and assertion normalization happens before graph materialization. Entities merge through shared `schema:sameAs` targets, including direct-ID aliases to those targets; duplicate assertions preserve maximum confidence and all valid source provenance. Invalid nodes/provenance/self-loop edges, reverse `kb:relatedTo` duplicates, and cycle-causing `kb:nextStep` edges are removed with structured warnings, while finite confidence above one is normalized to one. `ToSnapshot()` is the semantic/operator projection; use `ToCompleteSnapshot()` only when retrieval sections, segments, and topics are intentionally required.
 
 ## Presets
 

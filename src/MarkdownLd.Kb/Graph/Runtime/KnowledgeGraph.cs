@@ -15,11 +15,17 @@ public sealed partial class KnowledgeGraph : IDisposable
     private readonly ReaderWriterLockSlim _graphLock = new();
     private TokenizedKnowledgeIndex? _tokenIndex;
 
-    internal KnowledgeGraph(Graph graph, TokenizedKnowledgeIndex? tokenIndex = null)
+    internal KnowledgeGraph(
+        Graph graph,
+        TokenizedKnowledgeIndex? tokenIndex = null,
+        KnowledgeGraphNormalizationReport? normalization = null)
     {
         _graph = graph;
         _tokenIndex = tokenIndex;
+        Normalization = normalization ?? KnowledgeGraphNormalizationReport.Empty;
     }
+
+    public KnowledgeGraphNormalizationReport Normalization { get; }
 
     public bool CanSearchByTokenDistance => _tokenIndex is not null;
 
@@ -116,6 +122,11 @@ public sealed partial class KnowledgeGraph : IDisposable
 
     public KnowledgeGraphSnapshot ToSnapshot()
     {
+        return ToSemanticSnapshot();
+    }
+
+    public KnowledgeGraphSnapshot ToCompleteSnapshot()
+    {
         _graphLock.EnterReadLock();
         try
         {
@@ -129,28 +140,12 @@ public sealed partial class KnowledgeGraph : IDisposable
 
     public string SerializeMermaidFlowchart()
     {
-        _graphLock.EnterReadLock();
-        try
-        {
-            return BuildMermaidFlowchart(CreateGraphSnapshot(_graph.Triples));
-        }
-        finally
-        {
-            _graphLock.ExitReadLock();
-        }
+        return BuildMermaidFlowchart(ToSnapshot());
     }
 
     public string SerializeDotGraph()
     {
-        _graphLock.EnterReadLock();
-        try
-        {
-            return BuildDotGraph(CreateGraphSnapshot(_graph.Triples));
-        }
-        finally
-        {
-            _graphLock.ExitReadLock();
-        }
+        return BuildDotGraph(ToSnapshot());
     }
 
     public string SerializeTurtle()

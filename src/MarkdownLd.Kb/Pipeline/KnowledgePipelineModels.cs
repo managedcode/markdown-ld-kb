@@ -81,6 +81,8 @@ public sealed record MarkdownKnowledgeBuildResult(
 
     public IReadOnlyList<string> Diagnostics { get; init; } = [];
 
+    public KnowledgeGraphNormalizationReport Normalization { get; init; } = KnowledgeGraphNormalizationReport.Empty;
+
     public KnowledgeGraphShaclValidationReport ValidateShacl(string? shapesTurtle = null)
     {
         return Graph.ValidateShacl(shapesTurtle);

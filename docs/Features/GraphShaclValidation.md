@@ -49,14 +49,14 @@ flowchart TB
     Statement -->|"prov:wasDerivedFrom"| Source["source IRI or invalid literal"]
 ```
 
-Invalid caller-authored `sameAs` and provenance values are represented as literals so SHACL can report node-kind violations instead of silently dropping them.
+Extracted and graph-rule `sameAs`, confidence, and provenance values pass through graph normalization before materialization. Invalid edges and provenance are omitted with structured warnings, while finite confidence above one is normalized to one with a warning. SHACL remains the validation boundary for graphs loaded directly from external RDF/JSON-LD and for constraints that normalization does not own.
 
 ## Testing Methodology
 
 Flow tests cover:
 
 - valid Markdown and configured graph rules conform to the default shapes;
-- invalid `schema:sameAs`, provenance, and assertion confidence produce SHACL results;
+- invalid graph-rule `schema:sameAs` and provenance are removed, and confidence above one is normalized, with warnings before SHACL validation;
 - caller-supplied shapes validate the same built graph;
 - sameAs-first entity merge rewrites assertion endpoints before validation.
 

@@ -55,7 +55,7 @@ It mentions SPARQL and JSON-LD.
       "id": "{{ArticleEntityId}}",
       "type": "{{ArticleEntityType}}",
       "label": "{{ChatFlowTitle}}",
-      "sameAs": ["{{ArticleEntitySameAs}}"]
+      "sameAs": ["{{ArticleEntitySameAs}}", "{{ArticleEntitySameAs}}", ""]
     },
     {
       "id": "{{SparqlEntityId}}",
@@ -138,6 +138,14 @@ ASK WHERE {
 
         var graphHasChatFacts = await result.Graph.ExecuteAskAsync(ChatFlowAskQuery);
         graphHasChatFacts.ShouldBeTrue();
+        result.Normalization.Warnings.Select(static warning => warning.Code)
+            .ShouldContain(KnowledgeGraphNormalizationWarningCode.DuplicateEdgeRemoved);
+        result.Normalization.Warnings.Select(static warning => warning.Code)
+            .ShouldContain(KnowledgeGraphNormalizationWarningCode.InvalidEdgeRemoved);
+        result.Facts.Assertions.Single(assertion =>
+            assertion.SubjectId == ChatFlowDocumentId &&
+            assertion.Predicate == MentionsPredicate &&
+            assertion.ObjectId == ArticleEntityId).Confidence.ShouldBe(0.91d);
 
         var search = await result.Graph.SearchAsync(ChatFlowSearchTerm);
         search.Rows.Any(row =>

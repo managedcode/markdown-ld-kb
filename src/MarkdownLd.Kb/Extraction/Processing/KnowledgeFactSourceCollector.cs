@@ -8,6 +8,7 @@ internal static class KnowledgeFactSourceCollector
             .SelectMany(EnumerateEntitySources)
             .Where(static source => !string.IsNullOrWhiteSpace(source))
             .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
     }
 
@@ -17,7 +18,17 @@ internal static class KnowledgeFactSourceCollector
             .SelectMany(EnumerateAssertionSources)
             .Where(static source => !string.IsNullOrWhiteSpace(source))
             .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
+    }
+
+    public static string SelectPrimaryAssertionSource(params KnowledgeAssertionFact[] assertions)
+    {
+        return assertions
+            .SelectMany(EnumerateAssertionSources)
+            .Where(static source => !string.IsNullOrWhiteSpace(source))
+            .Order(StringComparer.Ordinal)
+            .FirstOrDefault() ?? string.Empty;
     }
 
     public static IEnumerable<string> EnumerateEntitySources(KnowledgeEntityFact entity)

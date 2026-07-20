@@ -72,42 +72,7 @@ internal sealed class KnowledgeGraphMaterializationContext(Graph graph)
 
     private static Uri? ResolvePredicate(string predicate)
     {
-        if (predicate.Contains(':', StringComparison.Ordinal))
-        {
-            var separatorIndex = predicate.IndexOf(':');
-            var prefix = predicate[..separatorIndex];
-            var local = predicate[(separatorIndex + 1)..];
-            return prefix.ToLowerInvariant() switch
-            {
-                SchemaPrefix => new Uri(SchemaNamespaceText + local),
-                KbPrefix => new Uri(KbNamespaceText + local),
-                ProvPrefix => new Uri(ProvNamespaceText + local),
-                RdfPrefix => new Uri(RdfNamespaceText + local),
-                RdfsPrefix => new Uri(RdfsNamespaceText + local),
-                OwlPrefix => new Uri(OwlNamespaceText + local),
-                SkosPrefix => new Uri(SkosNamespaceText + local),
-                XsdPrefix => new Uri(XsdNamespaceText + local),
-                _ => Uri.TryCreate(predicate, UriKind.Absolute, out var prefixedAbsolute)
-                    ? prefixedAbsolute
-                    : null,
-            };
-        }
-
-        if (Uri.TryCreate(predicate, UriKind.Absolute, out var absolute))
-        {
-            return absolute;
-        }
-
-        return predicate.ToLowerInvariant() switch
-        {
-            MentionPredicateKey => SchemaMentionsUri,
-            AboutPredicateKey => SchemaAboutUri,
-            AuthorPredicateKey => SchemaAuthorUri,
-            CreatorPredicateKey => SchemaCreatorUri,
-            HasPartPredicateKey => SchemaHasPartUri,
-            SameAsPredicateKey => SchemaSameAsUri,
-            _ => null,
-        };
+        return KnowledgeGraphPredicateResolver.Resolve(predicate);
     }
 
     private static Uri NormalizeTypeUri(string type)

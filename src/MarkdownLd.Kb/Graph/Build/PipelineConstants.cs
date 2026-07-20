@@ -16,6 +16,7 @@ internal static partial class PipelineConstants
     internal const string NoExtractorDiagnostic = "No fact extractor was selected. Connect an IChatClient or set ExtractionMode to Tiktoken.";
     internal const string MissingChatClientMessage = "ChatClient extraction mode requires an IChatClient.";
     internal const string TokenDistanceSearchUnavailableMessage = "Token distance search requires a graph built with Tiktoken extraction mode.";
+    internal const string CycleSearchPredicateInvalidMessagePrefix = "Cycle search predicate could not be resolved: ";
     internal const string SemanticSearchRequiresIndexMessage = "Semantic search requires a semantic index built from an embedding generator.";
     internal const string SemanticSearchEmbeddingCountMismatchMessage = "Embedding generation returned an unexpected result count.";
     internal const string ReciprocalRankAccumulatorEmptyMessage = "Reciprocal rank fusion accumulator has no match.";

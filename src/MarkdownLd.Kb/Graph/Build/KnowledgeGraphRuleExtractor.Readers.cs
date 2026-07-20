@@ -159,16 +159,12 @@ internal sealed partial class KnowledgeGraphRuleExtractor
             {
                 foreach (var item in list)
                 {
-                    var text = item?.ToString()?.Trim();
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        yield return text;
-                    }
+                    yield return item?.ToString()?.Trim() ?? string.Empty;
                 }
             }
-            else if (!string.IsNullOrWhiteSpace(raw?.ToString()))
+            else
             {
-                yield return raw.ToString()!.Trim();
+                yield return raw?.ToString()?.Trim() ?? string.Empty;
             }
         }
     }

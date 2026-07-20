@@ -8,6 +8,8 @@ public sealed record KnowledgeGraphBuildOptions
 
     public bool IncludeAssertionReification { get; init; }
 
+    public KnowledgeGraphNormalizationOptions Normalization { get; init; } = KnowledgeGraphNormalizationOptions.Default;
+
     public KnowledgeGraphSemanticLayerOptions SemanticLayers { get; init; } = KnowledgeGraphSemanticLayerOptions.Default;
 
     public KnowledgeGraphSchemaSearchProfile? SchemaSearchProfile { get; init; }

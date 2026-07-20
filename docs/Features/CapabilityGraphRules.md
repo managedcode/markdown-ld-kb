@@ -14,9 +14,10 @@ flowchart LR
     FrontMatter --> Rules["KnowledgeGraphRuleExtractor"]
     Rules --> RuleFacts["Entity and edge facts"]
     Extraction --> Facts["Extraction facts"]
-    RuleFacts --> Merge["KnowledgeFactMerger"]
-    Facts --> Merge
-    Merge --> Graph["KnowledgeGraph"]
+    RuleFacts --> Normalize["KnowledgeGraphNormalizer"]
+    Facts --> Normalize
+    Normalize --> Graph["KnowledgeGraph"]
+    Normalize --> Warnings["Structured warnings"]
     Graph --> Focused["SearchFocusedAsync"]
     Focused --> Primary["Primary matches"]
     Focused --> Related["Related matches"]
@@ -49,6 +50,8 @@ Rule values can be strings or maps. Strings become node labels. Maps can use `id
 
 Malformed caller-authored rule entries are skipped with caller-visible build diagnostics. The pipeline reports invalid shapes, missing predicates, unsupported predicates, missing objects, and blank node references in `MarkdownKnowledgeBuildResult.Diagnostics` instead of silently dropping them.
 
+Valid-looking rules still pass through graph normalization. Exact or reverse-symmetric duplicates, self-loops, malformed endpoints, and cycle-causing `kb:nextStep` edges are removed with typed `MarkdownKnowledgeBuildResult.Normalization` warnings. The default graph snapshot is semantic/operator-safe and excludes Tiktoken retrieval internals.
+
 ## Test Matrix
 
 | Case | Expected behavior |
@@ -62,5 +65,5 @@ Malformed caller-authored rule entries are skipped with caller-visible build dia
 
 ## Verification
 
-- `dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --treenode-filter "/*/*/*/Capability_graph_front_matter_builds_focused_search_with_related_and_next_step_results" --no-progress`
+- `dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --treenode-filter "/*/*/CapabilityGraphFlowTests/*"`
 - `dotnet test --solution MarkdownLd.Kb.slnx --configuration Release`

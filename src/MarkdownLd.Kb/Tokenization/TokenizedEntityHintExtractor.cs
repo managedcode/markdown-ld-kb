@@ -110,17 +110,11 @@ internal sealed class TokenizedEntityHintExtractor
             return [];
         }
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var strings = new List<string>();
         foreach (var item in ReadSequence(value))
         {
             var text = ConvertFrontMatterString(item);
-            if (string.IsNullOrWhiteSpace(text) || !seen.Add(text))
-            {
-                continue;
-            }
-
-            strings.Add(text);
+            strings.Add(text ?? string.Empty);
         }
 
         return strings.ToArray();

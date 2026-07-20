@@ -28,7 +28,7 @@ public sealed class GraphShaclValidationFlowTests
     }
 
     [Test]
-    public async Task Default_SHACL_shapes_report_invalid_assertion_confidence_and_sameAs()
+    public async Task Normalization_removes_invalid_sameAs_confidence_and_provenance_before_SHACL_validation()
     {
         var pipeline = new MarkdownKnowledgePipeline(BaseUri);
         var result = await pipeline.BuildAsync(
@@ -63,10 +63,15 @@ public sealed class GraphShaclValidationFlowTests
 
         var report = result.Graph.ValidateShacl();
 
-        report.Conforms.ShouldBeFalse();
-        report.Results.Select(static issue => issue.Message).ShouldContain("schema:sameAs values must be IRIs.");
-        report.Results.Select(static issue => issue.Message).ShouldContain("kb:confidence must be a decimal from 0 through 1.");
-        report.Results.Select(static issue => issue.Message).ShouldContain("prov:wasDerivedFrom values must be IRIs.");
+        result.Normalization.Warnings.Select(static warning => warning.Code)
+            .ShouldContain(KnowledgeGraphNormalizationWarningCode.InvalidEdgeRemoved);
+        result.Normalization.Warnings.Select(static warning => warning.Code)
+            .ShouldContain(KnowledgeGraphNormalizationWarningCode.InvalidProvenanceRemoved);
+        result.Normalization.Warnings.Select(static warning => warning.Code)
+            .ShouldContain(KnowledgeGraphNormalizationWarningCode.ConfidenceNormalized);
+        report.Results.Select(static issue => issue.Message).ShouldNotContain("schema:sameAs values must be IRIs.");
+        report.Results.Select(static issue => issue.Message).ShouldNotContain("kb:confidence must be a decimal from 0 through 1.");
+        report.Results.Select(static issue => issue.Message).ShouldNotContain("prov:wasDerivedFrom values must be IRIs.");
 
         var assertionMetadataExists = await result.Graph.ExecuteAskAsync("""
 PREFIX kb: <urn:managedcode:markdown-ld-kb:vocab:>
@@ -77,7 +82,7 @@ ASK WHERE {
     rdf:subject <https://kb.example/tools/shacl-source/> ;
     rdf:predicate kb:relatedTo ;
     rdf:object <https://kb.example/tools/shacl-target/> ;
-    kb:confidence "1.25"^^xsd:decimal .
+    kb:confidence "1"^^xsd:decimal .
 }
 """);
         assertionMetadataExists.ShouldBeTrue();

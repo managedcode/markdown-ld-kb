@@ -36,6 +36,8 @@ public sealed class MarkdownKnowledgeBankBuild
 
     public IReadOnlyList<string> Diagnostics => Result.Diagnostics;
 
+    public KnowledgeGraphNormalizationReport Normalization => Result.Normalization;
+
     public KnowledgeGraphSemanticIndex? SemanticIndex { get; private set; }
 
     public KnowledgeGraphShaclValidationReport ValidateShacl(string? shapesTurtle = null)

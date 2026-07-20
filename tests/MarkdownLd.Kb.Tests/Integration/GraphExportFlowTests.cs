@@ -49,7 +49,8 @@ RDF --sameas--> https://www.w3.org/RDF/
             new MarkdownSourceDocument(ExportPath, ExportMarkdown),
         ]);
 
-        var snapshot = result.Graph.ToSnapshot();
+        var snapshot = result.Graph.ToCompleteSnapshot();
+        var semanticSnapshot = result.Graph.ToSnapshot();
 
         snapshot.Nodes.ShouldContain(node =>
             node.Id == GraphExportDocumentId &&
@@ -67,6 +68,8 @@ RDF --sameas--> https://www.w3.org/RDF/
             edge.PredicateId == SchemaMentionsPredicateId &&
             edge.PredicateLabel == SchemaMentionsPredicateLabel &&
             edge.ObjectId == rdfSegment.Id);
+        semanticSnapshot.Nodes.ShouldNotContain(node =>
+            node.Id.StartsWith(TokenSegmentIdPrefix, StringComparison.Ordinal));
 
         var mermaid = result.Graph.SerializeMermaidFlowchart();
         mermaid.ShouldContain(MermaidHeader);

@@ -183,7 +183,10 @@ internal static class MarkdownFrontMatterParser
         return values.TryGetValue(key, out var value) ? ConvertToString(value) : null;
     }
 
-    private static IReadOnlyList<string> ReadStringList(IReadOnlyDictionary<string, object?> values, string key)
+    private static IReadOnlyList<string> ReadStringList(
+        IReadOnlyDictionary<string, object?> values,
+        string key,
+        StringComparer? comparer = null)
     {
         if (!values.TryGetValue(key, out var value) || value is null)
         {
@@ -194,7 +197,7 @@ internal static class MarkdownFrontMatterParser
             .SelectMany(ConvertListItems)
             .Where(item => !string.IsNullOrWhiteSpace(item))
             .Select(item => item!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(comparer ?? StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -242,7 +245,10 @@ internal static class MarkdownFrontMatterParser
 
         if (item is IReadOnlyDictionary<string, object?> dictionary)
         {
-            var sameAs = ReadStringList(dictionary, MarkdownTextConstants.SameAsKey);
+            var sameAs = ReadStringList(
+                dictionary,
+                MarkdownTextConstants.SameAsKey,
+                StringComparer.Ordinal);
             return new MarkdownEntityHint(
                 NormalizeLabel(GetString(dictionary, MarkdownTextConstants.LabelKey) ?? GetString(dictionary, MarkdownTextConstants.NameKey) ?? GetString(dictionary, MarkdownTextConstants.ValueKey) ?? string.Empty),
                 GetString(dictionary, MarkdownTextConstants.TypeKey),

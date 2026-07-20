@@ -63,7 +63,7 @@ internal sealed partial class KnowledgeGraphRuleExtractor(Uri baseUri)
             Id = entity.Id,
             Label = entity.Label,
             Type = entity.Type,
-            SameAs = entity.SameAs.Where(static item => !string.IsNullOrWhiteSpace(item)).ToList(),
+            SameAs = entity.SameAs.ToList(),
             Confidence = entity.Confidence,
             Source = entity.Source,
         });

@@ -30,17 +30,20 @@ flowchart LR
     Mode --> None["None\nmetadata only"]
     Mode --> Chat["ChatClientKnowledgeFactExtractor\nIChatClient"]
     Mode --> Token["Tiktoken token-distance extractor\nMicrosoft.ML.Tokenizers"]
-    None --> Merge["KnowledgeFactMerger\n→ merged KnowledgeExtractionResult"]
+    None --> Merge["KnowledgeFactMerger\n→ canonical facts"]
     Chat --> Merge
     Token --> Merge
-    Merge --> Builder["KnowledgeGraphBuilder\n→ RDF + ontology + SKOS graph"]
+    Merge --> Normalize["KnowledgeGraphNormalizer\n→ clean facts + warnings"]
+    Normalize --> Builder["KnowledgeGraphBuilder\n→ RDF + ontology + SKOS graph"]
     Builder --> Search["SearchBySchemaAsync"]
     Builder --> Ranked["SearchRankedAsync\nGraph / BM25 / Semantic / Hybrid RRF\nDocument-aware via build result"]
     Ranked --> Answer["AnswerAsync\ncited IChatClient answer"]
     Builder --> Sparql["ExecuteSelectAsync\nExecuteAskAsync"]
     Builder --> FederatedSearch["SearchBySchemaFederatedAsync"]
     Builder --> Shacl["ValidateShacl\nSHACL report"]
-    Builder --> Snap["ToSnapshot"]
+    Builder --> Snap["ToSnapshot\nsemantic/operator graph"]
+    Builder --> Complete["ToCompleteSnapshot\nretrieval diagnostics"]
+    Builder --> Cycles["FindCycles\nbounded SCC analysis"]
     Builder --> Diagram["SerializeMermaidFlowchart\nSerializeDotGraph"]
     Builder --> Export["SerializeTurtle\nSerializeJsonLd"]
 ```
@@ -52,7 +55,7 @@ Extraction is explicit:
 - `ChatClient` builds facts only from structured `Microsoft.Extensions.AI.IChatClient` output.
 - `Tiktoken` builds a local corpus graph from Tiktoken token IDs, section/segment structure, explicit front matter entity hints, and local keyphrase topics using `Microsoft.ML.Tokenizers`.
 
-Tiktoken mode is deterministic and network-free. It uses lexical token-distance search rather than semantic embedding search. Its default local weighting is subword TF-IDF; raw term frequency and binary presence are also available. Token-distance search can opt into fuzzy query correction over corpus words before Tiktoken encoding, which helps typo-heavy same-language queries without treating model-specific token IDs as editable text. It creates `schema:DefinedTerm` topic nodes, explicit front matter hint entities, and `schema:hasPart` / `schema:about` / `schema:mentions` edges.
+Tiktoken mode is deterministic and network-free. It uses lexical token-distance search rather than semantic embedding search. Its default local weighting is subword TF-IDF; raw term frequency and binary presence are also available. Token-distance search can opt into fuzzy query correction over corpus words before Tiktoken encoding, which helps typo-heavy same-language queries without treating model-specific token IDs as editable text. It creates `schema:DefinedTerm` topic nodes, explicit front matter hint entities, and `schema:hasPart` / `schema:about` / `schema:mentions` edges. Retrieval-only section, segment, and n-gram topic nodes stay available through `ToCompleteSnapshot()` and RDF serialization, but the default operator projection excludes them.
 
 **Graph outputs:**
 
@@ -62,7 +65,11 @@ Tiktoken mode is deterministic and network-free. It uses lexical token-distance 
 - `MarkdownKnowledgeBankBuild.BuildSemanticIndexAsync(...)` — optional semantic index through `IEmbeddingGenerator<string, Embedding<float>>`
 - `MarkdownKnowledgeBank.PlanChanges(...)` — compare source SHA256 fingerprints and return changed, unchanged, and removed paths before a build
 - `MarkdownKnowledgeBank.EvaluateChunks(...)` — deterministic chunk-size, expected-answer coverage, and quality-sample report
-- `ToSnapshot()` — stable `KnowledgeGraphSnapshot` with `Nodes` and `Edges`
+- `ToSnapshot()` — stable semantic/operator `KnowledgeGraphSnapshot` with retrieval internals removed
+- `ToSemanticSnapshot()` — explicit equivalent of the default semantic projection
+- `ToCompleteSnapshot()` — complete RDF snapshot including Tiktoken retrieval internals
+- `FindCycles(...)` — bounded strongly connected components for selected relationship predicates
+- `MarkdownKnowledgeBuildResult.Normalization` — structured warnings for removed duplicate, invalid, self-loop, symmetric, cycle-causing, invalid-provenance, and invalid-node facts plus normalized confidence
 - `SerializeMermaidFlowchart()` — Mermaid `graph LR` diagram
 - `SerializeDotGraph()` — Graphviz DOT diagram
 - `SerializeTurtle()` — Turtle RDF serialization
@@ -121,13 +128,15 @@ All async methods accept an optional `CancellationToken`.
 | Add AI extraction without provider lock-in | `IChatClient`, `MarkdownKnowledgeExtractionMode.ChatClient` | [Optional AI Extraction](#optional-ai-extraction) |
 | Add optional semantic retrieval | `IEmbeddingGenerator<string, Embedding<float>>` | [Unified API](#unified-api) |
 | Use deterministic local extraction | `MarkdownKnowledgeExtractionMode.Tiktoken` | [Local Tiktoken Extraction](#local-tiktoken-extraction) |
+| Render an operator knowledge graph | `ToSnapshot()` | [Graph Normalization](docs/Features/GraphNormalization.md) |
+| Inspect retrieval internals deliberately | `ToCompleteSnapshot()` | [Graph Normalization](docs/Features/GraphNormalization.md) |
 
 The most important split is local graph search versus federated graph search. `SearchBySchemaAsync` searches one in-memory graph. `SearchBySchemaFederatedAsync` and `ExecuteFederatedSelectAsync` are explicit opt-in federation paths that require allowlisted `SERVICE` endpoints.
 
 ## Install
 
 ```bash
-dotnet add package ManagedCode.MarkdownLd.Kb --version 0.2.6
+dotnet add package ManagedCode.MarkdownLd.Kb --version 0.2.7
 ```
 
 For local repository development:
@@ -1071,7 +1080,7 @@ const string Shapes = """
 var report = result.Graph.ValidateShacl(Shapes);
 ```
 
-Invalid caller-authored `sameAs` or provenance values are kept as RDF literals so the SHACL report can expose the exact violation instead of silently dropping the malformed fact.
+Invalid values loaded directly through RDF/JSON-LD remain available to SHACL so the report can expose the exact violation. Extracted and graph-rule entity `sameAs` values pass through graph normalization first: malformed targets, duplicates, and self-links are removed with caller-visible warnings.
 
 ## Export The Graph
 
@@ -1105,7 +1114,7 @@ internal static class ExportGraphDemo
 }
 ```
 
-`ToSnapshot()` returns a stable object graph with `Nodes` and `Edges` so callers can build their own UI, JSON endpoint, or visualization layer without touching dotNetRDF internals. URI node labels are resolved from `schema:name` when available, so diagram output is readable by default.
+`ToSnapshot()` returns the stable semantic/operator graph used by UI, JSON endpoint, and diagram callers. It removes Tiktoken section, segment, and n-gram topic nodes plus every incident retrieval edge while retaining authored node IDs for relationship navigation. Use `ToCompleteSnapshot()` only for retrieval diagnostics or callers that deliberately need the complete RDF projection. URI node labels are resolved from `schema:name` when available, so diagram output is readable by default.
 
 `SerializeJsonLd()` generates JSON-LD text directly. The explicit `SaveJsonLdToFileAsync`, `SaveJsonLdToStoreAsync`, `LoadJsonLdFromFileAsync`, and `LoadJsonLdFromStoreAsync` helpers force JSON-LD format even when a storage key does not have a `.jsonld` extension. Loaded JSON-LD becomes a normal in-memory `KnowledgeGraph`, so SPARQL and search APIs work the same way as they do on the original graph.
 

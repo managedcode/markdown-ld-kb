@@ -18,6 +18,8 @@ The default Markdig chunker uses a Han, Japanese kana, Korean Hangul, CJK-symbol
 
 Capability graph rules add deterministic caller-authored entities and edges for groups, related nodes, and next-step nodes so applications can build workflow/capability graphs without relying on a flat document-topic graph. `KnowledgeFactMerger` merges sameAs-linked entities even when the shared external target appears as another entity's direct ID, and it preserves multi-source assertion provenance before graph materialization. `KnowledgeGraphBuilder` materializes three additive semantic layers in one graph: instance/document triples, a SKOS concept layer, and repository-owned ontology declarations over `kb:` terms using `dotNetRdf.Ontology` and `dotNetRdf.Skos`.
 
+`KnowledgeGraphNormalizer` is the mandatory materialization boundary. It reports and removes malformed nodes/edges, invalid provenance, exact and symmetric duplicates, entity `schema:sameAs` duplicates/self-loops, assertion self-loops, and cycle-causing `kb:nextStep` edges while preserving the highest confidence and all valid source provenance. Finite confidence above one is normalized with a warning. `KnowledgeGraph.FindCycles` returns bounded strongly connected components for caller-selected predicates. The complete RDF graph still contains Tiktoken retrieval sections, segments, topics, and neighbor edges, but the default `ToSnapshot()` and diagram/search projection are semantic/operator-safe; `ToCompleteSnapshot()` is the explicit retrieval-diagnostics view.
+
 `KnowledgeGraph` exposes explicit runtime adapters for graph-store persistence/load, schema-aware SPARQL search, federated schema-aware SPARQL search, RDFS/SKOS/N3 materialized inference, Lucene-backed full-text indexing, dynamic graph access, and Linked Data Fragments materialization through dotNetRDF. Linked Data Fragments transport stays caller-owned: hosts pass an already configured `HttpClient` when they need custom transport behavior, including clients created through `IHttpClientFactory`, but the core library does not depend on `IHttpClientFactory`. RDF serialization remains repository-owned, while filesystem/blob access is delegated to `ManagedCode.Storage` through `IKnowledgeGraphStore`, `StorageKnowledgeGraphStore`, `FileSystemKnowledgeGraphStore`, and `InMemoryKnowledgeGraphStore`.
 
 Ranked search can use graph-native exact matching, in-memory BM25 lexical ranking, opt-in bounded fuzzy token matching for BM25 typo tolerance with a bit-vector short-token path and dynamic-programming long-token fallback, or an optional semantic adapter over `Microsoft.Extensions.AI.IEmbeddingGenerator<string, Embedding<float>>`. Exact BM25 counts only selected query terms with span-based dictionary lookup, pooled per-query term statistics, and bounded top-N retention; fuzzy BM25 stays opt-in and builds full candidate term dictionaries only when it needs to enumerate typo candidates. Graph-only ranked search uses graph-native labels, descriptions, and related labels. Build-result/facade ranked search and cited answering add parsed Markdown body chunks to document candidates so body-only evidence can be retrieved without storing raw body text in RDF. Hybrid ranked search keeps graph-native results first by default and can opt into reciprocal-rank fusion when callers want rank-fused graph and semantic evidence. The graph remains canonical; semantic hits are fallback or merge inputs rather than the source of truth.
@@ -46,11 +48,12 @@ flowchart LR
     Router --> TokenExtractor["Tiktoken token-distance extractor"]
     Router --> NoExtractor["No fact extractor"]
     Cache --> Router
-    Rules --> Builder
+    Rules --> Normalizer["Fact merge + graph normalizer"]
     Metadata --> Builder
-    ChatExtractor --> Builder["RDF / ontology / SKOS graph builder"]
-    TokenExtractor --> Builder
-    NoExtractor --> Builder
+    ChatExtractor --> Normalizer
+    TokenExtractor --> Normalizer
+    NoExtractor --> Normalizer
+    Normalizer --> Builder["RDF / ontology / SKOS graph builder"]
     Builder --> Graph["In-memory knowledge graph"]
     Graph --> BuildFacade["MarkdownKnowledgeBankBuild"]
     Parser --> Links["Source-relative link resolver"]
@@ -70,6 +73,9 @@ flowchart LR
     Graph --> Serializers["Turtle and JSON-LD serializers"]
     Graph --> NlToSparql["NL-to-SPARQL adapter"]
     Graph --> Merge["Thread-safe graph merge API"]
+    Graph --> Cycles["Bounded SCC cycle analysis"]
+    Graph --> SemanticSnapshot["Default semantic snapshot"]
+    Graph --> CompleteSnapshot["Explicit complete retrieval snapshot"]
     Federated --> LocalFederated["Allowlisted local graph bindings"]
     Federated --> RemoteSparql["Allowlisted remote SPARQL endpoints"]
     LdfSource["Optional Linked Data Fragments source"] --> Ldf["LDF materialization adapter"]
@@ -96,6 +102,7 @@ sequenceDiagram
     participant Cache as IKnowledgeExtractionCache
     participant Chat as IChatClient
     participant Tokenizer as Tiktoken tokenizer
+    participant Normalizer as KnowledgeGraphNormalizer
     participant Graph as KnowledgeGraphBuilder
     participant BuiltGraph as KnowledgeGraph
     participant SchemaSearch as Schema-aware SPARQL search
@@ -140,7 +147,10 @@ sequenceDiagram
         Router-->>Pipeline: No extracted facts and diagnostic
     end
     Router-->>Pipeline: Entities, assertions, optional token index
-    Pipeline->>Graph: Add facts as RDF triples
+    Pipeline->>Normalizer: Merge and normalize facts
+    Normalizer->>Normalizer: Validate, de-duplicate, and break configured cycles
+    Normalizer-->>Pipeline: Clean facts and structured warnings
+    Pipeline->>Graph: Add normalized facts as RDF triples
     Graph->>Graph: Add ontology declarations and SKOS concepts
     Graph-->>Pipeline: In-memory KnowledgeGraph
     Pipeline-->>Bank: MarkdownKnowledgeBuildResult
@@ -398,7 +408,8 @@ flowchart LR
     Merge --> WriteLock["write lock"]
     Search["SearchBySchemaAsync / SearchAsync"] --> ReadLock["read lock"]
     Select["ExecuteSelectAsync / ExecuteAskAsync"] --> ReadLock
-    Snapshot["ToSnapshot"] --> ReadLock
+    Snapshot["ToSnapshot semantic projection"] --> ReadLock
+    CompleteSnapshot["ToCompleteSnapshot retrieval diagnostics"] --> ReadLock
     Diagram["SerializeMermaidFlowchart / SerializeDotGraph"] --> ReadLock
     Serialize["SerializeTurtle / SerializeJsonLd"] --> ReadLock
     WriteLock --> DotNetRdf["dotNetRDF Graph"]
@@ -406,6 +417,29 @@ flowchart LR
 ```
 
 `MergeAsync` snapshots the source graph under that source graph's read lock, then merges the snapshot into the destination graph under the destination graph's write lock. This keeps shared in-memory graph updates safe without adding a server, database, background worker, or hosted graph service.
+
+## Graph Normalization and Projection Boundary
+
+Normalization runs before any extracted or caller-authored assertion is materialized. Exact duplicates are canonicalized by resolved predicate IRI and case-sensitive subject/object IRIs. Reverse `kb:relatedTo` pairs share an unordered identity and retain the first authored direction while merging confidence and provenance. Directed acyclic predicates are considered in descending confidence order; an edge is rejected when its object can already reach its subject. This guarantees an acyclic retained graph but does not claim a globally minimum feedback-edge set, which is an NP-hard optimization problem.
+
+Cycle analysis uses iterative strongly connected component traversal, so it is `O(V + E)` and does not enumerate an exponential number of simple cycles.
+
+```mermaid
+flowchart LR
+    Raw["Raw model, Tiktoken, and rule facts"] --> Merge["KnowledgeFactMerger"]
+    Merge --> Validate["IRI, predicate, confidence, and self-loop validation"]
+    Validate --> Symmetric["Exact and symmetric edge de-duplication"]
+    Symmetric --> Dag["Confidence-first DAG normalization"]
+    Dag --> Clean["Normalized facts"]
+    Dag --> Warnings["KnowledgeGraphNormalizationReport"]
+    Clean --> Builder["KnowledgeGraphBuilder"]
+    Builder --> Complete["Complete RDF graph"]
+    Complete --> Semantic["ToSnapshot / ToSemanticSnapshot"]
+    Complete --> Retrieval["ToCompleteSnapshot"]
+    Complete --> Scc["FindCycles with selected predicates"]
+```
+
+The semantic projection removes Tiktoken-owned `token-section/`, `token-segment/`, and `token-topic/` nodes plus all incident edges. Front-matter entity hints and authored `schema:about`, `schema:mentions`, `kb:relatedTo`, `kb:memberOf`, and `kb:nextStep` relationships remain available with stable subject/object IDs for consumer navigation and highlighting.
 
 ## Upstream Behaviour Mapping
 
@@ -480,6 +514,9 @@ Required first-slice scenarios:
 - Full-text, dynamic, and Linked Data Fragments runtime adapters are covered through public flow tests.
 - `IChatClient` extractor accepts structured extraction output without depending on a provider-specific SDK.
 - Chunk-based `IChatClient` extraction is deterministic in chunk ordering, can reuse optional cache entries, and merges chunk results into a single canonical graph.
+- Graph normalization reports duplicate, invalid, self-loop, symmetric-duplicate, invalid-provenance/node, confidence-normalization, and cycle-causing facts; the resulting fact set and RDF graph remain consistent and acyclic for `kb:nextStep`.
+- Default snapshots and Mermaid/DOT diagrams exclude Tiktoken retrieval internals, while `ToCompleteSnapshot()` and RDF serialization retain the complete retrieval graph for diagnostics and persistence.
+- Cycle analysis returns bounded strongly connected components for selected predicates and ignores literal/blank-node metadata edges.
 - Default no-chat mode emits no extracted facts and reports a diagnostic telling callers to connect `IChatClient` or choose Tiktoken mode.
 - No-match search returns an empty result instead of an error.
 - Semantic-only or hybrid search without a semantic index fails explicitly.

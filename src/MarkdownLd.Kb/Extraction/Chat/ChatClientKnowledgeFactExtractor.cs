@@ -201,7 +201,7 @@ public sealed class ChatClientKnowledgeFactExtractor
             return [];
         }
 
-        var merged = new Dictionary<(string SubjectId, string Predicate, string ObjectId), KnowledgeFactAssertion>();
+        var normalizedAssertions = new List<KnowledgeFactAssertion>(assertions.Count);
 
         foreach (var assertion in assertions)
         {
@@ -221,25 +221,15 @@ public sealed class ChatClientKnowledgeFactExtractor
                 continue;
             }
 
-            var normalized = new KnowledgeFactAssertion(
+            normalizedAssertions.Add(new KnowledgeFactAssertion(
                 subjectId,
                 predicate,
                 objectId,
                 NormalizeConfidence(assertion.Confidence),
-                string.IsNullOrWhiteSpace(assertion.Source) ? request.ChunkSourceUri : assertion.Source.Trim());
-
-            var key = (normalized.SubjectId, normalized.Predicate, normalized.ObjectId);
-            if (merged.TryGetValue(key, out var existing))
-            {
-                merged[key] = existing.Confidence >= normalized.Confidence ? existing : normalized;
-            }
-            else
-            {
-                merged[key] = normalized;
-            }
+                string.IsNullOrWhiteSpace(assertion.Source) ? request.ChunkSourceUri : assertion.Source.Trim()));
         }
 
-        return merged.Values.ToArray();
+        return normalizedAssertions;
     }
 
     private string NormalizeEntityId(string? id, string label)
@@ -266,11 +256,7 @@ public sealed class ChatClientKnowledgeFactExtractor
         }
 
         return sameAs
-            .Select(item => item?.Trim())
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(item => item, StringComparer.Ordinal)
-            .Select(item => item!)
+            .Select(static item => item?.Trim() ?? string.Empty)
             .ToArray();
     }
 
@@ -278,8 +264,6 @@ public sealed class ChatClientKnowledgeFactExtractor
     {
         return (left ?? [])
             .Concat(right ?? [])
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(item => item, StringComparer.Ordinal)
             .ToArray();
     }
 

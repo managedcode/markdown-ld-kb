@@ -2,8 +2,8 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal sealed class KnowledgeFactAliasIndex
 {
-    private readonly Dictionary<string, string> _entityAliases = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _sameAsAliases = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _entityAliases = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _sameAsAliases = new(StringComparer.Ordinal);
 
     public IReadOnlyDictionary<string, string> EntityAliases => _entityAliases;
 
