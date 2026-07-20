@@ -92,6 +92,8 @@ List only the skills this solution actually uses.
 - `test`: `dotnet test --solution MarkdownLd.Kb.slnx --configuration Release`
 - `format`: `dotnet format MarkdownLd.Kb.slnx --verify-no-changes`
 - `coverage`: `dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings"`
+- `outdated packages`: `dotnet package list --outdated`
+- `vulnerable packages`: `dotnet package list --vulnerable --include-transitive`
 
 `.NET` runner policy:
 
@@ -173,6 +175,10 @@ Local `AGENTS.md` files may tighten these values, but they must not loosen them 
   - broader required regressions
 - If `build` is separate from `test`, run `build` before `test`.
 - After tests pass, run `format`, then the final required verification commands.
+- At the end of every task, run `dotnet package list --outdated` and `dotnet package list --vulnerable --include-transitive` from the solution root.
+- Update every outdated direct NuGet dependency to the latest stable version before completion. For a vulnerable transitive package, use `dotnet nuget why` to identify its owner, upgrade the owning direct dependency first, and use a documented safe central transitive pin only when the latest owner still resolves a vulnerable version.
+- A task is not complete while the vulnerability report contains a direct or transitive advisory. Do not suppress or ignore the advisory to make the report green.
+- The final task summary MUST list every NuGet dependency changed as `old version -> new version`, identify any intentional central transitive pin, and state the final outdated and vulnerability scan results.
 - The task is complete only when every planned checklist item is done and all relevant tests are green.
 - Summarize the change, risks, and verification before marking the task complete.
 
