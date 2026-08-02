@@ -878,3 +878,5 @@ Tests/**/LocalModels/
 Apps/**/LocalModels/
 .markitdown
 .quickdup
+*.brainstorm.md
+*.plan.md
