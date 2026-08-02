@@ -28,10 +28,7 @@ internal static class TokenizedKnowledgeFactFactory
             entities.Add(CreateSegmentEntity(segment));
         }
 
-        foreach (var topic in topics)
-        {
-            entities.Add(CreateTopicEntity(topic));
-        }
+        AddTopicEntities(entities, topics);
 
         return new KnowledgeExtractionResult
         {
@@ -86,9 +83,59 @@ internal static class TokenizedKnowledgeFactFactory
             Id = topic.Id,
             Label = topic.Label,
             Type = TokenTopicTypeText,
-            Confidence = topic.Score,
+            Confidence = topic.Confidence,
             Source = topic.DocumentId,
         };
     }
 
+    private static void AddTopicEntities(
+        List<KnowledgeEntityFact> entities,
+        IReadOnlyList<TokenizedKnowledgeTopic> topics)
+    {
+        var indexes = new Dictionary<string, int>(topics.Count, StringComparer.Ordinal);
+        Dictionary<string, HashSet<string>>? sourcesByTopic = null;
+        foreach (var topic in topics)
+        {
+            var candidate = CreateTopicEntity(topic);
+            if (!indexes.TryGetValue(topic.Id, out var index))
+            {
+                indexes.Add(topic.Id, entities.Count);
+                entities.Add(candidate);
+                continue;
+            }
+
+            var existing = entities[index];
+            sourcesByTopic ??= new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            if (!sourcesByTopic.TryGetValue(topic.Id, out var sources))
+            {
+                sources = new HashSet<string>(StringComparer.Ordinal) { existing.Source };
+                sourcesByTopic.Add(topic.Id, sources);
+            }
+
+            sources.Add(candidate.Source);
+            entities[index] = existing with
+            {
+                Label = existing.Label.Length >= candidate.Label.Length ? existing.Label : candidate.Label,
+                Confidence = Math.Max(existing.Confidence, candidate.Confidence),
+                Source = string.IsNullOrWhiteSpace(existing.Source) ? candidate.Source : existing.Source,
+            };
+        }
+
+        if (sourcesByTopic is null)
+        {
+            return;
+        }
+
+        foreach (var pair in sourcesByTopic)
+        {
+            var index = indexes[pair.Key];
+            entities[index] = entities[index] with
+            {
+                Sources = pair.Value
+                    .Where(static source => !string.IsNullOrWhiteSpace(source))
+                    .Order(StringComparer.Ordinal)
+                    .ToList(),
+            };
+        }
+    }
 }

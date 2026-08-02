@@ -23,6 +23,7 @@ Purpose: BenchmarkDotNet performance suite for Markdown-LD Knowledge Bank.
 - build: `(cd ../.. && dotnet build MarkdownLd.Kb.slnx --no-restore)`
 - fuzzy: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*")`
 - graph-build: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphBuildBenchmarks*")`
+- tiktoken-build: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenGraphBuildBenchmarks*")`
 - graph-search: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphSearchBenchmarks*")`
 - tiktoken-search: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenSearchBenchmarks*")`
 - persistence: `(cd ../.. && dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphPersistenceBenchmarks*")`

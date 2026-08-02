@@ -14,10 +14,12 @@ flowchart LR
     Corpus --> Pipeline["MarkdownKnowledgePipeline"]
     Runner --> Fuzzy["bounded fuzzy distance"]
     Runner --> Graph["ranked graph and BM25 search"]
+    Runner --> TokenBuild["Tiktoken repeated-catalog build"]
     Runner --> Tokens["Tiktoken token-distance search"]
     Runner --> Federation["local federated SPARQL binding"]
     Runner --> Persistence["snapshot, serialization, save, load, export"]
     Pipeline --> Graph
+    Pipeline --> TokenBuild
     Pipeline --> Tokens
     Graph --> Persistence
 ```
@@ -30,6 +32,7 @@ The benchmark project is `benchmarks/MarkdownLd.Kb.Benchmarks`. It references th
 | --- | --- |
 | `FuzzyEditDistanceBenchmarks` | Bounded bit-vector/banded edit distance against a naive Levenshtein baseline for short typo and long affix-heavy tokens. |
 | `GraphBuildBenchmarks` | Markdown source to in-memory graph build time across named workload profiles. |
+| `TiktokenGraphBuildBenchmarks` | Full Tiktoken extraction, related-segment selection, normalization, and RDF materialization for a repeated catalog corpus. |
 | `GraphSearchBenchmarks` | Graph-ranked search, BM25, BM25 fuzzy matching, schema search, focused search, and local federated schema search. |
 | `TiktokenSearchBenchmarks` | Exact token-distance search and fuzzy query correction over long-document and multilingual token-heavy graphs. |
 | `GraphPersistenceBenchmarks` | Snapshot creation, Turtle/JSON-LD serialization, Mermaid/DOT export, in-memory store save/load, and file save/load. |
@@ -45,6 +48,7 @@ Benchmark parameters use named workload profiles instead of raw document-count r
 | `LongDocuments` | 80 long recovery playbooks with repeated sections. | Long body and chunk-scan pressure without pretending the main variable is file count. |
 | `LargeCorpus` | 1000 compact documents. | Scale pressure for graph build, snapshot, serialization, save, and load paths. |
 | `TokenizedMultilingual` | 250 token-heavy multilingual/CJK documents. | Tiktoken and fuzzy query-correction behaviour on non-trivial tokenization input. |
+| `RepeatedCatalog` | 48 catalog-like documents with deliberately repeated headings and authorization/revision phrases. | Detects redundant topic facts, symmetric neighbor pairs, unbounded confidence warnings, and graph-build allocation regressions. |
 | `FederatedRunbooks` | 250 SPARQL/service/runbook documents. | Local federated schema-search and service-binding query plans. |
 
 ## Commands
@@ -53,6 +57,7 @@ Benchmark parameters use named workload profiles instead of raw document-count r
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --list flat
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*FuzzyEditDistanceBenchmarks*"
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphBuildBenchmarks*"
+dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenGraphBuildBenchmarks*"
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphSearchBenchmarks*"
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*TiktokenSearchBenchmarks*"
 dotnet run --project benchmarks/MarkdownLd.Kb.Benchmarks -c Release -- --filter "*GraphPersistenceBenchmarks*"
@@ -73,7 +78,7 @@ The benchmark configuration is intentionally diagnostic, not just a stopwatch. T
 | Benchmark shape | corpus profile, query scenario, runtime, platform, JIT, job, iteration counts | Keeps runs explainable and comparable without turning local numbers into a cross-machine contract. |
 | Optional profiler traces | EventPipe CPU, GC, or JIT files | Gives the next level of evidence when a benchmark result points at a hot path. |
 
-The build/test/pack validation job stays separate from performance measurement. The PR validation workflow, release workflow, and dedicated benchmark workflow run the complete benchmark suite: fuzzy edit distance, graph build, graph search, Tiktoken search, graph persistence, and graph lifecycle. They run suites as parallel matrix jobs and upload `artifacts/benchmarks/results` as suite-specific `benchmarkdotnet-results-*` artifacts so CI keeps the same performance evidence shape without serializing every suite into one long job.
+The build/test/pack validation job stays separate from performance measurement. The PR validation workflow, release workflow, and dedicated benchmark workflow run the complete benchmark suite: fuzzy edit distance, graph build, Tiktoken graph build, graph search, Tiktoken search, graph persistence, and graph lifecycle. They run suites as parallel matrix jobs and upload `artifacts/benchmarks/results` as suite-specific `benchmarkdotnet-results-*` artifacts so CI keeps the same performance evidence shape without serializing every suite into one long job.
 
 Optional EventPipe profiling is opt-in:
 
@@ -86,6 +91,8 @@ MARKDOWN_LD_KB_BENCHMARK_PROFILE=jit dotnet run --project benchmarks/MarkdownLd.
 ## Current Results
 
 On May 4, 2026, a full local BenchmarkDotNet run on Apple M2 Pro with .NET 10.0.5 wrote Markdown, CSV, and JSON reports to `artifacts/benchmarks/results`.
+
+That historical run predates `TiktokenGraphBuildBenchmarks`; the new suite is intentionally not backfilled with synthetic numbers and will establish its baseline on the next measured run.
 
 | Suite | Job | Cases | Result files |
 | --- | --- | ---: | --- |

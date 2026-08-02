@@ -19,15 +19,15 @@
     <PackageVersion Include="ManagedCode.Storage.Core" Version="10.0.6" />
     <PackageVersion Include="ManagedCode.Storage.FileSystem" Version="10.0.6" />
     <PackageVersion Include="ManagedCode.Storage.VirtualFileSystem" Version="10.0.6" />
-    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.0" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.3" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.3" />
     <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.10" />
     <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
     <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.9.0" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
-    <PackageVersion Include="TUnit" Version="1.61.15" />
+    <PackageVersion Include="TUnit" Version="1.63.0" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 </Project>

@@ -33,14 +33,15 @@ internal static class BenchmarkCorpusFactory
     }
 
     public static MarkdownKnowledgeBuildResult BuildTiktoken(
-        IReadOnlyList<MarkdownSourceDocument> sources)
+        IReadOnlyList<MarkdownSourceDocument> sources,
+        bool buildAutoRelatedSegmentRelations = false)
     {
         var pipeline = new MarkdownKnowledgePipeline(
             BaseUri,
             extractionMode: MarkdownKnowledgeExtractionMode.Tiktoken,
             tiktokenOptions: new TiktokenKnowledgeGraphOptions
             {
-                BuildAutoRelatedSegmentRelations = false,
+                BuildAutoRelatedSegmentRelations = buildAutoRelatedSegmentRelations,
             });
         return pipeline.BuildAsync(sources).GetAwaiter().GetResult();
     }

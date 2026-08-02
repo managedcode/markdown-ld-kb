@@ -1,3 +1,5 @@
+using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
+
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed record TokenDistanceSearchResult(
@@ -32,7 +34,10 @@ internal sealed record TokenizedKnowledgeTopic(
     string DocumentId,
     string SegmentId,
     string Label,
-    double Score);
+    double Score)
+{
+    public double Confidence => Math.Clamp(Score, ZeroConfidence, FullConfidence);
+}
 
 internal sealed record TokenizedKnowledgeEntityHint(
     string Id,

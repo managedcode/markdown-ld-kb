@@ -13,53 +13,86 @@ internal sealed class TiktokenRelatedSegmentBuilder
     public TokenizedKnowledgeRelation[] BuildRelations(IReadOnlyList<TokenizedKnowledgeSegment> segments)
     {
         var maxPerSegment = Math.Min(_options.MaxRelatedSegments, Math.Max(0, segments.Count - 1));
+        if (maxPerSegment == 0)
+        {
+            return [];
+        }
+
         var capacity = (int)Math.Min((long)segments.Count * maxPerSegment, int.MaxValue);
         var relations = new List<TokenizedKnowledgeRelation>(capacity);
-        var related = new List<RelatedSegmentCandidate>(maxPerSegment);
+        var relatedBySegment = CreateRelatedLists(segments.Count, maxPerSegment);
+        AddRelatedSegmentCandidates(segments, relatedBySegment);
+        var relationPairs = new HashSet<(string Left, string Right)>(capacity);
         for (var sourceIndex = 0; sourceIndex < segments.Count; sourceIndex++)
         {
-            related.Clear();
-            AddRelatedSegmentCandidates(segments, sourceIndex, related);
-            AddRelations(relations, segments[sourceIndex], related);
+            AddRelations(relations, relationPairs, segments[sourceIndex], relatedBySegment[sourceIndex]);
         }
 
         return relations.ToArray();
     }
 
+    private static List<RelatedSegmentCandidate>[] CreateRelatedLists(int count, int capacity)
+    {
+        var related = new List<RelatedSegmentCandidate>[count];
+        for (var index = 0; index < count; index++)
+        {
+            related[index] = new List<RelatedSegmentCandidate>(capacity);
+        }
+
+        return related;
+    }
+
     private void AddRelatedSegmentCandidates(
         IReadOnlyList<TokenizedKnowledgeSegment> segments,
-        int sourceIndex,
-        List<RelatedSegmentCandidate> related)
+        IReadOnlyList<List<RelatedSegmentCandidate>> relatedBySegment)
     {
-        var source = segments[sourceIndex];
-        for (var index = 0; index < segments.Count; index++)
+        for (var sourceIndex = 0; sourceIndex < segments.Count; sourceIndex++)
         {
-            if (index == sourceIndex)
+            var source = segments[sourceIndex];
+            for (var candidateIndex = sourceIndex + 1; candidateIndex < segments.Count; candidateIndex++)
             {
-                continue;
-            }
+                var candidate = segments[candidateIndex];
+                var distance = source.Vector.EuclideanDistanceTo(candidate.Vector);
+                if (distance > _options.MaximumRelatedDistance)
+                {
+                    continue;
+                }
 
-            var candidate = segments[index];
-            var distance = source.Vector.EuclideanDistanceTo(candidate.Vector);
-            if (distance <= _options.MaximumRelatedDistance)
-            {
-                AddBoundedRelatedCandidate(related, new RelatedSegmentCandidate(candidate, distance));
+                AddBoundedRelatedCandidate(
+                    relatedBySegment[sourceIndex],
+                    new RelatedSegmentCandidate(candidate, distance));
+                AddBoundedRelatedCandidate(
+                    relatedBySegment[candidateIndex],
+                    new RelatedSegmentCandidate(source, distance));
             }
         }
     }
 
     private static void AddRelations(
         ICollection<TokenizedKnowledgeRelation> relations,
+        ISet<(string Left, string Right)> relationPairs,
         TokenizedKnowledgeSegment source,
         IReadOnlyList<RelatedSegmentCandidate> related)
     {
         foreach (var candidate in related)
         {
+            if (!relationPairs.Add(CreateRelationPair(source.Id, candidate.Segment.Id)))
+            {
+                continue;
+            }
+
             relations.Add(new TokenizedKnowledgeRelation(
                 source.Id,
                 candidate.Segment.Id,
                 candidate.Distance));
         }
+    }
+
+    private static (string Left, string Right) CreateRelationPair(string left, string right)
+    {
+        return string.Compare(left, right, StringComparison.Ordinal) <= 0
+            ? (left, right)
+            : (right, left);
     }
 
     private void AddBoundedRelatedCandidate(

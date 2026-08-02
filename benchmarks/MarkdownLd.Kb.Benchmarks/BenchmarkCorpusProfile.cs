@@ -6,5 +6,6 @@ public enum BenchmarkCorpusProfile
     LongDocuments,
     LargeCorpus,
     TokenizedMultilingual,
+    RepeatedCatalog,
     FederatedRunbooks,
 }

@@ -136,7 +136,7 @@ The most important split is local graph search versus federated graph search. `S
 ## Install
 
 ```bash
-dotnet add package ManagedCode.MarkdownLd.Kb --version 0.2.7
+dotnet add package ManagedCode.MarkdownLd.Kb --version 0.2.8
 ```
 
 For local repository development:

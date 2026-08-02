@@ -88,6 +88,8 @@ jobs:
             filter: '*FuzzyEditDistanceBenchmarks*'
           - suite: graph-build
             filter: '*GraphBuildBenchmarks*'
+          - suite: tiktoken-build
+            filter: '*TiktokenGraphBuildBenchmarks*'
           - suite: graph-search
             filter: '*GraphSearchBenchmarks*'
           - suite: tiktoken-search

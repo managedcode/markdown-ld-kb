@@ -11,7 +11,7 @@ public sealed class TokenizedKnowledgeFactFactoryTests
     private const string FirstSegmentId = "https://facts.example/token-segment/first";
     private const string SecondSegmentId = "https://facts.example/token-segment/second";
     private const string ThirdSegmentId = "https://facts.example/token-segment/third";
-    private const string SchemaAbout = "schema:about";
+    private const string SchemaAbout = "https://schema.org/about";
     private const double HighestScore = 0.91;
 
     [Test]
@@ -55,6 +55,23 @@ public sealed class TokenizedKnowledgeFactFactoryTests
         documentAssertions[1].Confidence.ShouldBe(0.72);
         documentAssertions[1].Source.ShouldBe(SecondDocumentId);
         documentAssertions[1].Sources.ShouldBeEmpty();
+
+        var normalized = new KnowledgeGraphNormalizer().Normalize(facts);
+        normalized.Report.Warnings.ShouldBeEmpty();
+    }
+
+    [Test]
+    public void Topic_ranking_scores_are_bounded_before_fact_materialization()
+    {
+        var facts = TokenizedKnowledgeFactFactory.Build(
+            [],
+            [],
+            [Topic(FirstDocumentId, FirstSegmentId, "High ranking topic", 10.25)],
+            [],
+            []);
+
+        facts.Entities.Single().Confidence.ShouldBe(1d);
+        facts.Assertions.Select(static assertion => assertion.Confidence).ShouldAllBe(static confidence => confidence == 1d);
 
         var normalized = new KnowledgeGraphNormalizer().Normalize(facts);
         normalized.Report.Warnings.ShouldBeEmpty();

@@ -8,6 +8,7 @@ internal static class BenchmarkMarkdownCorpus
     private const int LongDocumentCount = 80;
     private const int LargeDocumentCount = 1000;
     private const int TokenizedDocumentCount = 250;
+    private const int RepeatedCatalogDocumentCount = 48;
     private const int FederatedDocumentCount = 250;
     private const string LocalFederatedEndpointText = "https://bench.example/sparql/local";
     private const string CacheTitlePrefix = "Cache restore runbook";
@@ -30,6 +31,7 @@ internal static class BenchmarkMarkdownCorpus
             BenchmarkCorpusProfile.LongDocuments => LongDocumentCount,
             BenchmarkCorpusProfile.LargeCorpus => LargeDocumentCount,
             BenchmarkCorpusProfile.TokenizedMultilingual => TokenizedDocumentCount,
+            BenchmarkCorpusProfile.RepeatedCatalog => RepeatedCatalogDocumentCount,
             BenchmarkCorpusProfile.FederatedRunbooks => FederatedDocumentCount,
             _ => ShortDocumentCount,
         };
@@ -42,6 +44,7 @@ internal static class BenchmarkMarkdownCorpus
             BenchmarkCorpusProfile.LongDocuments => "long-documents",
             BenchmarkCorpusProfile.LargeCorpus => "large-corpus",
             BenchmarkCorpusProfile.TokenizedMultilingual => "tokenized-multilingual",
+            BenchmarkCorpusProfile.RepeatedCatalog => "repeated-catalog",
             BenchmarkCorpusProfile.FederatedRunbooks => "federated-runbooks",
             _ => "short-documents",
         };
@@ -53,6 +56,7 @@ internal static class BenchmarkMarkdownCorpus
         {
             BenchmarkCorpusProfile.LongDocuments => CreateLongMarkdown(index),
             BenchmarkCorpusProfile.TokenizedMultilingual => CreateTokenizedMarkdown(index),
+            BenchmarkCorpusProfile.RepeatedCatalog => CreateRepeatedCatalogMarkdown(index),
             BenchmarkCorpusProfile.FederatedRunbooks => CreateFederatedMarkdown(index),
             _ => CreateStandardMarkdown(index),
         };
@@ -133,6 +137,28 @@ internal static class BenchmarkMarkdownCorpus
             Federated SPARQL service binding validates local endpoint allowlists and runbook evidence.
             The local SERVICE endpoint {{LocalFederatedEndpointText}} is used for deterministic federation timing.
             Runbook evidence includes graph schema checks, service diagnostics, and focused result expansion.
+            """;
+    }
+
+    private static string CreateRepeatedCatalogMarkdown(int index)
+    {
+        return $$"""
+            ---
+            title: Catalog Tool {{index:D5}}
+            summary: Repeated catalog authorization and revision guidance.
+            tags:
+              - benchmark
+              - catalog
+            ---
+            # Catalog authorization workflow
+
+            Catalog authorization validates owner identity, optimistic revision, and bounded input.
+            Catalog authorization validates owner identity before every mutation.
+
+            ## Usage examples
+
+            Use catalog tool {{index:D5}} to inspect an exact resource and return a typed result.
+            Use the catalog workflow to validate authorization and revision requirements.
             """;
     }
 

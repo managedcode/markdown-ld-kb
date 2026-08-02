@@ -92,9 +92,10 @@ internal static class TokenizedKnowledgeAssertionBuilder
     }
 
     private static void AddTopicAssertions(
-        ICollection<KnowledgeAssertionFact> assertions,
+        List<KnowledgeAssertionFact> assertions,
         IReadOnlyList<TokenizedKnowledgeTopic> topics)
     {
+        var documentAssertions = new Dictionary<(string DocumentId, string TopicId), KnowledgeAssertionFact>();
         foreach (var topic in topics)
         {
             assertions.Add(new KnowledgeAssertionFact
@@ -102,19 +103,33 @@ internal static class TokenizedKnowledgeAssertionBuilder
                 SubjectId = topic.SegmentId,
                 Predicate = SchemaAboutText,
                 ObjectId = topic.Id,
-                Confidence = topic.Score,
+                Confidence = topic.Confidence,
                 Source = topic.DocumentId,
             });
 
-            assertions.Add(new KnowledgeAssertionFact
+            var candidate = new KnowledgeAssertionFact
             {
                 SubjectId = topic.DocumentId,
                 Predicate = SchemaAboutText,
                 ObjectId = topic.Id,
-                Confidence = topic.Score,
+                Confidence = topic.Confidence,
                 Source = topic.DocumentId,
-            });
+            };
+            var key = (topic.DocumentId, topic.Id);
+            if (!documentAssertions.TryGetValue(key, out var existing))
+            {
+                documentAssertions.Add(key, candidate);
+                continue;
+            }
+
+            documentAssertions[key] = existing with
+            {
+                Confidence = Math.Max(existing.Confidence, candidate.Confidence),
+                Sources = existing.Sources.Count == 0 ? [topic.DocumentId] : existing.Sources,
+            };
         }
+
+        assertions.AddRange(documentAssertions.Values);
     }
 
     private static KnowledgeAssertionFact CreateRelationAssertion(TokenizedKnowledgeRelation relation)

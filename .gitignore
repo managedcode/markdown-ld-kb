@@ -880,3 +880,4 @@ Apps/**/LocalModels/
 .quickdup
 *.brainstorm.md
 *.plan.md
+.junie
