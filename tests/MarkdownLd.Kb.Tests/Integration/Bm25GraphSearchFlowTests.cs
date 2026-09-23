@@ -7,6 +7,56 @@ namespace ManagedCode.MarkdownLd.Kb.Tests.Integration;
 
 public sealed class Bm25GraphSearchFlowTests
 {
+    private const string CourseGraphJsonLd = """
+        {
+          "@graph": [
+            { "@id": "urn:course:bofu", "@type": "https://schema.org/DefinedTerm",
+              "https://schema.org/name": [{"@value":"BOFU — bottom of funnel"}],
+              "https://schema.org/description": [{"@value":"Queries from people seeking a provider or purchase."}] },
+            { "@id": "urn:course:tofu", "@type": "https://schema.org/DefinedTerm",
+              "https://schema.org/name": [{"@value":"TOFU — top of funnel"}],
+              "https://schema.org/description": [{"@value":"Queries that introduce a problem."}] },
+            { "@id": "urn:course:video", "@type": "https://schema.org/VideoObject",
+              "https://schema.org/name": [{"@value":"Bye Now"}],
+              "https://schema.org/about": [{"@id":"urn:course:bofu"}] },
+            { "@id": "urn:course:clip", "@type": "https://schema.org/Clip",
+              "https://schema.org/name": [{"@value":"Video SEO 00:17:01–00:18:03"}],
+              "https://schema.org/text": [{"@value":"I sent the video to journalists."}] }
+          ]
+        }
+        """;
+
+    [Test]
+    [Arguments("BOFU")]
+    [Arguments("bottom funnel")]
+    [Arguments("What is BOFU?")]
+    public async Task Bm25_loaded_graph_prefers_exact_term_definition_to_related_video_and_fuzzy_term(string query)
+    {
+        using var graph = KnowledgeGraph.LoadJsonLd(CourseGraphJsonLd);
+        var matches = await graph.SearchRankedAsync(query, new KnowledgeGraphRankedSearchOptions
+        {
+            Mode = KnowledgeGraphSearchMode.Bm25,
+            EnableFuzzyTokenMatching = true,
+            MaxResults = 4,
+        });
+
+        matches[0].NodeId.ShouldBe("urn:course:bofu");
+    }
+
+    [Test]
+    public async Task Bm25_loaded_graph_searches_original_clip_text()
+    {
+        using var graph = KnowledgeGraph.LoadJsonLd(CourseGraphJsonLd);
+        var matches = await graph.SearchRankedAsync("journalists", new KnowledgeGraphRankedSearchOptions
+        {
+            Mode = KnowledgeGraphSearchMode.Bm25,
+            EnableFuzzyTokenMatching = true,
+            MaxResults = 4,
+        });
+
+        matches.Single().NodeId.ShouldBe("urn:course:clip");
+    }
+
     private const string BaseUriText = "https://bm25-search.example/";
     private const string CachePath = "content/runbooks/cache-restore.md";
     private const string ArchivePath = "content/runbooks/archive-policy.md";

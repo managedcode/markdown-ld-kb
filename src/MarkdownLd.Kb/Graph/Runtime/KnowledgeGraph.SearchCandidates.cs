@@ -23,8 +23,10 @@ public sealed partial class KnowledgeGraph
             var fallbackLabel = nodesById[nodeId].Label;
             var resolvedLabel = label ?? fallbackLabel;
             var description = ResolvePrimaryText(edges, nodesById, SchemaDescriptionText);
+            var body = ResolvePrimaryText(edges, nodesById, SchemaTextText);
             var relatedLabels = ResolveSearchContextLabels(edges, nodesById);
-            if (string.IsNullOrWhiteSpace(label) && string.IsNullOrWhiteSpace(description) && relatedLabels.Count == 0)
+            if (string.IsNullOrWhiteSpace(label) && string.IsNullOrWhiteSpace(description) &&
+                string.IsNullOrWhiteSpace(body) && relatedLabels.Count == 0)
             {
                 continue;
             }
@@ -34,7 +36,7 @@ public sealed partial class KnowledgeGraph
                 resolvedLabel,
                 description,
                 relatedLabels,
-                ComposeSearchText(resolvedLabel, description, relatedLabels)));
+                ComposeSearchText(resolvedLabel, description, body, relatedLabels)));
         }
 
         return candidates;
@@ -150,11 +152,13 @@ public sealed partial class KnowledgeGraph
     private static string ComposeSearchText(
         string label,
         string? description,
+        string? body,
         IReadOnlyList<string> relatedLabels)
     {
         var builder = new StringBuilder();
         AppendSearchText(builder, label);
         AppendSearchText(builder, description);
+        AppendSearchText(builder, body);
 
         foreach (var relatedLabel in relatedLabels)
         {

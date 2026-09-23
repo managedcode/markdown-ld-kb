@@ -120,6 +120,7 @@ internal static partial class PipelineConstants
     internal const string SchemaDefinedTermText = "https://schema.org/DefinedTerm";
     internal const string SchemaNameText = "https://schema.org/name";
     internal const string SchemaDescriptionText = "https://schema.org/description";
+    internal const string SchemaTextText = "https://schema.org/text";
     internal const string SchemaDatePublishedText = "https://schema.org/datePublished";
     internal const string SchemaDateModifiedText = "https://schema.org/dateModified";
     internal const string SchemaKeywordsText = "https://schema.org/keywords";

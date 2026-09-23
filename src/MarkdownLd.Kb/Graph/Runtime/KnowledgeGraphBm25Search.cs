@@ -15,18 +15,20 @@ internal static class KnowledgeGraphBm25Search
             return [];
         }
 
+        var labelScores = KnowledgeGraphBm25LabelScores.Calculate(candidates, queryTerms);
         var fuzzyOptions = KnowledgeGraphFuzzyTokenMatchingOptions.FromRankedSearch(options);
         if (!fuzzyOptions.Enabled)
         {
             return KnowledgeGraphExactBm25Search.Search(
                 candidates,
                 queryTerms,
-                options.MaxResults);
+                options.MaxResults,
+                labelScores);
         }
 
         var documents = CreateDocuments(candidates, out var averageDocumentLength);
         using var statistics = CreateTermStatistics(documents, queryTerms, fuzzyOptions);
-        return CreateMatches(documents, queryTerms, statistics, averageDocumentLength, options.MaxResults);
+        return CreateMatches(documents, queryTerms, statistics, averageDocumentLength, options.MaxResults, labelScores);
     }
 
     private static Bm25Document[] CreateDocuments(
@@ -80,7 +82,8 @@ internal static class KnowledgeGraphBm25Search
         string[] queryTerms,
         KnowledgeGraphBm25TermStatistics statistics,
         double averageDocumentLength,
-        int maxResults)
+        int maxResults,
+        IReadOnlyList<double> labelScores)
     {
         var matches = new List<KnowledgeGraphRankedSearchMatch>(Math.Min(documents.Length, maxResults));
         for (var documentIndex = 0; documentIndex < documents.Length; documentIndex++)
@@ -105,7 +108,7 @@ internal static class KnowledgeGraphBm25Search
                     document.Candidate.Label,
                     document.Candidate.Description,
                     KnowledgeGraphRankedSearchSource.Bm25,
-                    score),
+                    score + labelScores[documentIndex]),
                 maxResults);
         }
 

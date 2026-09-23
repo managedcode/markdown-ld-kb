@@ -8,7 +8,8 @@ internal static class KnowledgeGraphExactBm25Search
     public static IReadOnlyList<KnowledgeGraphRankedSearchMatch> Search(
         IReadOnlyList<KnowledgeGraphSearchCandidate> candidates,
         string[] queryTerms,
-        int maxResults)
+        int maxResults,
+        IReadOnlyList<double> labelScores)
     {
         using var statistics = KnowledgeGraphBm25TermStatistics.Rent(candidates.Count, queryTerms.Length);
         statistics.Clear();
@@ -28,7 +29,8 @@ internal static class KnowledgeGraphExactBm25Search
                 statistics,
                 documentLengths,
                 averageDocumentLength,
-                maxResults);
+                maxResults,
+                labelScores);
         }
         finally
         {
@@ -89,7 +91,8 @@ internal static class KnowledgeGraphExactBm25Search
         KnowledgeGraphBm25TermStatistics statistics,
         IReadOnlyList<int> documentLengths,
         double averageDocumentLength,
-        int maxResults)
+        int maxResults,
+        IReadOnlyList<double> labelScores)
     {
         var matches = new List<KnowledgeGraphRankedSearchMatch>(Math.Min(candidates.Count, maxResults));
         for (var documentIndex = 0; documentIndex < candidates.Count; documentIndex++)
@@ -114,7 +117,7 @@ internal static class KnowledgeGraphExactBm25Search
                     candidate.Label,
                     candidate.Description,
                     KnowledgeGraphRankedSearchSource.Bm25,
-                    score),
+                    score + labelScores[documentIndex]),
                 maxResults);
         }
 

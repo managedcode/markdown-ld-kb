@@ -11,7 +11,7 @@ The graph remains canonical. Graph-only callers rank graph-native text. Build-re
 ```mermaid
 flowchart LR
     Query["User query"] --> Mode["Graph / BM25 / Semantic / Hybrid mode"]
-    Graph["KnowledgeGraph snapshot"] --> Canonical["Canonical graph candidates\nlabel + description + related labels\nno keywords"]
+    Graph["KnowledgeGraph snapshot"] --> Canonical["Canonical graph candidates\nlabel + description + text + related labels\nno keywords"]
     Documents["MarkdownKnowledgeBuildResult.Documents"] --> DocumentAware["Document-aware candidates\n+ heading path + chunk markdown"]
     Canonical --> DocumentAware
     DocumentAware --> GraphRank["Graph ranking"]
@@ -30,14 +30,14 @@ flowchart LR
 
 ## Modes
 
-- `Graph`: rank only graph-native matches from `schema:name`, `schema:description`, and graph-related labels such as `schema:mentions` and `schema:about`.
-- `Bm25`: rank candidates with an in-memory BM25 lexical score. `KnowledgeGraph.SearchRankedAsync` uses graph-native labels, descriptions, and related labels. `MarkdownKnowledgeBuildResult.SearchRankedAsync`, `MarkdownKnowledgeBankBuild.SearchAsync`, and cited answering add parsed Markdown body chunks for body-only evidence. Exact BM25 counts only selected query terms with span-based lookup and pooled per-query statistics. `EnableFuzzyTokenMatching` can opt into bounded edit-distance token matching for typo-tolerant BM25 queries; fuzzy BM25 builds full candidate term dictionaries only when it needs to enumerate typo candidates.
+- `Graph`: rank only graph-native matches from `schema:name`, `schema:description`, `schema:text`, and graph-related labels such as `schema:mentions` and `schema:about`.
+- `Bm25`: rank candidates with an in-memory BM25 lexical score. `KnowledgeGraph.SearchRankedAsync` uses graph-native labels, descriptions, text bodies, and related labels. Exact matches in a candidate label receive an additional BM25 contribution so a definition titled `BOFU` ranks ahead of a related video that merely mentions it. `MarkdownKnowledgeBuildResult.SearchRankedAsync`, `MarkdownKnowledgeBankBuild.SearchAsync`, and cited answering add parsed Markdown body chunks for body-only evidence. Exact BM25 counts only selected query terms with span-based lookup and pooled per-query statistics. `EnableFuzzyTokenMatching` can opt into bounded edit-distance token matching for typo-tolerant BM25 queries; fuzzy BM25 builds full candidate term dictionaries only when it needs to enumerate typo candidates.
 - `Semantic`: rank only semantic matches from the optional semantic index.
 - `Hybrid`: combine graph-ranked and semantic-ranked matches. The default strategy keeps graph-ranked results first and appends semantic-only fallback matches only when graph recall is insufficient.
 
 ## Behavior
 
-- `schema:keywords` are excluded from canonical ranking.
+- `schema:keywords` are excluded from canonical ranking. `schema:text` on a clip is searchable, including timestamped subtitle excerpts; the graph remains the source of citation provenance.
 - BM25 mode does not require an embedding provider, semantic index, Lucene index, or database.
 - Build-result BM25 can find body-only terms that are absent from title, summary, and front matter.
 - Fuzzy BM25 token matching is opt-in through `KnowledgeGraphRankedSearchOptions.EnableFuzzyTokenMatching`, `MaxFuzzyEditDistance`, and `MinimumFuzzyTokenLength`. It handles insertion, deletion, and substitution typos with common-affix trimming, stack-backed bit-vector masks for short residual tokens, and a pooled bounded banded dynamic-programming fallback for longer residual tokens. It does not use platform-specific SIMD intrinsics.
@@ -57,5 +57,6 @@ flowchart LR
 
 ## Verification
 
+- `dotnet test --project tests/MarkdownLd.Kb.Tests/MarkdownLd.Kb.Tests.csproj --configuration Release -- --treenode-filter "/*/*/Bm25GraphSearchFlowTests/*"`
 - `dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --treenode-filter "/*/*/HybridGraphSearchFlowTests/*" --no-progress`
 - `dotnet test --solution MarkdownLd.Kb.slnx --configuration Release`
