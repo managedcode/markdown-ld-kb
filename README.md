@@ -3,8 +3,8 @@
 [![PR validation](https://github.com/managedcode/markdown-ld-kb/actions/workflows/validation.yml/badge.svg)](https://github.com/managedcode/markdown-ld-kb/actions/workflows/validation.yml)
 [![Release](https://github.com/managedcode/markdown-ld-kb/actions/workflows/release.yml/badge.svg)](https://github.com/managedcode/markdown-ld-kb/actions/workflows/release.yml)
 [![CodeQL](https://github.com/managedcode/markdown-ld-kb/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/managedcode/markdown-ld-kb/actions/workflows/codeql-analysis.yml)
-[![NuGet](https://img.shields.io/nuget/v/ManagedCode.MarkdownLd.Kb.svg?logo=nuget)](https://www.nuget.org/packages/ManagedCode.MarkdownLd.Kb)
-[![NuGet downloads](https://img.shields.io/nuget/dt/ManagedCode.MarkdownLd.Kb.svg?logo=nuget)](https://www.nuget.org/packages/ManagedCode.MarkdownLd.Kb)
+[![NuGet](https://img.shields.io/nuget/v/ManagedCode.MarkdownLd.Kb.svg?style=flat-square&logo=nuget)](https://www.nuget.org/packages/ManagedCode.MarkdownLd.Kb)
+[![NuGet downloads](https://img.shields.io/nuget/dt/ManagedCode.MarkdownLd.Kb.svg?style=flat-square&logo=nuget)](https://www.nuget.org/packages/ManagedCode.MarkdownLd.Kb)
 [![GitHub release](https://img.shields.io/github/v/release/managedcode/markdown-ld-kb?include_prereleases&logo=github)](https://github.com/managedcode/markdown-ld-kb/releases)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -135,8 +135,10 @@ The most important split is local graph search versus federated graph search. `S
 
 ## Install
 
+Install the latest stable release from [NuGet](https://www.nuget.org/packages/ManagedCode.MarkdownLd.Kb):
+
 ```bash
-dotnet add package ManagedCode.MarkdownLd.Kb --version 0.2.8
+dotnet add package ManagedCode.MarkdownLd.Kb
 ```
 
 For local repository development:
