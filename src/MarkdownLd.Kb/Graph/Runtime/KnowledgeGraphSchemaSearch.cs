@@ -2,7 +2,7 @@ using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
-public sealed record KnowledgeGraphSchemaSearchProfile
+public sealed partial record KnowledgeGraphSchemaSearchProfile
 {
     public static KnowledgeGraphSchemaSearchProfile Default { get; } = new();
 
@@ -49,6 +49,9 @@ public sealed record KnowledgeGraphSchemaSearchProfile
     public IReadOnlyList<Uri> FederatedServiceEndpoints { get; init; } = [];
 
     public KnowledgeGraphSchemaSearchTermMode TermMode { get; init; } = KnowledgeGraphSchemaSearchTermMode.ExactPhrase;
+
+    /// <summary>Optional absolute subject IRIs for primary matching. Null searches all subjects; empty matches none. Expansion is not restricted.</summary>
+    public IReadOnlyCollection<string>? CandidateNodeIds { get; init; }
 
     public int MaxResults { get; init; } = DefaultSchemaSearchMaxResults;
 

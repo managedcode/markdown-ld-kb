@@ -559,3 +559,23 @@ Coverage requirement: 95%+ line coverage for changed production code.
 - Schema-aware SPARQL search feature: `docs/Features/SchemaAwareSparqlSearch.md`
 - Graph creation contracts feature: `docs/Features/GraphCreationContracts.md`
 - Federated SPARQL decision: `docs/ADR/ADR-0006-federated-sparql-adapter.md`
+
+### Schema candidate VALUES
+
+Schema profiles optionally carry absolute `CandidateNodeIds`. The compiler binds subject VALUES independently inside every local/federated evidence branch on the existing graph. Primary retrieval is constrained; relationship evidence and expansion remain graph-backed. See [ADR-0007](ADR/ADR-0007-schema-search-candidate-values.md).
+
+Diagnostic-only schema workload and engine option reproduction live under `scripts/`; they use the real owner graph/engine and add no production dependency. Profiling evidence, platform limits, and the upstream engine issue are recorded in [Schema Search Profiling](Performance/SchemaSearchProfiling.md).
+
+### Ontology discovery and schema provenance
+
+The ontology schema profile reuses the schema compiler/ranker and supports caller-selected full-text candidates and explicit federation. `ToOntologySnapshot` exposes an independent caller-owned official dotNetRDF `OntologyGraph`. Source labels stay inside the provenance OPTIONAL so missing sources cannot bind unrelated graph subjects. See [ADR-0008](ADR/ADR-0008-ontology-search-and-bounded-provenance.md) and [Ontology Graph Search](Features/OntologyGraphSearch.md).
+
+```mermaid
+flowchart LR
+    Graph[KnowledgeGraph] --> Profile[Ontology schema profile]
+    Graph --> FullText[Optional full-text subjects index]
+    FullText --> Values[Candidate VALUES]
+    Values --> Profile
+    Profile --> SPARQL[Local or allowlisted federated SPARQL]
+    Graph --> Snapshot[Independent OntologyGraph snapshot]
+```

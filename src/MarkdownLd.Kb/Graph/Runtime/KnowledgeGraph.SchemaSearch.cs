@@ -101,6 +101,7 @@ public sealed partial class KnowledgeGraph
             throw new InvalidOperationException(SchemaSearchTextPredicatesRequiredMessage);
         }
 
+        ValidateSchemaCandidateNodeIds(profile.CandidateNodeIds);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(profile.MaxResults);
         ArgumentOutOfRangeException.ThrowIfNegative(profile.MaxRelatedResults);
         ArgumentOutOfRangeException.ThrowIfNegative(profile.MaxNextStepResults);
@@ -217,7 +218,7 @@ public sealed partial class KnowledgeGraph
         }
         else
         {
-            AppendSchemaSearchBody(builder, query, profile.TermMode, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, SparqlIndent);
+            AppendSchemaSearchBody(builder, query, profile, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, SparqlIndent);
         }
 
         builder.AppendLine(SparqlCloseBrace);

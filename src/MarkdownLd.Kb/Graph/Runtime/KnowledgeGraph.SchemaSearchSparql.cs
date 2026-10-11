@@ -35,7 +35,7 @@ public sealed partial class KnowledgeGraph
                 .Append(GreaterThanCharacter)
                 .Append(SpaceCharacter)
                 .AppendLine(SparqlOpenBrace);
-            AppendSchemaSearchBody(builder, query, profile.TermMode, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, SparqlDoubleIndent + SparqlIndent);
+            AppendSchemaSearchBody(builder, query, profile, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, SparqlDoubleIndent + SparqlIndent);
             builder.AppendLine(SparqlDoubleIndent + SparqlCloseBrace);
             builder.AppendLine(SparqlIndent + SparqlCloseBrace);
         }
@@ -44,7 +44,7 @@ public sealed partial class KnowledgeGraph
     private static void AppendSchemaSearchBody(
         StringBuilder builder,
         string query,
-        KnowledgeGraphSchemaSearchTermMode termMode,
+        KnowledgeGraphSchemaSearchProfile profile,
         IReadOnlyList<ResolvedSchemaTextPredicate> textPredicates,
         IReadOnlyList<ResolvedSchemaRelationshipPredicate> relationships,
         IReadOnlyList<string> typeFilters,
@@ -53,14 +53,14 @@ public sealed partial class KnowledgeGraph
         string indent)
     {
         builder.AppendLine(indent + SparqlOpenBrace);
-        AppendDirectEvidencePattern(builder, query, termMode, textPredicates, typeFilters, excludedTypes, facetFilters, indent + SparqlIndent);
+        AppendDirectEvidencePattern(builder, query, profile, textPredicates, typeFilters, excludedTypes, facetFilters, indent + SparqlIndent);
         builder.AppendLine(indent + SparqlCloseBrace);
 
         foreach (var relationship in relationships)
         {
             builder.AppendLine(indent + SparqlUnionKeyword);
             builder.AppendLine(indent + SparqlOpenBrace);
-            AppendRelationshipEvidencePattern(builder, query, termMode, relationship, typeFilters, excludedTypes, facetFilters, indent + SparqlIndent);
+            AppendRelationshipEvidencePattern(builder, query, profile, relationship, typeFilters, excludedTypes, facetFilters, indent + SparqlIndent);
             builder.AppendLine(indent + SparqlCloseBrace);
         }
     }
@@ -68,52 +68,61 @@ public sealed partial class KnowledgeGraph
     private static void AppendDirectEvidencePattern(
         StringBuilder builder,
         string query,
-        KnowledgeGraphSchemaSearchTermMode termMode,
+        KnowledgeGraphSchemaSearchProfile profile,
         IReadOnlyList<ResolvedSchemaTextPredicate> textPredicates,
         IReadOnlyList<string> typeFilters,
         IReadOnlyList<string> excludedTypes,
         IReadOnlyList<ResolvedSchemaFacetFilter> facetFilters,
         string indent)
     {
-        AppendSubjectTypeAndLabels(builder, indent);
-        AppendFacetFilters(builder, facetFilters, indent);
-        AppendValues(builder, SparqlEvidencePredicateVariable, textPredicates.Select(static predicate => predicate.PredicateId), indent);
-        AppendTriple(builder, SparqlSubjectVariable, SparqlEvidencePredicateVariable, SparqlEvidenceValueVariable, indent);
-        AppendLiteralFilter(builder, query, termMode, indent);
-        AppendTypeFilters(builder, typeFilters, excludedTypes, indent);
+        builder.AppendLine(indent + SparqlOpenBrace);
+        var evidenceIndent = indent + SparqlIndent;
+        AppendSchemaCandidateValues(builder, profile.CandidateNodeIds, evidenceIndent);
+        AppendFacetFilters(builder, facetFilters, evidenceIndent);
+        AppendValues(builder, SparqlEvidencePredicateVariable, textPredicates.Select(static predicate => predicate.PredicateId), evidenceIndent);
+        AppendTriple(builder, SparqlSubjectVariable, SparqlEvidencePredicateVariable, SparqlEvidenceValueVariable, evidenceIndent);
+        AppendLiteralFilter(builder, query, profile.TermMode, evidenceIndent);
+        AppendTriple(builder, SparqlSubjectVariable, SparqlTypeShortcut, SparqlTypeVariable, evidenceIndent);
+        AppendTypeFilters(builder, typeFilters, excludedTypes, evidenceIndent);
+        builder.AppendLine(indent + SparqlCloseBrace);
+        AppendSubjectMetadata(builder, indent);
         AppendBindText(builder, SchemaSearchDirectEvidenceKind, SparqlEvidenceKindVariable, indent);
     }
 
     private static void AppendRelationshipEvidencePattern(
         StringBuilder builder,
         string query,
-        KnowledgeGraphSchemaSearchTermMode termMode,
+        KnowledgeGraphSchemaSearchProfile profile,
         ResolvedSchemaRelationshipPredicate relationship,
         IReadOnlyList<string> typeFilters,
         IReadOnlyList<string> excludedTypes,
         IReadOnlyList<ResolvedSchemaFacetFilter> facetFilters,
         string indent)
     {
-        AppendSubjectTypeAndLabels(builder, indent);
-        AppendFacetFilters(builder, facetFilters, indent);
+        builder.AppendLine(indent + SparqlOpenBrace);
+        var evidenceIndent = indent + SparqlIndent;
+        AppendSchemaCandidateValues(builder, profile.CandidateNodeIds, evidenceIndent);
+        AppendFacetFilters(builder, facetFilters, evidenceIndent);
         AppendValues(
             builder,
             SparqlEvidencePredicateVariable,
             relationship.TargetTextPredicateIds.Distinct(StringComparer.Ordinal),
-            indent);
-        AppendRelationshipPathTriple(builder, relationship, indent);
+            evidenceIndent);
+        AppendRelationshipPathTriple(builder, relationship, evidenceIndent);
+        AppendTriple(builder, SparqlRelatedNodeVariable, SparqlEvidencePredicateVariable, SparqlEvidenceValueVariable, evidenceIndent);
+        AppendLiteralFilter(builder, query, profile.TermMode, evidenceIndent);
+        AppendTriple(builder, SparqlSubjectVariable, SparqlTypeShortcut, SparqlTypeVariable, evidenceIndent);
+        AppendTypeFilters(builder, typeFilters, excludedTypes, evidenceIndent);
+        builder.AppendLine(indent + SparqlCloseBrace);
+        AppendSubjectMetadata(builder, indent);
         AppendOptionalSource(builder, SparqlRelatedNodeVariable, SparqlRelatedSourceVariable, SparqlRelatedSourceLabelVariable, indent);
-        AppendTriple(builder, SparqlRelatedNodeVariable, SparqlEvidencePredicateVariable, SparqlEvidenceValueVariable, indent);
-        AppendLiteralFilter(builder, query, termMode, indent);
         AppendOptionalLabel(builder, SparqlRelatedNodeVariable, SparqlRelatedLabelVariable, indent);
-        AppendTypeFilters(builder, typeFilters, excludedTypes, indent);
         AppendBindText(builder, relationship.PredicateId, SparqlViaPredicateVariable, indent);
         AppendBindText(builder, SchemaSearchRelationshipEvidenceKind, SparqlEvidenceKindVariable, indent);
     }
 
-    private static void AppendSubjectTypeAndLabels(StringBuilder builder, string indent)
+    private static void AppendSubjectMetadata(StringBuilder builder, string indent)
     {
-        AppendTriple(builder, SparqlSubjectVariable, SparqlTypeShortcut, SparqlTypeVariable, indent);
         AppendOptionalLabel(builder, SparqlSubjectVariable, SparqlLabelVariable, indent);
         AppendOptionalPredicate(builder, SparqlSubjectVariable, SchemaDescriptionText, SparqlDescriptionVariable, indent);
         AppendOptionalSource(builder, SparqlSubjectVariable, SparqlSourceVariable, SparqlSourceLabelVariable, indent);

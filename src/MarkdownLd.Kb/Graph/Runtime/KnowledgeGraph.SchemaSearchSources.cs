@@ -12,23 +12,12 @@ public sealed partial class KnowledgeGraph
         string sourceLabelVariable,
         string indent)
     {
-        builder
-            .Append(indent)
-            .Append(SparqlOptionalKeyword)
-            .Append(SpaceCharacter)
-            .Append(OpenBraceCharacter)
-            .Append(SpaceCharacter)
-            .Append(subjectVariable)
-            .Append(SpaceCharacter)
-            .Append(ProvPrefix)
-            .Append(ColonCharacter)
-            .Append(ProvWasDerivedFromSuffix)
-            .Append(SpaceCharacter)
-            .Append(sourceVariable)
-            .Append(SparqlStatementTerminator)
-            .Append(SpaceCharacter)
-            .Append(CloseBraceCharacter)
-            .AppendLine();
-        AppendOptionalLabel(builder, sourceVariable, sourceLabelVariable, indent);
+        // Keep source-label lookup inside the provenance OPTIONAL. An unbound source
+        // must not turn the label patterns into a scan of unrelated graph subjects.
+        builder.Append(indent).Append(SparqlOptionalKeyword).Append(SpaceCharacter).AppendLine(SparqlOpenBrace);
+        var sourceIndent = indent + SparqlIndent;
+        AppendTriple(builder, subjectVariable, ProvPrefix + ColonCharacter + ProvWasDerivedFromSuffix, sourceVariable, sourceIndent);
+        AppendOptionalLabel(builder, sourceVariable, sourceLabelVariable, sourceIndent);
+        builder.Append(indent).AppendLine(SparqlCloseBrace);
     }
 }

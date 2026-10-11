@@ -17,6 +17,7 @@ public sealed record KnowledgeArticleSearchResult(
 
 public sealed class KnowledgeSearchService
 {
+    private static readonly UriComparer RdfUriComparer = new();
     private const string SchemaPlaceholder = "{SCHEMA}";
     private const string RdfPlaceholder = "{RDF}";
     private const string TermPlaceholder = "{TERM}";
@@ -134,7 +135,7 @@ LIMIT {LIMIT}
 
     private static IReadOnlyList<KnowledgeEntitySearchResult> MapEntityResults(SparqlQueryResult result)
     {
-        var items = new Dictionary<Uri, KnowledgeEntitySearchResult>();
+        var items = new Dictionary<Uri, KnowledgeEntitySearchResult>(RdfUriComparer);
 
         foreach (var row in result.Rows)
         {
@@ -150,7 +151,7 @@ LIMIT {LIMIT}
             {
                 if (items.TryGetValue(entityId, out var existing))
                 {
-                    var mergedSameAs = existing.SameAs.Concat([sameAsUri]).Distinct().ToArray();
+                    var mergedSameAs = existing.SameAs.Concat([sameAsUri]).Distinct(RdfUriComparer).ToArray();
                     items[entityId] = existing with { SameAs = mergedSameAs };
                     continue;
                 }
@@ -158,13 +159,7 @@ LIMIT {LIMIT}
 
             if (items.TryGetValue(entityId, out var current))
             {
-                var mergedSameAs = current.SameAs;
-                if (TryGetUri(row.Bindings, SameAsVariable, out var currentSameAs))
-                {
-                    mergedSameAs = mergedSameAs.Concat([currentSameAs]).Distinct().ToArray();
-                }
-
-                items[entityId] = current with { Label = label, Type = type, SameAs = mergedSameAs };
+                items[entityId] = current with { Label = label, Type = type };
                 continue;
             }
 
@@ -180,7 +175,7 @@ LIMIT {LIMIT}
 
     private static IReadOnlyList<KnowledgeArticleSearchResult> MapArticleResults(SparqlQueryResult result)
     {
-        var items = new Dictionary<Uri, KnowledgeArticleSearchResult>();
+        var items = new Dictionary<Uri, KnowledgeArticleSearchResult>(RdfUriComparer);
 
         foreach (var row in result.Rows)
         {

@@ -893,6 +893,29 @@ Console.WriteLine(result.GeneratedSparql);
 
 `RelationshipPredicates` let a source node match because a related node contains the evidence literal, for example `?capability ex:requires ?system` and `?system ex:symptom "stale shard checksum"`. `ExpansionPredicates` return related and next-step nodes with the local focused graph so the caller can show the smallest useful subgraph around the hit.
 
+For OWL/RDFS discovery, use the built-in ontology profile. It searches class/property labels and comments and follows hierarchy, domain/range and equivalence evidence. You can inspect an independent caller-owned dotNetRDF ontology snapshot:
+
+```csharp
+var matches = await graph.SearchBySchemaAsync(
+    "forecast", KnowledgeGraphSchemaSearchProfile.Ontology);
+using var ontology = graph.ToOntologySnapshot();
+var classes = ontology.AllClasses.ToArray();
+```
+
+Optional full-text subject results can narrow SPARQL on the original graph without rebuilding a graph per request:
+
+```csharp
+using var fullText = await graph.BuildFullTextIndexAsync();
+var candidates = await fullText.SearchAsync("forecast OR rainfall", limit: 25);
+var profile = KnowledgeGraphSchemaSearchProfile.Ontology with
+{
+    CandidateNodeIds = candidates.Select(match => match.NodeId).Distinct().ToArray()
+};
+var refined = await graph.SearchBySchemaAsync("rainfall", profile);
+```
+
+`CandidateNodeIds = null` searches all subjects; an empty collection matches none. Related evidence and expansion retain the full graph. Preselection recall is caller-controlled. See [Ontology Graph Search](docs/Features/OntologyGraphSearch.md) for local/federated behavior and supported RDF capabilities.
+
 For federated schema search, put endpoint URIs in `FederatedServiceEndpoints` and execute with `SearchBySchemaFederatedAsync`. The generated query uses explicit SPARQL `SERVICE` blocks and the same `FederatedSparqlExecutionOptions` allowlist used by raw federated SPARQL:
 
 ```csharp
@@ -1316,20 +1339,21 @@ dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --coverage 
 
 Coverage is collected through `Microsoft.Testing.Extensions.CodeCoverage`. Cobertura is the XML output format used for line and branch reporting; the test project does not reference Coverlet.
 
+For live allocation/GC investigation, see [Schema Search Profiling](docs/Performance/SchemaSearchProfiling.md) and the reusable `dotnet-diagnostics-mcp` skill. The diagnostic harness figures are kept separate from the benchmark snapshot below.
+
 BenchmarkDotNet performance runs are separate from TUnit correctness tests. Commands, workload profiles, profiler options, and full result tables live in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md). The build/test/pack validation job stays separate; PR validation, release validation, and the dedicated benchmark workflow run the complete BenchmarkDotNet suite as parallel suite jobs and upload suite-specific `benchmarkdotnet-results-*` artifacts.
 
-Current local headline numbers from the May 4, 2026 BenchmarkDotNet 0.15.8 run on Apple M2 Pro with .NET 10.0.5:
+Current local snapshot from October 12, 2026: BenchmarkDotNet 0.15.8, Apple M2 Pro, .NET 10.0.12 / SDK 10.0.401. The full `Required` suite completed all 127 cases in 7 minutes 10 seconds. MB below follows BenchmarkDotNet (MiB).
 
 | Area | Current local result |
 | --- | --- |
-| Full suite | 118 BenchmarkDotNet cases using the `Required` job; local sequential pass completed in 5 minutes 41 seconds (`real 341.12s`) |
-| Graph build | `LargeCorpus` builds in 151.12 ms with 58.75 MB allocated |
-| Low-latency search | `ShortDocuments` exact ranked graph search is 1.143 ms / 2.15 MB; BM25 is 2.503 ms / 2.14 MB |
-| Typo-tolerant search | BM25 fuzzy stays opt-in; `ShortDocuments` typo fuzzy search is 7.366 ms / 2.77 MB |
-| RDF query paths | `ShortDocuments` exact schema SPARQL is 94.422 ms / 61.25 MB; local federated schema search is 92.469 ms / 63.24 MB |
-| Tiktoken search | `LongDocuments` exact token-distance search is 145.52 μs / 107.23 KB; typo correction is 250.10 μs / 110.17 KB |
-| Persistence | `LargeCorpus` Turtle file load is 118.305 ms / 28.10 MB; JSON-LD file load is 163.824 ms / 75.51 MB |
-| Lifecycle | Build/search/save/load/export is 154.3 ms / 53.7 MB |
-| Fuzzy edit distance | Long insertion is 381.38x faster than naive Levenshtein; long no-match is 178.03x faster, both with 0 B allocated |
+| Graph build | `LargeCorpus`: 71.56 ms / 58.06 MB allocated |
+| Ranked search | `ShortDocuments` exact: 3.438 ms / 2.75 MB; BM25: 6.893 ms / 2.76 MB |
+| Graph schema search | `ShortDocuments` exact: 24.928 ms / 5.92 MB; local federated schema: 22.144 ms / 8.00 MB |
+| Candidate schema workload | `ShortDocuments` exact: unrestricted 36.469 ms / 17.86 MB; ten candidates 16.003 ms / 7.68 MB |
+| Candidate no-match workload | `ShortDocuments`: unrestricted 13.137 ms / 7.24 MB; ten candidates 12.179 ms / 4.93 MB |
+| Tiktoken build | Repeated catalog: 104.446 ms / 67.05 MB |
+| Persistence | `LargeCorpus`: Turtle file load 93.948 ms / 28.13 MB; JSON-LD file load 140.072 ms / 80.39 MB |
+| Lifecycle | Build/search/save/load/export: 110.009 ms / 55.72 MB |
 
-These numbers are local diagnostics, not a cross-machine performance contract.
+Background Roslynk CPU load produced broad timing confidence intervals. These are observed means, not a reliable latency speedup claim or a cross-machine performance contract. The owner checkout also included pre-existing serialization/tokenization edits outside this release's scoped changes. Full result tables and that qualification context are in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md).

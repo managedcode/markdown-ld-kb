@@ -47,6 +47,8 @@ Target capabilities:
 
 ## Durable Project Rules
 
+- Keep the official dotNetRDF package family, including ontology, full-text, and SPIN capabilities. Report confirmed dotNetRDF engine defects upstream with a minimal reproduction; optimize our own graph/query flow without forking or replacing the engine.
+
 - Keep the core Markdown-to-graph pipeline deterministic and testable without network access.
 - Keep the core runtime in-memory. Do not introduce localhost, HTTP server, background service, database server, or hosted API dependencies into the production library.
 - Graph construction must support caller-supplied build rules so applications can turn Markdown corpora into structured capability/workflow graphs with groups, typed relationships, related-node expansion, and focused subgraphs instead of only flat document/topic graphs.

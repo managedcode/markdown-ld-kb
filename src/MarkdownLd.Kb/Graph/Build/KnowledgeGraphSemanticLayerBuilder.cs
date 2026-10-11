@@ -7,6 +7,9 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
 {
+    private static readonly Uri OntologyClassTypeUri = new(OntologyHelper.OwlClass);
+    private static readonly Uri OntologyPropertyTypeUri = new(OntologyHelper.RdfProperty);
+    private static readonly UriComparer RdfUriComparer = new();
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri);
 
     public void Apply(
@@ -37,7 +40,7 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
 
     private void AddOntologyLayer(Graph graph)
     {
-        var ontologyGraph = new OntologyGraph(_baseUri);
+        using var ontologyGraph = new OntologyGraph(_baseUri);
         KnowledgeGraphNamespaces.Register(ontologyGraph);
         AssertOntologyHeader(ontologyGraph);
         DeclareOntologyClasses(ontologyGraph);
@@ -77,6 +80,7 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
         params Uri[] superClasses)
     {
         var ontologyClass = ontologyGraph.CreateOntologyClass(classUri);
+        ontologyClass.AddType(OntologyClassTypeUri);
         foreach (var superClass in superClasses)
         {
             ontologyClass.AddSuperClass(superClass);
@@ -93,6 +97,7 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
     {
         var propertyUri = new Uri(propertyText);
         var ontologyProperty = ontologyGraph.CreateOntologyProperty(propertyUri);
+        ontologyProperty.AddType(OntologyPropertyTypeUri);
         ontologyProperty.AddDomain(domainUri);
         ontologyProperty.AddRange(rangeUri);
         AssertResourceLabel(ontologyGraph, propertyUri);
@@ -113,8 +118,8 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
         var statementNodes = graph.Triples
             .Where(static triple => triple.Predicate is IUriNode predicateNode &&
                                     triple.Object is IUriNode objectNode &&
-                                    predicateNode.Uri == RdfTypeUri &&
-                                    objectNode.Uri == RdfStatementUri)
+                                    EqualityHelper.AreUrisEqual(predicateNode.Uri, RdfTypeUri) &&
+                                    EqualityHelper.AreUrisEqual(objectNode.Uri, RdfStatementUri))
             .Select(static triple => triple.Subject)
             .Distinct()
             .ToArray();
@@ -211,7 +216,7 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
 
     private static HashSet<Uri> CollectConceptUris(Graph graph)
     {
-        var conceptUris = new HashSet<Uri>();
+        var conceptUris = new HashSet<Uri>(RdfUriComparer);
 
         CollectTypedConceptUris(graph, conceptUris);
         CollectReferencedConceptUris(graph, conceptUris, SchemaAboutUri);
@@ -221,14 +226,14 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
 
     private static void CollectTypedConceptUris(Graph graph, ISet<Uri> conceptUris)
     {
-        foreach (var triple in graph.Triples.Where(static triple => triple.Subject is IUriNode && triple.Predicate is IUriNode predicateNode && predicateNode.Uri == RdfTypeUri && triple.Object is IUriNode))
+        foreach (var triple in graph.Triples.Where(static triple => triple.Subject is IUriNode && triple.Predicate is IUriNode predicateNode && EqualityHelper.AreUrisEqual(predicateNode.Uri, RdfTypeUri) && triple.Object is IUriNode))
         {
             if (triple.Subject is not IUriNode subjectNode || triple.Object is not IUriNode objectNode)
             {
                 continue;
             }
 
-            if (objectNode.Uri == SchemaDefinedTermUri || objectNode.Uri == SkosConceptUri || objectNode.Uri == KbKnowledgeConceptUri)
+            if (EqualityHelper.AreUrisEqual(objectNode.Uri, SchemaDefinedTermUri) || EqualityHelper.AreUrisEqual(objectNode.Uri, SkosConceptUri) || EqualityHelper.AreUrisEqual(objectNode.Uri, KbKnowledgeConceptUri))
             {
                 conceptUris.Add(subjectNode.Uri);
             }
@@ -237,12 +242,12 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
 
     private static HashSet<Uri> CollectTypedSubjects(Graph graph, Uri typeUri)
     {
-        var subjects = new HashSet<Uri>();
-        foreach (var triple in graph.Triples.Where(static triple => triple.Predicate is IUriNode predicateNode && predicateNode.Uri == RdfTypeUri))
+        var subjects = new HashSet<Uri>(RdfUriComparer);
+        foreach (var triple in graph.Triples.Where(static triple => triple.Predicate is IUriNode predicateNode && EqualityHelper.AreUrisEqual(predicateNode.Uri, RdfTypeUri)))
         {
             if (triple.Subject is IUriNode subjectNode &&
                 triple.Object is IUriNode objectNode &&
-                objectNode.Uri == typeUri)
+                EqualityHelper.AreUrisEqual(objectNode.Uri, typeUri))
             {
                 subjects.Add(subjectNode.Uri);
             }
@@ -253,7 +258,7 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
 
     private static void CollectReferencedConceptUris(Graph graph, ISet<Uri> conceptUris, Uri predicateUri)
     {
-        foreach (var triple in graph.Triples.Where(triple => triple.Predicate is IUriNode predicateNode && predicateNode.Uri == predicateUri && triple.Object is IUriNode))
+        foreach (var triple in graph.Triples.Where(triple => triple.Predicate is IUriNode predicateNode && EqualityHelper.AreUrisEqual(predicateNode.Uri, predicateUri) && triple.Object is IUriNode))
         {
             conceptUris.Add(((IUriNode)triple.Object).Uri);
         }
@@ -261,7 +266,7 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
 
     private Dictionary<Uri, string> CollectAboutLabels(IReadOnlyList<MarkdownDocument> documents)
     {
-        var labels = new Dictionary<Uri, string>();
+        var labels = new Dictionary<Uri, string>(RdfUriComparer);
         foreach (var document in documents)
         {
             foreach (var about in ReadFrontMatterValues(document.FrontMatter, AboutKey))
@@ -327,7 +332,7 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
 
     private static Dictionary<Uri, string> CollectConceptLabels(Graph graph)
     {
-        var labels = new Dictionary<Uri, LabelCandidate>();
+        var labels = new Dictionary<Uri, LabelCandidate>(RdfUriComparer);
         foreach (var triple in graph.Triples)
         {
             if (triple.Subject is not IUriNode subjectNode ||
@@ -350,28 +355,28 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
             }
         }
 
-        return labels.ToDictionary(static pair => pair.Key, static pair => pair.Value.Value);
+        return labels.ToDictionary(static pair => pair.Key, static pair => pair.Value.Value, RdfUriComparer);
     }
 
     private static int GetLabelPriority(Uri predicateUri)
     {
-        if (predicateUri == SchemaNameUri)
+        if (EqualityHelper.AreUrisEqual(predicateUri, SchemaNameUri))
         {
             return 3;
         }
 
-        if (predicateUri == SkosPrefLabelUri)
+        if (EqualityHelper.AreUrisEqual(predicateUri, SkosPrefLabelUri))
         {
             return 2;
         }
 
-        return predicateUri == RdfsLabelUri ? 1 : 0;
+        return EqualityHelper.AreUrisEqual(predicateUri, RdfsLabelUri) ? 1 : 0;
     }
 
     private static Dictionary<Uri, IReadOnlyList<IUriNode>> CollectUriTargets(Graph graph, Uri predicateUri)
     {
-        var targets = new Dictionary<Uri, List<IUriNode>>();
-        foreach (var triple in graph.Triples.Where(triple => triple.Predicate is IUriNode predicateNode && predicateNode.Uri == predicateUri))
+        var targets = new Dictionary<Uri, List<IUriNode>>(RdfUriComparer);
+        foreach (var triple in graph.Triples.Where(triple => triple.Predicate is IUriNode predicateNode && EqualityHelper.AreUrisEqual(predicateNode.Uri, predicateUri)))
         {
             if (triple.Subject is not IUriNode subjectNode || triple.Object is not IUriNode objectNode)
             {
@@ -389,7 +394,8 @@ internal sealed class KnowledgeGraphSemanticLayerBuilder(Uri baseUri)
 
         return targets.ToDictionary(
             static pair => pair.Key,
-            static pair => (IReadOnlyList<IUriNode>)pair.Value);
+            static pair => (IReadOnlyList<IUriNode>)pair.Value,
+            RdfUriComparer);
     }
 
     private static void MirrorSchemaSameAsAsSkosExactMatch(

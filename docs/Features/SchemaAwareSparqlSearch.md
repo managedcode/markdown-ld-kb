@@ -260,3 +260,21 @@ Covered scenarios:
 - graph contract and schema validation flows
 - all-terms, inbound relationship, property path, and facet behavior
 - focused graph export
+
+
+## Candidate subject filtering
+
+`KnowledgeGraphSchemaSearchProfile.CandidateNodeIds` constrains primary subjects with branch-local SPARQL `VALUES` on the original graph. Pass absolute IRIs, including custom graph bindings. Null retains unrestricted search; an empty collection matches no subjects. Duplicate IDs are deduplicated deterministically. Invalid or SPARQL-unsafe IDs fail explicitly before query execution. Relationship evidence and related/next-step expansion continue to use the original graph. This filter is a retrieval/performance boundary; hosts still enforce authorization separately.
+
+```mermaid
+flowchart LR
+    Candidates[Allowed candidate subject IRIs] --> Profile[Schema search profile]
+    Profile --> Values[Branch-local VALUES]
+    Values --> Graph[Existing RDF graph]
+    Graph --> Evidence[Direct and relationship evidence]
+    Evidence --> Expansion[Original graph expansion]
+```
+
+Regression methodology: real dotNetRDF local and locally bound federated queries cover direct/relationship evidence, preserved expansion/triple count, empty/unknown/duplicate/unsafe subjects and concurrent profiles. Run the full TUnit suite and coverage; changed runtime must remain at least 95% covered.
+
+Mandatory evidence, candidate VALUES, facets and type filters run in a nested group before optional metadata. Provenance and its label lookups share one OPTIONAL so missing sources cannot bind unrelated graph nodes. Multiple primary types and labelled/unlabelled subject/related sources remain visible. Ontology discovery uses the same compiler through [Ontology Graph Search](OntologyGraphSearch.md).
