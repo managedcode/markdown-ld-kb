@@ -260,12 +260,16 @@ public sealed partial class KnowledgeGraph : IDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             var dataset = new InMemoryDataset(_graph);
-            var processor = queryExecutionTimeoutMilliseconds is null
-                ? new LeviathanQueryProcessor(dataset)
-                : new LeviathanQueryProcessor(dataset, options =>
+            // Each caller already owns an asynchronous query worker. Keep native
+            // evaluation in that worker instead of nesting PLINQ work and URI-cache contention.
+            var processor = new LeviathanQueryProcessor(dataset, options =>
+            {
+                options.UsePLinqEvaluation = false;
+                if (queryExecutionTimeoutMilliseconds is int timeout)
                 {
-                    options.QueryExecutionTimeout = queryExecutionTimeoutMilliseconds.Value;
-                });
+                    options.QueryExecutionTimeout = timeout;
+                }
+            });
             return processor.ProcessQuery(query);
         }
         finally
@@ -289,7 +293,11 @@ public sealed partial class KnowledgeGraph : IDisposable
             var processor = new KnowledgeGraphFederatedQueryProcessor(
                 dataset,
                 localServices,
-                options => options.QueryExecutionTimeout = queryExecutionTimeoutMilliseconds);
+                options =>
+                {
+                    options.UsePLinqEvaluation = false;
+                    options.QueryExecutionTimeout = queryExecutionTimeoutMilliseconds;
+                });
             return processor.ProcessQuery(query);
         }
         finally

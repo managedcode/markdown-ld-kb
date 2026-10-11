@@ -227,6 +227,20 @@ Use `KnowledgeGraphBuildProfile` when graph creation and graph search should tra
 
 Use `graph.DescribeSchema(profile.Prefixes)` for external JSON-LD and `graph.ValidateSchemaSearchProfile(profile)` before exposing a profile to users.
 
+## Concurrent Query Execution
+
+Independent asynchronous callers keep their own query workers. Each local dotNetRDF processor uses `UsePLinqEvaluation = false`, including local federated `SERVICE` bindings. Query evaluation stays within its existing worker, avoiding nested PLINQ fan-out and shared URI-cache contention when many callers search together.
+
+```mermaid
+flowchart LR
+    Callers[Concurrent callers] --> Workers[Independent asynchronous query workers]
+    Workers --> ReadLock[Graph read lock]
+    ReadLock --> Native[Native dotNetRDF evaluation without nested PLINQ]
+    Native --> Results[Per-query matches and evidence]
+```
+
+Read-only validation, graph locking, caller cancellation, the federation allowlist, and caller-configured query timeouts retain their existing behavior. SPARQL semantics remain the same, and callers continue executing independently.
+
 ## Verification
 
 ```bash
@@ -237,6 +251,7 @@ Covered scenarios:
 
 - simple compatibility search misses custom JSON-LD predicates while schema-aware SPARQL finds them
 - direct custom predicate evidence
+- concurrent local and federated queries retain independent direct and relationship evidence; local search retains neighbor expansion
 - related-node evidence through a configured relationship
 - focused search routing through a schema profile
 - federated schema search through allowlisted local `SERVICE` bindings
