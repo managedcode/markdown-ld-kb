@@ -352,6 +352,9 @@ Use this capability to remove an existing story.
 
 `graph_groups` creates `kb:memberOf` edges. `graph_related` creates `kb:relatedTo` edges. `graph_next_steps` creates `kb:nextStep` edges. For advanced graphs, use `graph_entities` and `graph_edges` to add explicit nodes and predicates. Absolute IRIs are preserved; plain labels become stable entity IRIs under the pipeline base URI.
 
+Schema expansion preserves each neighbor role independently: a node connected as both related and next-step appears in both result arrays with its role-specific score and all RDF types. The focused graph contains the node once.
+
+
 ```csharp
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 
@@ -394,7 +397,7 @@ Entities with the same `schema:sameAs` target are merged before assertions are e
 - a SKOS concept scheme / concept layer for graph concepts
 - repository-owned ontology declarations for `kb:` classes and properties
 
-The implementation uses `dotNetRdf`, `dotNetRdf.Ontology`, and `dotNetRdf.Skos` as the semantic building blocks. Markdown remains the source of truth; the library owns the mapping from Markdown/front matter/rules into the RDF graph.
+The implementation uses `dotNetRdf.Core`, `dotNetRdf.Ontology`, and `dotNetRdf.Skos` as the semantic building blocks. Markdown remains the source of truth; the library owns the mapping from Markdown/front matter/rules into the RDF graph.
 
 By default, semantic layers are enabled through `KnowledgeGraphBuildOptions.SemanticLayers`.
 
@@ -418,7 +421,7 @@ var result = await pipeline.BuildAsync(
 
 Once a Markdown file or directory has been built into a `KnowledgeGraph`, the same public runtime can persist it through a graph-store abstraction, reload it, materialize inference, expose a full-text index, expose a dynamic snapshot, or materialize a Linked Data Fragments source into the same local graph model.
 
-The runtime now uses `dotNetRdf`, `dotNetRdf.Ontology`, `dotNetRdf.Skos`, `dotNetRdf.Inferencing`, `dotNetRdf.Dynamic`, `dotNetRdf.Query.FullText`, and `dotNetRdf.Ldf` through repository-owned adapters instead of a hand-rolled RDF stack. RDF serialization remains repository-owned; filesystem/blob access is delegated to `ManagedCode.Storage`.
+The runtime now uses `dotNetRdf.Core`, `dotNetRdf.Ontology`, `dotNetRdf.Skos`, `dotNetRdf.Inferencing`, `dotNetRdf.Dynamic`, `dotNetRdf.Query.FullText`, and `dotNetRdf.Ldf` through repository-owned adapters instead of a hand-rolled RDF stack. RDF serialization remains repository-owned; filesystem/blob access is delegated to `ManagedCode.Storage`.
 
 ```csharp
 using ManagedCode.MarkdownLd.Kb.Pipeline;
@@ -1343,17 +1346,15 @@ For live allocation/GC investigation, see [Schema Search Profiling](docs/Perform
 
 BenchmarkDotNet performance runs are separate from TUnit correctness tests. Commands, workload profiles, profiler options, and full result tables live in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md). The build/test/pack validation job stays separate; PR validation, release validation, and the dedicated benchmark workflow run the complete BenchmarkDotNet suite as parallel suite jobs and upload suite-specific `benchmarkdotnet-results-*` artifacts.
 
-Current local snapshot from October 12, 2026: BenchmarkDotNet 0.15.8, Apple M2 Pro, .NET 10.0.12 / SDK 10.0.401. The full `Required` suite completed all 127 cases in 7 minutes 10 seconds. MB below follows BenchmarkDotNet (MiB).
+Current local snapshot from October 12, 2026: BenchmarkDotNet 0.15.8, Apple M2 Pro, .NET 10.0.12 / SDK 10.0.401. The complete `Required` suite ran 131 cases in 6 minutes 45 seconds. MB below follows BenchmarkDotNet (MiB).
 
 | Area | Current local result |
 | --- | --- |
-| Graph build | `LargeCorpus`: 71.56 ms / 58.06 MB allocated |
-| Ranked search | `ShortDocuments` exact: 3.438 ms / 2.75 MB; BM25: 6.893 ms / 2.76 MB |
-| Graph schema search | `ShortDocuments` exact: 24.928 ms / 5.92 MB; local federated schema: 22.144 ms / 8.00 MB |
-| Candidate schema workload | `ShortDocuments` exact: unrestricted 36.469 ms / 17.86 MB; ten candidates 16.003 ms / 7.68 MB |
-| Candidate no-match workload | `ShortDocuments`: unrestricted 13.137 ms / 7.24 MB; ten candidates 12.179 ms / 4.93 MB |
-| Tiktoken build | Repeated catalog: 104.446 ms / 67.05 MB |
-| Persistence | `LargeCorpus`: Turtle file load 93.948 ms / 28.13 MB; JSON-LD file load 140.072 ms / 80.39 MB |
-| Lifecycle | Build/search/save/load/export: 110.009 ms / 55.72 MB |
+| Compact schema search | `ShortDocuments`: unrestricted 36.204 ms / 15.36 MB; ten candidates 9.504 ms / 5.32 MB |
+| Compact candidate no-match | `ShortDocuments`: 8.609 ms / 3.26 MB |
+| Rich catalog schema search | 120 Tiktoken documents: unrestricted 69.734 ms / 16.88 MB; one candidate 10.577 ms / 9.41 MB |
+| Rich catalog candidate no-match | 9.838 ms / 4 MB |
+| Tiktoken build | Repeated catalog: 113.1 ms / 67.07 MB |
+| Lifecycle | Build/search/save/load/export: 117.0 ms / 56.09 MB |
 
 Background Roslynk CPU load produced broad timing confidence intervals. These are observed means, not a reliable latency speedup claim or a cross-machine performance contract. The owner checkout also included pre-existing serialization/tokenization edits outside this release's scoped changes. Full result tables and that qualification context are in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md).

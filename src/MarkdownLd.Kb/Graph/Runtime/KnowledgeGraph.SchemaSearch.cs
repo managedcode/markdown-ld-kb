@@ -55,7 +55,7 @@ public sealed partial class KnowledgeGraph
             Explain: CreateSchemaSearchExplain(plan, null, federated.ServiceEndpointSpecifiers));
     }
 
-    private static KnowledgeGraphSchemaSearchPlan CreateSchemaSearchPlan(
+    private KnowledgeGraphSchemaSearchPlan CreateSchemaSearchPlan(
         string query,
         KnowledgeGraphSchemaSearchProfile profile,
         bool federated)
@@ -196,7 +196,7 @@ public sealed partial class KnowledgeGraph
         return path.Select(item => ResolveSchemaSearchIri(item, prefixes)).ToArray();
     }
 
-    private static string BuildSchemaSearchSparql(
+    private string BuildSchemaSearchSparql(
         string query,
         IReadOnlyDictionary<string, string> prefixes,
         IReadOnlyList<ResolvedSchemaTextPredicate> textPredicates,
@@ -218,7 +218,7 @@ public sealed partial class KnowledgeGraph
         }
         else
         {
-            AppendSchemaSearchBody(builder, query, profile, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, SparqlIndent);
+            AppendSchemaSearchBody(builder, query, profile, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, SparqlIndent, TripleCount >= SchemaSearchFixedPredicateMinimumTriples);
         }
 
         builder.AppendLine(SparqlCloseBrace);

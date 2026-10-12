@@ -11,7 +11,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="dotNetRdf" />
+    <PackageReference Include="dotNetRdf.Core" />
+    <PackageReference Include="dotNetRdf.Client" />
+    <PackageReference Include="dotNetRdf.Query.Spin" />
     <PackageReference Include="dotNetRdf.Dynamic" />
     <PackageReference Include="dotNetRdf.Inferencing" />
     <PackageReference Include="dotNetRdf.Ldf" />

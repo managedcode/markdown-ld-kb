@@ -35,7 +35,7 @@ if (!expectedIds.SequenceEqual(narrowed.Matches.Select(match => match.NodeId)))
 {
     throw new InvalidOperationException("Candidate and unrestricted primary match order differ.");
 }
-Console.WriteLine(JsonSerializer.Serialize(new { ready = true, pid = Environment.ProcessId, runtime = Environment.Version.ToString(), corpus = corpus.ToString(), documents = sources.Length, query = matchQuery, candidateCount = expectedIds.Length, primaryResultsEqual = true }));
+Console.WriteLine(JsonSerializer.Serialize(new { ready = true, pid = Environment.ProcessId, runtime = Environment.Version.ToString(), corpus = corpus.ToString(), documents = sources.Length, triples = build.Graph.TripleCount, query = matchQuery, candidateCount = expectedIds.Length, primaryResultsEqual = true }));
 
 while (await Console.In.ReadLineAsync() is { } command)
 {

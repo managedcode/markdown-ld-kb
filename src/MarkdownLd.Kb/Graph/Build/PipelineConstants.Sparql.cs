@@ -2,6 +2,11 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 internal static partial class PipelineConstants
 {
+    // Measured None corpora favor compact predicate VALUES; rich Tiktoken graphs favor indexed branches.
+    internal const int SchemaSearchFixedPredicateMinimumTriples = 8_192;
+    internal const string SparqlNotExistsKeyword = "NOT EXISTS";
+    internal const string SchemaSearchAlternativePathSeparator = "|";
+    internal const string SchemaSearchPreferredLabelVariableSuffix = "Preferred";
     internal const string EmptySparqlQueryMessage = "SPARQL query is empty";
     internal const string ReadOnlySparqlQueryMessage = "SPARQL query is not read-only.";
     internal const string ExpectedResultSetMessage = "Expected a SPARQL result set.";

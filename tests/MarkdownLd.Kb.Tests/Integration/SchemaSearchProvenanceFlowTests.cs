@@ -90,4 +90,27 @@ public sealed class SchemaSearchProvenanceFlowTests
         sources.Single(source => source.SourceId.EndsWith("/unlabelled", StringComparison.Ordinal)).SourceLabel.ShouldBeNull();
     }
 
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Disabled_relationship_targets_do_not_emit_unbound_evidence_rows(bool federated)
+    {
+        using var graph = KnowledgeGraph.LoadJsonLd(GraphJson);
+        using var root = KnowledgeGraph.LoadJsonLd("""{"@graph": []}""");
+        var endpoint = new Uri("https://provenance.example/sparql");
+        var profile = new KnowledgeGraphSchemaSearchProfile
+        {
+            TypeFilters = ["schema:SoftwareApplication"],
+            TextPredicates = [new("schema:name")],
+            RelationshipPredicates = [new("schema:about", [])],
+            ExpansionPredicates = [],
+            FederatedServiceEndpoints = [endpoint]
+        };
+        var options = new FederatedSparqlExecutionOptions { AllowedServiceEndpoints = [endpoint], LocalServiceBindings = [new(endpoint, graph)] };
+        var result = federated ? await root.SearchBySchemaFederatedAsync("Rainfall", profile, options) : await graph.SearchBySchemaAsync("Rainfall", profile);
+        result.Matches.ShouldBeEmpty();
+        var rows = federated ? (await root.ExecuteFederatedSelectAsync(result.GeneratedSparql, options)).Result.Rows : (await graph.ExecuteSelectAsync(result.GeneratedSparql)).Rows;
+        rows.ShouldBeEmpty();
+    }
+
 }

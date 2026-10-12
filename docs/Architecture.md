@@ -579,3 +579,9 @@ flowchart LR
     Profile --> SPARQL[Local or allowlisted federated SPARQL]
     Graph --> Snapshot[Independent OntologyGraph snapshot]
 ```
+
+### Schema expansion result identity
+
+Expansion maps SPARQL rows by (node, role), retaining role-specific best bindings and all RDF types. One node may appear in both related and next-step results; focused graph projection deduplicates nodes. See [ADR-0009](ADR/ADR-0009-schema-expansion-role-and-type-retention.md).
+
+Schema SPARQL compilation selects compact predicate VALUES for small local graphs and fixed predicate branches for larger local/unknown remote graphs; expansion remains fixed-predicate. Subject metadata decorates all bound evidence once, related metadata stays in the relationship-only group, and expansion metadata decorates its mandatory union once. A single guarded label OPTIONAL retains schema:name/RDFS/SKOS priority and all preferred values while avoiding repeated left-join intermediate sets. This preserves full-graph relationships without per-request graph copies; see ADR-0009 and SchemaSearchProfiling for measured query-shape evidence.

@@ -55,9 +55,15 @@ public sealed partial class KnowledgeGraph
             .Append(SparqlLabelVariable)
             .AppendLine();
         builder.AppendLine(SparqlWhereKeyword + SpaceText + SparqlOpenBrace);
-        AppendValues(builder, SparqlSourceVariable, primary.Select(static match => match.NodeId), SparqlIndent);
-        AppendValues(builder, SparqlPredicateVariable, plan.ExpansionPredicates.Select(static predicate => predicate.PredicateId), SparqlIndent);
-        AppendTriple(builder, SparqlSourceVariable, SparqlPredicateVariable, SparqlNodeVariable, SparqlIndent);
+        builder.AppendLine(SparqlIndent + SparqlOpenBrace);
+        var hasBranch = false;
+        foreach (var predicateId in plan.ExpansionPredicates.Select(static predicate => predicate.PredicateId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            AppendEvidenceBranchStart(builder, SparqlDoubleIndent, hasBranch);
+            AppendExpansionBranch(builder, primary, predicateId);
+            hasBranch = true;
+        }
+        builder.AppendLine(SparqlIndent + SparqlCloseBrace);
         builder.Append(SparqlIndent).Append(SparqlOptionalKeyword).Append(SpaceCharacter).AppendLine(SparqlOpenBrace);
         AppendTriple(builder, SparqlNodeVariable, SparqlTypeShortcut, SparqlTypeVariable, SparqlDoubleIndent);
         builder.Append(SparqlIndent).AppendLine(SparqlCloseBrace);
@@ -67,52 +73,13 @@ public sealed partial class KnowledgeGraph
         return builder.ToString();
     }
 
-    private static IReadOnlyList<KnowledgeGraphSchemaSearchMatch> BuildExpansionMatches(
-        SparqlQueryResult rows,
-        KnowledgeGraphSchemaSearchPlan plan,
-        IReadOnlyList<KnowledgeGraphSchemaSearchMatch> primary)
+    private static void AppendExpansionBranch(StringBuilder builder, IReadOnlyList<KnowledgeGraphSchemaSearchMatch> primary, string predicateId)
     {
-        var primaryIds = primary.Select(static match => match.NodeId).ToHashSet(StringComparer.Ordinal);
-        return rows.Rows
-            .Where(row => TryGetRowValue(row, SchemaSearchNodeKey, out var nodeId) && !primaryIds.Contains(nodeId))
-            .Select(row => CreateExpansionMatch(row, plan))
-            .Where(static match => match is not null)
-            .GroupBy(match => match!.NodeId, StringComparer.Ordinal)
-            .Select(static group => group.OrderByDescending(match => match!.Score).First()!)
-            .OrderByDescending(static match => match.Score)
-            .ThenBy(static match => match.Label, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static KnowledgeGraphSchemaSearchMatch? CreateExpansionMatch(
-        SparqlRow row,
-        KnowledgeGraphSchemaSearchPlan plan)
-    {
-        if (!TryGetRowValue(row, SchemaSearchNodeKey, out var nodeId) ||
-            !TryGetRowValue(row, SchemaSearchPredicateKey, out var predicateId) ||
-            !TryGetRowValue(row, SchemaSearchSourceKey, out var sourceId))
-        {
-            return null;
-        }
-
-        var expansion = plan.ExpansionPredicates.FirstOrDefault(predicate => predicate.PredicateId == predicateId);
-        if (expansion is null)
-        {
-            return null;
-        }
-
-        var label = TryGetRowValue(row, SchemaSearchLabelKey, out var rowLabel) ? rowLabel : nodeId;
-        var type = TryGetRowValue(row, SchemaSearchTypeKey, out var rowType) ? rowType : null;
-        var types = type is null ? [] : new[] { type };
-        return new KnowledgeGraphSchemaSearchMatch(
-            nodeId,
-            label,
-            expansion.Role,
-            expansion.Score,
-            types,
-            [],
-            SourceNodeId: sourceId,
-            ViaPredicateId: predicateId);
+        var branchIndent = SparqlDoubleIndent + SparqlIndent;
+        AppendValues(builder, SparqlSourceVariable, primary.Select(static match => match.NodeId), branchIndent);
+        AppendTriple(builder, SparqlSourceVariable, SparqlUriOpen + predicateId + SparqlUriClose, SparqlNodeVariable, branchIndent);
+        AppendBindUri(builder, predicateId, SparqlPredicateVariable, branchIndent);
+        builder.AppendLine(SparqlDoubleIndent + SparqlCloseBrace);
     }
 
     private KnowledgeGraphSnapshot BuildSchemaSearchFocusedGraph(

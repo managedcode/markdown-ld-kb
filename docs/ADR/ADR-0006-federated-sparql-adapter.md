@@ -100,3 +100,5 @@ Rejected because the core boundary is RDF/SPARQL-first, not MediaWiki API-first,
 - Add policy-owned endpoint profiles, starting with Wikidata main and scholarly endpoints.
 - Keep local SPARQL blocking top-level `SERVICE` unless the caller uses the explicit federated API.
 - Add deterministic non-network tests for policy and failure behavior.
+
+October 12, 2026 scope refinement: replace the broad meta-package with official Core/Client and explicit graph capability packages. This preserves supported APIs and SPIN package availability while dropping the unwanted HTML/DataTables adapters. Engine version remains 3.5.2; Client remains an official capability dependency, not a new federation implementation.
