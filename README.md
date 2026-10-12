@@ -102,6 +102,7 @@ Tiktoken mode is deterministic and network-free. It uses lexical token-distance 
 - `KnowledgeGraph.Diff(other)` — compare graph snapshots and report added, removed, and changed literal edges
 - `BuildIncrementalAsync(...)` — rebuild deterministically while returning a source manifest, changed paths, unchanged paths, removed paths, and optional graph diff
 - `MaterializeInferenceAsync(options)` — explicit RDFS / SKOS / N3-rule materialization
+- `Project(options)` — independent RDF projection with explicit subject/object/predicate allowlists
 - `BuildFullTextIndexAsync(options)` — optional Lucene-backed graph full-text index
 - `ToDynamicSnapshot()` — optional dynamic graph access over dotNetRDF dynamic types
 
@@ -1358,3 +1359,24 @@ Current local snapshot from October 12, 2026: BenchmarkDotNet 0.15.8, Apple M2 P
 | Lifecycle | Build/search/save/load/export: 108.8 ms / 56.09 MB |
 
 Background Roslynk CPU load produced broad timing confidence intervals. These are observed means, not a reliable latency speedup claim or a cross-machine performance contract. The owner checkout also included pre-existing serialization/tokenization edits outside this release's scoped changes. Full result tables and that qualification context are in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md).
+
+
+## Explicit remote HTTP ownership and graph projection
+
+Federated endpoint allowlists remain required. Supply your own HTTP pipeline when credentials, DNS/address rules or redirect handling matter, and require explicit bindings to prevent falling back to an unconfigured transport:
+
+```csharp
+var federation = new FederatedSparqlExecutionOptions
+{
+    AllowedServiceEndpoints = [endpoint],
+    RequireExplicitRemoteServiceBindings = true,
+    RemoteServiceBindings = [new FederatedSparqlRemoteServiceBinding(endpoint, httpClient)],
+};
+var result = await graph.ExecuteFederatedSelectAsync(query, federation, cancellationToken);
+```
+
+The caller owns `httpClient`. Local service bindings continue to execute without network requests. `Project(new KnowledgeGraphProjectionOptions(allowedSubjects) { AllowedResourceObjectIds = allowedObjects, AllowedPredicateIds = allowedPredicates })` creates an independently owned RDF graph; dispose it after use.
+
+The current `dotNetRdf.Query.Spin` package does not expose public RDF-command or explicit rule/constraint execution. That integration is blocked by [upstream issue 911](https://github.com/dotnetrdf/dotnetrdf/issues/911); supported ontology, inferencing, SPARQL and Lucene APIs remain available.
+
+Representative allocation measurements on Apple M4 / .NET 10.0.12: normalized vector distance 56 B -> 0 B; warm focused no-match at 120 documents 4.71 MB -> 38.27 KB (58.23 us), and at 1000 documents 44.48 MB -> 269.85 KB (458.22 us). These measure warm search; cold graph building and one immutable resident snapshot are separate costs. See [benchmark coverage](docs/Features/PerformanceBenchmarks.md) for workload details and full-suite qualification.

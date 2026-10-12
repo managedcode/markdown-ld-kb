@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <AssemblyName>ManagedCode.MarkdownLd.Kb.Tests</AssemblyName>
@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\MarkdownLd.Kb\MarkdownLd.Kb.csproj" />
   </ItemGroup>
 

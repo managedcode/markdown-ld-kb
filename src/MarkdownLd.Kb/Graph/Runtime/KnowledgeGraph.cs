@@ -227,6 +227,7 @@ public sealed partial class KnowledgeGraph : IDisposable
             cancellationToken.ThrowIfCancellationRequested();
             _graph.Merge(graph);
             _tokenIndex = null;
+            Volatile.Write(ref _semanticSnapshot, null);
         }
         finally
         {
@@ -349,6 +350,7 @@ public sealed partial class KnowledgeGraph : IDisposable
 
     public void Dispose()
     {
+        Volatile.Write(ref _semanticSnapshot, null);
         _graphLock.Dispose();
     }
 }

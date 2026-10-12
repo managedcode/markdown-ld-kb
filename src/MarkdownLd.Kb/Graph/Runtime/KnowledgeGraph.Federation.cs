@@ -7,6 +7,7 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed partial class KnowledgeGraph
 {
+    private const string ExplicitRemoteBindingsRequiredMessage = "Remote SERVICE endpoints require explicit caller-owned HTTP bindings.";
     private const string UnsupportedServiceSpecifierMessagePrefix = "Federated SERVICE specifiers must be absolute endpoint URIs at the local execution boundary: ";
     private const string UnallowlistedServiceEndpointMessagePrefix = "Federated SERVICE endpoint is not allowlisted: ";
 
@@ -22,7 +23,7 @@ public sealed partial class KnowledgeGraph
             ExecuteFederatedSelectRequiresSelectQueryMessage);
         var localServices = KnowledgeGraphFederatedLocalServiceRegistry.Create(
             prepared.Options.LocalServiceBindings,
-            prepared.Options.QueryExecutionTimeoutMilliseconds);
+            prepared.Options.QueryExecutionTimeoutMilliseconds, prepared.Options.RemoteServiceBindings);
         var result = await Task.Run(
                 () => ProcessFederatedQuery(prepared.Query, localServices, cancellationToken, prepared.Options.QueryExecutionTimeoutMilliseconds),
                 cancellationToken)
@@ -47,7 +48,7 @@ public sealed partial class KnowledgeGraph
             ExecuteFederatedAskRequiresAskQueryMessage);
         var localServices = KnowledgeGraphFederatedLocalServiceRegistry.Create(
             prepared.Options.LocalServiceBindings,
-            prepared.Options.QueryExecutionTimeoutMilliseconds);
+            prepared.Options.QueryExecutionTimeoutMilliseconds, prepared.Options.RemoteServiceBindings);
         var result = await Task.Run(
                 () => ProcessFederatedQuery(prepared.Query, localServices, cancellationToken, prepared.Options.QueryExecutionTimeoutMilliseconds),
                 cancellationToken)
@@ -80,6 +81,16 @@ public sealed partial class KnowledgeGraph
 
         EnsureSupportedServiceSpecifiers(serviceClauses);
         EnsureAllowlistedEndpoints(serviceClauses, effectiveOptions);
+        if (effectiveOptions.RequireExplicitRemoteServiceBindings)
+        {
+            var configured = effectiveOptions.LocalServiceBindings.Select(binding => binding.EndpointUri.AbsoluteUri)
+                .Concat(effectiveOptions.RemoteServiceBindings.Select(binding => binding.EndpointUri.AbsoluteUri)).ToHashSet(StringComparer.Ordinal);
+            var missing = serviceClauses.Where(clause => !configured.Contains(clause.ServiceEndpointUri!.AbsoluteUri)).Select(clause => clause.SpecifierText).ToArray();
+            if (missing.Length > 0)
+            {
+                throw new FederatedSparqlQueryException(ExplicitRemoteBindingsRequiredMessage, missing);
+            }
+        }
         return new FederatedPreparedQuery(
             query,
             effectiveOptions,

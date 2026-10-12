@@ -36,6 +36,8 @@ The benchmark project is `benchmarks/MarkdownLd.Kb.Benchmarks`. It references th
 | `SchemaCatalogGraphSearchBenchmarks` | Generated 120-document Tiktoken catalog, fixed-predicate evidence/metadata and expansion, unrestricted/candidate matching/no-match. |
 | `SchemaGraphSearchBenchmarks` | Mandatory evidence/provenance query allocation with unrestricted or candidate VALUES, matching and no-match inputs. |
 | `GraphSearchBenchmarks` | Graph-ranked search, BM25, BM25 fuzzy matching, schema search, focused search, and local federated schema search. |
+| `TokenVectorDistanceBenchmarks` | Sparse normalized vector distance at 16/128 weights, including allocated bytes. |
+| `TokenFocusedSearchBenchmarks` | Warm real Tiktoken focused search at 120/1000 documents, matching/no-match. |
 | `TiktokenSearchBenchmarks` | Exact token-distance search and fuzzy query correction over long-document and multilingual token-heavy graphs. |
 | `GraphPersistenceBenchmarks` | Snapshot creation, Turtle/JSON-LD serialization, Mermaid/DOT export, in-memory store save/load, and file save/load. |
 | `GraphLifecycleBenchmarks` | One broad build/search/save/load/export lifecycle benchmark for the complete suite. |
@@ -413,3 +415,15 @@ LaunchCount=1  WarmupCount=2
 | Method                       | Mean     | Error    | StdDev   | Ratio | RatioSD | Completed Work Items | Lock Contentions | Gen0      | Gen1      | Gen2     | Allocated | Alloc Ratio |
 |----------------------------- |---------:|---------:|---------:|------:|--------:|---------------------:|-----------------:|----------:|----------:|---------:|----------:|------------:|
 | BuildSearchSaveLoadAndExport | 108.8 ms | 70.30 ms | 18.26 ms |  1.02 |    0.22 |              52.5000 |                - | 6500.0000 | 2000.0000 | 500.0000 |  56.09 MB |        1.00 |
+
+
+## Semantic snapshot and vector allocation qualification (2026-10-12)
+
+| Workload | Before allocated | After allocated | After mean |
+| --- | ---: | ---: | ---: |
+| Sparse vector distance, 16 weights | 56 B | 0 B | 62.29 ns |
+| Sparse vector distance, 128 weights | 56 B | 0 B | 729.45 ns |
+| Focused no-match, 120 documents | 4.71 MB | 38.27 KB | 58.23 us |
+| Focused no-match, 1000 documents | 44.48 MB | 269.85 KB | 458.22 us |
+
+Distance timing is noisy; allocation elimination and reference-equivalent distances are the supported conclusion. Focused search uses one immutable graph-owned snapshot invalidated by merge. Measurements are uninstrumented; allocation profiler sample estimates are separate evidence. Reports are under `artifacts/benchmarks/governed-vector-before`, `governed-vector-after`, `governed-focused-before`, and `governed-focused-after`.

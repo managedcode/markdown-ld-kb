@@ -589,3 +589,7 @@ Schema SPARQL compilation selects compact predicate VALUES for small local graph
 ### Indexed schema focused projection
 
 Schema match/expansion URI identities select subject triples through official dotNetRDF indexes before rendering graph nodes. Object-index lookup keeps object-only selected nodes. Non-URI focus retains the general RDF projection. Both paths preserve labels, sorted induced edges and deduplicated focus nodes under the graph read lock; MergeAsync updates the indexes under its write lock. See ADR-0009 and the profiling report for measured attribution and qualification.
+
+## Governed graph projection and allocation ownership
+
+One immutable semantic snapshot belongs to each `KnowledgeGraph`, is reused by readers and is invalidated by merge. Normalized token vectors own their dictionaries and avoid boxed hot-path enumeration. Explicit RDF projection filters subjects, resource objects and optional predicates before retrieval. Federated remote bindings use caller-owned official SPARQL HTTP clients and can require configured bindings for every remote endpoint. SPIN RDF-command/inference integration remains blocked by upstream public API issue 911. See [ADR-0010](ADR/ADR-0010-immutable-semantic-snapshots-and-explicit-graph-egress.md).

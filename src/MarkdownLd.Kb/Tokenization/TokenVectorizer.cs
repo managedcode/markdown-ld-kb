@@ -155,13 +155,15 @@ internal sealed record TokenVector
 {
     private const double NormalizedSquaredDistanceScale = 2d;
 
-    private TokenVector(IReadOnlyDictionary<int, double> weights, double squaredMagnitude)
+    private TokenVector(Dictionary<int, double> weights, double squaredMagnitude)
     {
-        Weights = weights;
+        _weights = weights;
         SquaredMagnitude = squaredMagnitude;
     }
 
-    public IReadOnlyDictionary<int, double> Weights { get; }
+    private readonly Dictionary<int, double> _weights;
+
+    public IReadOnlyDictionary<int, double> Weights => _weights;
 
     private double SquaredMagnitude { get; }
 
@@ -186,13 +188,13 @@ internal sealed record TokenVector
             return Weights.Count == other.Weights.Count ? ZeroConfidence : FullConfidence;
         }
 
-        var dotProduct = CalculateDotProduct(Weights, other.Weights);
+        var dotProduct = CalculateDotProduct(_weights, other._weights);
         return Math.Sqrt(Math.Max(ZeroConfidence, SquaredMagnitude + other.SquaredMagnitude - (NormalizedSquaredDistanceScale * dotProduct)));
     }
 
     private static double CalculateDotProduct(
-        IReadOnlyDictionary<int, double> left,
-        IReadOnlyDictionary<int, double> right)
+        Dictionary<int, double> left,
+        Dictionary<int, double> right)
     {
         var smaller = left.Count <= right.Count ? left : right;
         var larger = left.Count <= right.Count ? right : left;

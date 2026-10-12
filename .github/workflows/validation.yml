@@ -82,6 +82,10 @@ jobs:
             filter: '*GraphPersistenceBenchmarks*'
           - suite: graph-lifecycle
             filter: '*GraphLifecycleBenchmarks*'
+          - suite: token-vector-distance
+            filter: '*TokenVectorDistanceBenchmarks*'
+          - suite: token-focused-search
+            filter: '*TokenFocusedSearchBenchmarks*'
 
     steps:
     - name: Checkout

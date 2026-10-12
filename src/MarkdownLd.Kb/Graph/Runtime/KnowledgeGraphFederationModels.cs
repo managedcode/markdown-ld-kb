@@ -10,6 +10,11 @@ public sealed record FederatedSparqlExecutionOptions
 
     public IReadOnlyList<FederatedSparqlLocalServiceBinding> LocalServiceBindings { get; init; } = [];
 
+    public IReadOnlyList<FederatedSparqlRemoteServiceBinding> RemoteServiceBindings { get; init; } = [];
+
+    /// <summary>Require caller-owned HTTP clients for every non-local SERVICE endpoint.</summary>
+    public bool RequireExplicitRemoteServiceBindings { get; init; }
+
     public int QueryExecutionTimeoutMilliseconds { get; init; } = DefaultFederatedSparqlTimeoutMilliseconds;
 }
 
@@ -48,3 +53,5 @@ public sealed class FederatedSparqlQueryException(string message, IReadOnlyList<
 {
     public IReadOnlyList<string> ServiceEndpointSpecifiers { get; } = serviceEndpointSpecifiers;
 }
+
+public sealed record FederatedSparqlRemoteServiceBinding(Uri EndpointUri, HttpClient HttpClient);
