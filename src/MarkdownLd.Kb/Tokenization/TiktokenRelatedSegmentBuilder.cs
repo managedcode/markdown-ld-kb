@@ -46,26 +46,50 @@ internal sealed class TiktokenRelatedSegmentBuilder
         IReadOnlyList<TokenizedKnowledgeSegment> segments,
         IReadOnlyList<List<RelatedSegmentCandidate>> relatedBySegment)
     {
-        for (var sourceIndex = 0; sourceIndex < segments.Count; sourceIndex++)
+        var ordered = Enumerable.Range(0, segments.Count)
+            .OrderBy(index => segments[index].Id, StringComparer.Ordinal).ToArray();
+        var unresolved = new SortedSet<int>(Enumerable.Range(0, segments.Count));
+        for (var position = 0; position < ordered.Length; position++)
         {
-            var source = segments[sourceIndex];
-            for (var candidateIndex = sourceIndex + 1; candidateIndex < segments.Count; candidateIndex++)
+            unresolved.Remove(position);
+            var sourceIndex = ordered[position];
+            var candidates = HasExactNeighbors(relatedBySegment[sourceIndex])
+                ? unresolved.ToArray()
+                : Enumerable.Range(position + 1, ordered.Length - position - 1);
+            foreach (var candidatePosition in candidates)
             {
-                var candidate = segments[candidateIndex];
-                var distance = source.Vector.EuclideanDistanceTo(candidate.Vector);
-                if (distance > _options.MaximumRelatedDistance)
+                var candidateIndex = ordered[candidatePosition];
+                AddPair(segments, relatedBySegment, sourceIndex, candidateIndex);
+                if (HasExactNeighbors(relatedBySegment[candidateIndex]))
                 {
-                    continue;
+                    unresolved.Remove(candidatePosition);
                 }
-
-                AddBoundedRelatedCandidate(
-                    relatedBySegment[sourceIndex],
-                    new RelatedSegmentCandidate(candidate, distance));
-                AddBoundedRelatedCandidate(
-                    relatedBySegment[candidateIndex],
-                    new RelatedSegmentCandidate(source, distance));
             }
         }
+    }
+
+    private bool HasExactNeighbors(IReadOnlyList<RelatedSegmentCandidate> related) =>
+        related.Count == _options.MaxRelatedSegments && related[^1].Distance == 0d;
+
+    private void AddPair(
+        IReadOnlyList<TokenizedKnowledgeSegment> segments,
+        IReadOnlyList<List<RelatedSegmentCandidate>> relatedBySegment,
+        int sourceIndex,
+        int candidateIndex)
+    {
+        var source = segments[sourceIndex];
+        var candidate = segments[candidateIndex];
+        // Preserve the original operand order, including floating-point accumulation.
+        var distance = sourceIndex < candidateIndex
+            ? source.Vector.EuclideanDistanceTo(candidate.Vector)
+            : candidate.Vector.EuclideanDistanceTo(source.Vector);
+        if (distance > _options.MaximumRelatedDistance)
+        {
+            return;
+        }
+
+        AddBoundedRelatedCandidate(relatedBySegment[sourceIndex], new RelatedSegmentCandidate(candidate, distance));
+        AddBoundedRelatedCandidate(relatedBySegment[candidateIndex], new RelatedSegmentCandidate(source, distance));
     }
 
     private static void AddRelations(

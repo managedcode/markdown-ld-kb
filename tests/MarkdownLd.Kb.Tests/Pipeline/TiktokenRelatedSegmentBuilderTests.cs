@@ -47,6 +47,49 @@ public sealed class TiktokenRelatedSegmentBuilderTests
         actualPairs.Distinct().Count().ShouldBe(actualPairs.Length);
     }
 
+    [Test]
+    [Arguments(1)]
+    [Arguments(4)]
+    [Arguments(12)]
+    public void Shuffled_repeated_vectors_preserve_exact_exhaustive_top_k(int count)
+    {
+        var random = new Random(42);
+        var segments = Enumerable.Range(0, 80)
+            .Select(index => Segment(index.ToString("D3", System.Globalization.CultureInfo.InvariantCulture), (index % 5, 1d)))
+            .OrderBy(_ => random.Next()).ToArray();
+
+        CreateBuilder(count).BuildRelations(segments)
+            .ShouldBe(BuildCurrentTopKUnion(segments, count));
+    }
+
+    [Test]
+    public void Mixed_sparse_weights_preserve_original_distances_and_order()
+    {
+        var random = new Random(73);
+        var segments = Enumerable.Range(0, 100).Select(index => Segment(
+            index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            (index % 7, random.NextDouble()), (10 + index % 3, random.NextDouble())))
+            .OrderBy(_ => random.Next()).ToArray();
+
+        CreateBuilder(5).BuildRelations(segments).ShouldBe(BuildCurrentTopKUnion(segments, 5));
+    }
+
+    [Test]
+    public void Large_repeated_vectors_retain_every_source_and_the_distinct_tail()
+    {
+        const int count = 35_000;
+        var segments = Enumerable.Range(0, count)
+            .Select(index => Segment(index.ToString("D5", System.Globalization.CultureInfo.InvariantCulture), (1, 1d)))
+            .Append(Segment("tail", (2, 1d))).ToArray();
+
+        var relations = CreateBuilder(4).BuildRelations(segments);
+
+        relations.SelectMany(relation => new[] { relation.SubjectId, relation.ObjectId })
+            .Distinct().Count().ShouldBe(count + 1);
+        relations.Where(relation => relation.ObjectId == segments[^1].Id || relation.SubjectId == segments[^1].Id)
+            .Count().ShouldBe(4);
+    }
+
     private static TiktokenRelatedSegmentBuilder CreateBuilder(int maxRelatedSegments)
     {
         return new TiktokenRelatedSegmentBuilder(new TiktokenKnowledgeGraphOptions

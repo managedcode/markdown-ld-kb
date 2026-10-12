@@ -94,21 +94,9 @@ MARKDOWN_LD_KB_BENCHMARK_PROFILE=jit dotnet run --project benchmarks/MarkdownLd.
 
 ## Current Results
 
-On October 12, 2026 the complete local `Required` suite completed 131/131 cases in 7 minutes 14 seconds (434.31s), on Apple M2 Pro, .NET 10.0.12, SDK 10.0.401, BenchmarkDotNet 0.15.8. Every exported case has valid statistics. Receipts: artifacts/projection-full-benchmarks.log and artifacts/benchmarks/projection-final/results.
+Full local `Required` suite: 138 unique successful cases, 448.99 seconds, October 12, 2026, Apple M2 Pro, .NET 10.0.12 / SDK 10.0.401, BenchmarkDotNet 0.15.8. Every exported case has non-empty statistics and allocation measurements. Primary-checkout codec/serialization edits remain outside this scoped release; canonical CI artifacts qualify the exact committed source. Warm operation statistics do not represent cold graph initialization or retained managed memory. Timings on a shared host are observations rather than causal speedup claims. Receipts: `artifacts/cold-related-verification.json`, `artifacts/cold-related-benchmarks.log`, `artifacts/benchmarks/cold-related-final/results/`.
 
-Background processes produced broad timing confidence intervals; observed means do not establish a reliable cross-machine latency speedup. Matching allocation supports indexed focused projection: rich candidate 9.41 -> 5.95 MiB/op, unrestricted 16.88 -> 12.90; ShortDocuments candidate 5.32 -> 4.78. No-match remains broadly unchanged because it has no focused graph to project. None corpora have 684/1,794 triples, generated 120-document Tiktoken catalog 14,160 and the actual gateway export 56,168. Known-good candidate pools measure retrieval allocation, not preselector recall. The primary checkout includes preserved unrelated serialization/tokenization edits outside this release; committed-source CI independently verifies release behavior. MB/KB below use BenchmarkDotNet binary units (MiB/KiB).
-
-| Suite | Job | Cases | Result files |
-| --- | --- | ---: | --- |
-| `FuzzyEditDistanceBenchmarks` | Required | 8 | Markdown, CSV, JSON |
-| `GraphBuildBenchmarks` | Required | 4 | Markdown, CSV, JSON |
-| `TiktokenGraphBuildBenchmarks` | Required | 1 | Markdown, CSV, JSON |
-| `GraphSearchBenchmarks` | Required | 54 | Markdown, CSV, JSON |
-| `SchemaCatalogGraphSearchBenchmarks` | Required | 4 | Markdown, CSV, JSON |
-| `SchemaGraphSearchBenchmarks` | Required | 8 | Markdown, CSV, JSON |
-| `TiktokenSearchBenchmarks` | Required | 12 | Markdown, CSV, JSON |
-| `GraphPersistenceBenchmarks` | Required | 39 | Markdown, CSV, JSON |
-| `GraphLifecycleBenchmarks` | Required | 1 | Markdown, CSV, JSON |
+Repeated-catalog builds cover 48 and 384 independently addressed sources. Exact-neighbor pruning preserves exhaustive top-k choices and floating-point distances; distinct corpora without enough exact neighbors remain quadratic. See [ADR-0011](../ADR/ADR-0011-exact-neighbor-pruning-for-repeated-segments.md).
 
 ### FuzzyEditDistanceBenchmarks
 
@@ -124,19 +112,19 @@ Job=Required  MinIterationTime=100ms  IterationCount=5
 LaunchCount=1  WarmupCount=2
 
 ```
-| Method                   | Scenario          | Mean         | Error       | StdDev     | Ratio  | RatioSD | Completed Work Items | Lock Contentions | Gen0   | Allocated | Alloc Ratio |
-|------------------------- |------------------ |-------------:|------------:|-----------:|-------:|--------:|---------------------:|-----------------:|-------:|----------:|------------:|
-| **BoundedBitVectorOrBanded** | **ShortDeletion**     |     **6.429 ns** |   **0.5417 ns** |  **0.1407 ns** |   **1.00** |    **0.03** |                    **-** |                **-** |      **-** |         **-** |          **NA** |
-| NaiveLevenshtein         | ShortDeletion     |    94.473 ns |   0.7479 ns |  0.1942 ns |  14.70 |    0.29 |                    - |                - | 0.0134 |     112 B |          NA |
-|                          |                   |              |             |            |        |         |                      |                  |        |           |             |
-| **BoundedBitVectorOrBanded** | **ShortSubstitution** |    **33.474 ns** |   **0.8167 ns** |  **0.1264 ns** |   **1.00** |    **0.00** |                    **-** |                **-** |      **-** |         **-** |          **NA** |
-| NaiveLevenshtein         | ShortSubstitution |    86.042 ns |   7.4757 ns |  1.1569 ns |   2.57 |    0.03 |                    - |                - | 0.0134 |     112 B |          NA |
-|                          |                   |              |             |            |        |         |                      |                  |        |           |             |
-| **BoundedBitVectorOrBanded** | **LongInsertion**     |    **27.014 ns** |   **0.4803 ns** |  **0.1247 ns** |   **1.00** |    **0.01** |                    **-** |                **-** |      **-** |         **-** |          **NA** |
-| NaiveLevenshtein         | LongInsertion     | 8,293.029 ns | 155.5642 ns | 24.0737 ns | 306.99 |    1.52 |                    - |                - | 0.0610 |     640 B |          NA |
-|                          |                   |              |             |            |        |         |                      |                  |        |           |             |
-| **BoundedBitVectorOrBanded** | **LongNoMatch**       |    **57.458 ns** |   **0.1591 ns** |  **0.0413 ns** |   **1.00** |    **0.00** |                    **-** |                **-** |      **-** |         **-** |          **NA** |
-| NaiveLevenshtein         | LongNoMatch       | 9,404.724 ns |  72.7884 ns | 18.9029 ns | 163.68 |    0.32 |                    - |                - | 0.0610 |     672 B |          NA |
+| Method                   | Scenario          | Mean         | Error        | StdDev        | Median       | Ratio  | RatioSD | Completed Work Items | Lock Contentions | Gen0   | Allocated | Alloc Ratio |
+|------------------------- |------------------ |-------------:|-------------:|--------------:|-------------:|-------:|--------:|---------------------:|-----------------:|-------:|----------:|------------:|
+| **BoundedBitVectorOrBanded** | **ShortDeletion**     |     **16.11 ns** |     **33.92 ns** |      **8.810 ns** |     **17.34 ns** |   **1.35** |    **1.07** |                    **-** |                **-** |      **-** |         **-** |          **NA** |
+| NaiveLevenshtein         | ShortDeletion     |    197.31 ns |    292.13 ns |     75.864 ns |    189.92 ns |  16.52 |   11.34 |                    - |                - | 0.0134 |     112 B |          NA |
+|                          |                   |              |              |               |              |        |         |                      |                  |        |           |             |
+| **BoundedBitVectorOrBanded** | **ShortSubstitution** |     **47.76 ns** |     **35.98 ns** |      **9.344 ns** |     **48.44 ns** |   **1.03** |    **0.27** |                    **-** |                **-** |      **-** |         **-** |          **NA** |
+| NaiveLevenshtein         | ShortSubstitution |    162.12 ns |    379.80 ns |     98.634 ns |     99.02 ns |   3.51 |    2.09 |                    - |                - | 0.0076 |     112 B |          NA |
+|                          |                   |              |              |               |              |        |         |                      |                  |        |           |             |
+| **BoundedBitVectorOrBanded** | **LongInsertion**     |     **71.81 ns** |    **188.05 ns** |     **29.101 ns** |     **60.65 ns** |   **1.10** |    **0.51** |                    **-** |                **-** |      **-** |         **-** |          **NA** |
+| NaiveLevenshtein         | LongInsertion     | 32,017.40 ns | 57,105.32 ns | 14,830.070 ns | 24,717.29 ns | 490.81 |  253.68 |                    - |                - |      - |     640 B |          NA |
+|                          |                   |              |              |               |              |        |         |                      |                  |        |           |             |
+| **BoundedBitVectorOrBanded** | **LongNoMatch**       |    **803.46 ns** |  **2,584.59 ns** |    **671.209 ns** |  **1,013.82 ns** |   **3.01** |    **4.32** |                    **-** |                **-** |      **-** |         **-** |          **NA** |
+| NaiveLevenshtein         | LongNoMatch       | 17,839.90 ns | 30,436.34 ns |  4,710.057 ns | 17,351.75 ns |  66.90 |   68.97 |                    - |                - |      - |     672 B |          NA |
 
 ### GraphBuildBenchmarks
 
@@ -152,251 +140,12 @@ Job=Required  MinIterationTime=100ms  IterationCount=5
 LaunchCount=1  WarmupCount=2
 
 ```
-| Method     | CorpusProfile        | Mean      | Error    | StdDev    | Completed Work Items | Lock Contentions | Gen0      | Gen1      | Gen2      | Allocated |
-|----------- |--------------------- |----------:|---------:|----------:|---------------------:|-----------------:|----------:|----------:|----------:|----------:|
-| **BuildGraph** | **ShortDocuments**       |  **48.80 ms** | **20.72 ms** |  **5.380 ms** |                    **-** |                **-** | **1666.6667** |  **666.6667** |         **-** |   **15.1 MB** |
-| **BuildGraph** | **LongDocuments**        |  **25.35 ms** | **17.44 ms** |  **4.530 ms** |                    **-** |                **-** | **1750.0000** |  **750.0000** |         **-** |  **14.43 MB** |
-| **BuildGraph** | **LargeCorpus**          | **117.89 ms** | **43.87 ms** | **11.394 ms** |                    **-** |                **-** | **7500.0000** | **2500.0000** | **1000.0000** |  **58.65 MB** |
-| **BuildGraph** | **Token(...)ngual [21]** |  **57.96 ms** | **58.86 ms** | **15.286 ms** |                    **-** |                **-** | **2000.0000** | **1000.0000** |  **333.3333** |  **18.19 MB** |
-
-### TiktokenGraphBuildBenchmarks
-
-```
-
-BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
-Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
-.NET SDK 10.0.401
-  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-
-Job=Required  MinIterationTime=100ms  IterationCount=5
-LaunchCount=1  WarmupCount=2
-
-```
-| Method                    | Mean     | Error    | StdDev   | Completed Work Items | Lock Contentions | Gen0      | Gen1      | Allocated |
-|-------------------------- |---------:|---------:|---------:|---------------------:|-----------------:|----------:|----------:|----------:|
-| BuildRepeatedCatalogGraph | 159.8 ms | 93.61 ms | 24.31 ms |                    - |                - | 8000.0000 | 3000.0000 |  67.09 MB |
-
-### GraphSearchBenchmarks
-
-```
-
-BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
-Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
-.NET SDK 10.0.401
-  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-
-Job=Required  MinIterationTime=100ms  IterationCount=5
-LaunchCount=1  WarmupCount=2
-
-```
-| Method                     | CorpusProfile     | QueryScenario | Mean      | Error      | StdDev    | Median    | Ratio | RatioSD | Completed Work Items | Lock Contentions | Gen0      | Gen1     | Gen2    | Allocated | Alloc Ratio |
-|--------------------------- |------------------ |-------------- |----------:|-----------:|----------:|----------:|------:|--------:|---------------------:|-----------------:|----------:|---------:|--------:|----------:|------------:|
-| **LocalFederatedSchemaSearch** | **ShortDocuments**    | **Exact**         | **25.238 ms** | **22.7424 ms** | **5.9061 ms** | **26.339 ms** |  **6.11** |    **1.49** |               **2.0000** |                **-** | **1000.0000** | **400.0000** |       **-** |   **8.11 MB** |        **2.95** |
-| RankedGraphSearch          | ShortDocuments    | Exact         |  4.176 ms |  3.2412 ms | 0.5016 ms |  4.215 ms |  1.01 |    0.16 |                    - |                - |  343.7500 | 125.0000 |       - |   2.75 MB |        1.00 |
-| Bm25Search                 | ShortDocuments    | Exact         |  8.149 ms | 11.0347 ms | 2.8657 ms |  9.198 ms |  1.97 |    0.68 |                    - |                - |  312.5000 | 125.0000 |       - |   2.76 MB |        1.00 |
-| Bm25FuzzySearch            | ShortDocuments    | Exact         |  7.330 ms | 12.2543 ms | 3.1824 ms |  9.006 ms |  1.78 |    0.74 |                    - |                - |  375.0000 | 187.5000 |       - |   3.47 MB |        1.26 |
-| SchemaSearch               | ShortDocuments    | Exact         | 18.582 ms |  6.4210 ms | 1.6675 ms | 19.356 ms |  4.50 |    0.62 |              23.0000 |          48.6000 |  400.0000 | 200.0000 |       - |   4.45 MB |        1.62 |
-| FocusedSearch              | ShortDocuments    | Exact         |  8.083 ms |  5.8719 ms | 0.9087 ms |  8.064 ms |  1.96 |    0.30 |                    - |                - |  500.0000 | 187.5000 |       - |   4.24 MB |        1.54 |
-|                            |                   |               |           |            |           |           |       |         |                      |                  |           |          |         |           |             |
-| **LocalFederatedSchemaSearch** | **ShortDocuments**    | **Typo**          | **33.803 ms** | **22.5497 ms** | **5.8561 ms** | **35.757 ms** | **11.28** |    **2.24** |               **2.0000** |                **-** | **1000.0000** | **500.0000** |       **-** |   **8.22 MB** |        **2.99** |
-| RankedGraphSearch          | ShortDocuments    | Typo          |  3.033 ms |  2.4427 ms | 0.3780 ms |  3.092 ms |  1.01 |    0.16 |                    - |                - |  343.7500 | 125.0000 |       - |   2.75 MB |        1.00 |
-| Bm25Search                 | ShortDocuments    | Typo          |  9.536 ms |  7.2393 ms | 1.8800 ms |  9.883 ms |  3.18 |    0.69 |                    - |                - |  312.5000 | 125.0000 |       - |   2.73 MB |        0.99 |
-| Bm25FuzzySearch            | ShortDocuments    | Typo          | 10.339 ms | 13.1291 ms | 3.4096 ms | 10.120 ms |  3.45 |    1.13 |                    - |                - |  375.0000 | 187.5000 |       - |   3.47 MB |        1.26 |
-| SchemaSearch               | ShortDocuments    | Typo          | 13.535 ms |  8.6712 ms | 2.2519 ms | 12.557 ms |  4.52 |    0.87 |              23.0000 |          67.7143 |  428.5714 | 142.8571 |       - |   4.44 MB |        1.61 |
-| FocusedSearch              | ShortDocuments    | Typo          |  7.425 ms | 13.4475 ms | 3.4923 ms |  5.225 ms |  2.48 |    1.11 |                    - |                - |  500.0000 | 187.5000 |       - |   4.24 MB |        1.54 |
-|                            |                   |               |           |            |           |           |       |         |                      |                  |           |          |         |           |             |
-| **LocalFederatedSchemaSearch** | **ShortDocuments**    | **NoMatch**       | **22.900 ms** | **17.0668 ms** | **4.4322 ms** | **25.177 ms** |  **7.05** |    **3.34** |               **2.0000** |                **-** | **1000.0000** | **400.0000** |       **-** |    **8.1 MB** |        **2.94** |
-| RankedGraphSearch          | ShortDocuments    | NoMatch       |  3.918 ms |  6.9766 ms | 1.8118 ms |  3.801 ms |  1.21 |    0.76 |                    - |                - |  343.7500 | 125.0000 |       - |   2.75 MB |        1.00 |
-| Bm25Search                 | ShortDocuments    | NoMatch       |  2.784 ms |  3.5007 ms | 0.5417 ms |  2.839 ms |  0.86 |    0.41 |                    - |                - |  312.5000 | 125.0000 |       - |   2.73 MB |        0.99 |
-| Bm25FuzzySearch            | ShortDocuments    | NoMatch       |  9.733 ms |  9.9890 ms | 2.5941 ms | 10.651 ms |  3.00 |    1.52 |                    - |                - |  375.0000 | 187.5000 |       - |   3.44 MB |        1.25 |
-| SchemaSearch               | ShortDocuments    | NoMatch       | 14.825 ms | 20.5461 ms | 3.1795 ms | 15.593 ms |  4.56 |    2.20 |              23.0000 |          53.3333 |  500.0000 | 166.6667 |       - |   4.45 MB |        1.62 |
-| FocusedSearch              | ShortDocuments    | NoMatch       |  5.510 ms |  7.6992 ms | 1.1915 ms |  5.007 ms |  1.70 |    0.82 |                    - |                - |  500.0000 | 250.0000 |       - |   4.21 MB |        1.53 |
-|                            |                   |               |           |            |           |           |       |         |                      |                  |           |          |         |           |             |
-| **LocalFederatedSchemaSearch** | **LongDocuments**     | **Exact**         | **17.119 ms** | **16.8717 ms** | **4.3815 ms** | **16.960 ms** |  **9.30** |    **4.24** |               **2.0000** |                **-** |  **857.1429** | **285.7143** |       **-** |   **7.14 MB** |        **3.47** |
-| RankedGraphSearch          | LongDocuments     | Exact         |  2.096 ms |  2.9819 ms | 0.7744 ms |  2.329 ms |  1.14 |    0.60 |                    - |                - |  250.0000 |  78.1250 |       - |   2.06 MB |        1.00 |
-| Bm25Search                 | LongDocuments     | Exact         |  3.500 ms |  4.8481 ms | 1.2590 ms |  3.967 ms |  1.90 |    0.99 |                    - |                - |  250.0000 |  62.5000 |       - |   2.06 MB |        1.00 |
-| Bm25FuzzySearch            | LongDocuments     | Exact         |  3.022 ms |  2.5765 ms | 0.6691 ms |  2.987 ms |  1.64 |    0.72 |                    - |                - |  437.5000 | 156.2500 |       - |   3.61 MB |        1.75 |
-| SchemaSearch               | LongDocuments     | Exact         |  8.057 ms | 10.3475 ms | 2.6872 ms |  8.573 ms |  4.38 |    2.19 |              23.0000 |          24.8000 |  300.0000 |        - |       - |   2.52 MB |        1.22 |
-| FocusedSearch              | LongDocuments     | Exact         |  2.197 ms |  2.7164 ms | 0.7054 ms |  1.784 ms |  1.19 |    0.59 |                    - |                - |  187.5000 |  46.8750 |       - |   1.55 MB |        0.75 |
-|                            |                   |               |           |            |           |           |       |         |                      |                  |           |          |         |           |             |
-| **LocalFederatedSchemaSearch** | **LongDocuments**     | **Typo**          | **18.301 ms** |  **1.5473 ms** | **0.4018 ms** | **18.271 ms** | **14.34** |    **2.28** |               **2.0000** |                **-** |  **833.3333** | **166.6667** |       **-** |   **7.15 MB** |        **3.48** |
-| RankedGraphSearch          | LongDocuments     | Typo          |  1.314 ms |  1.8173 ms | 0.2812 ms |  1.189 ms |  1.03 |    0.26 |                    - |                - |  250.0000 |  78.1250 |       - |   2.06 MB |        1.00 |
-| Bm25Search                 | LongDocuments     | Typo          |  2.286 ms |  1.6093 ms | 0.2490 ms |  2.370 ms |  1.79 |    0.33 |                    - |                - |  250.0000 |  93.7500 |       - |   2.05 MB |        1.00 |
-| Bm25FuzzySearch            | LongDocuments     | Typo          |  4.710 ms |  6.0452 ms | 0.9355 ms |  5.086 ms |  3.69 |    0.88 |                    - |                - |  437.5000 | 125.0000 |       - |   3.61 MB |        1.75 |
-| SchemaSearch               | LongDocuments     | Typo          |  7.118 ms |  5.5234 ms | 1.4344 ms |  7.758 ms |  5.58 |    1.36 |              23.0000 |          18.4167 |  250.0000 |        - |       - |   2.49 MB |        1.21 |
-| FocusedSearch              | LongDocuments     | Typo          |  3.488 ms |  6.9784 ms | 1.8123 ms |  2.546 ms |  2.73 |    1.39 |                    - |                - |  187.5000 |  62.5000 |       - |   1.55 MB |        0.75 |
-|                            |                   |               |           |            |           |           |       |         |                      |                  |           |          |         |           |             |
-| **LocalFederatedSchemaSearch** | **LongDocuments**     | **NoMatch**       | **20.442 ms** |  **4.1181 ms** | **1.0694 ms** | **20.073 ms** |  **9.82** |    **2.39** |               **2.0000** |                **-** |  **833.3333** | **166.6667** |       **-** |   **7.12 MB** |        **3.38** |
-| RankedGraphSearch          | LongDocuments     | NoMatch       |  2.193 ms |  2.0824 ms | 0.5408 ms |  2.368 ms |  1.05 |    0.35 |                    - |                - |  250.0000 |  78.1250 |       - |   2.11 MB |        1.00 |
-| Bm25Search                 | LongDocuments     | NoMatch       |  2.259 ms |  1.2007 ms | 0.1858 ms |  2.297 ms |  1.09 |    0.27 |                    - |                - |  250.0000 |  93.7500 |       - |   2.05 MB |        0.97 |
-| Bm25FuzzySearch            | LongDocuments     | NoMatch       |  5.233 ms |  5.6733 ms | 1.4733 ms |  4.371 ms |  2.51 |    0.89 |                    - |                - |  437.5000 | 125.0000 |       - |   3.65 MB |        1.73 |
-| SchemaSearch               | LongDocuments     | NoMatch       |  8.197 ms |  8.7492 ms | 2.2721 ms |  6.928 ms |  3.94 |    1.39 |              23.0000 |          19.0000 |  300.0000 |        - |       - |   2.51 MB |        1.19 |
-| FocusedSearch              | LongDocuments     | NoMatch       |  1.558 ms |  0.5772 ms | 0.1499 ms |  1.532 ms |  0.75 |    0.19 |                    - |                - |  187.5000 |  46.8750 |       - |   1.55 MB |        0.74 |
-|                            |                   |               |           |            |           |           |       |         |                      |                  |           |          |         |           |             |
-| **LocalFederatedSchemaSearch** | **FederatedRunbooks** | **Exact**         | **25.740 ms** | **33.2021 ms** | **5.1381 ms** | **25.636 ms** |  **7.58** |    **3.56** |               **2.0000** |                **-** | **1000.0000** | **400.0000** |       **-** |   **8.18 MB** |        **2.66** |
-| RankedGraphSearch          | FederatedRunbooks | Exact         |  4.258 ms |  9.2902 ms | 2.4126 ms |  3.214 ms |  1.25 |    0.88 |                    - |                - |  375.0000 | 125.0000 | 31.2500 |   3.08 MB |        1.00 |
-| Bm25Search                 | FederatedRunbooks | Exact         |  7.893 ms |  3.1353 ms | 0.8142 ms |  8.123 ms |  2.32 |    1.02 |                    - |                - |  312.5000 | 125.0000 |       - |   3.08 MB |        1.00 |
-| Bm25FuzzySearch            | FederatedRunbooks | Exact         |  7.811 ms |  6.2742 ms | 1.6294 ms |  8.676 ms |  2.30 |    1.09 |                    - |                - |  437.5000 | 125.0000 |       - |   4.08 MB |        1.33 |
-| SchemaSearch               | FederatedRunbooks | Exact         | 16.422 ms | 12.0480 ms | 1.8644 ms | 16.449 ms |  4.84 |    2.14 |              23.0000 |          62.8333 |  500.0000 | 166.6667 |       - |   4.53 MB |        1.47 |
-| FocusedSearch              | FederatedRunbooks | Exact         |  7.525 ms |  5.8262 ms | 1.5131 ms |  7.981 ms |  2.22 |    1.04 |                    - |                - |  625.0000 | 250.0000 | 62.5000 |   4.76 MB |        1.55 |
-|                            |                   |               |           |            |           |           |       |         |                      |                  |           |          |         |           |             |
-| **LocalFederatedSchemaSearch** | **FederatedRunbooks** | **Typo**          | **25.013 ms** | **23.2246 ms** | **6.0313 ms** | **28.437 ms** |  **6.14** |    **2.43** |               **2.0000** |                **-** | **1000.0000** | **400.0000** |       **-** |    **8.2 MB** |        **2.67** |
-| RankedGraphSearch          | FederatedRunbooks | Typo          |  4.605 ms |  7.5364 ms | 1.9572 ms |  3.584 ms |  1.13 |    0.59 |                    - |                - |  375.0000 | 125.0000 | 31.2500 |   3.08 MB |        1.00 |
-| Bm25Search                 | FederatedRunbooks | Typo          |  7.580 ms | 13.8478 ms | 3.5962 ms |  5.813 ms |  1.86 |    1.03 |                    - |                - |  312.5000 |  62.5000 |       - |   3.06 MB |        0.99 |
-| Bm25FuzzySearch            | FederatedRunbooks | Typo          |  5.005 ms |  3.7786 ms | 0.5847 ms |  5.237 ms |  1.23 |    0.42 |                    - |                - |  437.5000 | 125.0000 |       - |   4.08 MB |        1.33 |
-| SchemaSearch               | FederatedRunbooks | Typo          | 21.970 ms | 17.4354 ms | 4.5279 ms | 22.961 ms |  5.39 |    2.03 |              23.0000 |          23.0000 |  400.0000 | 200.0000 |       - |   4.53 MB |        1.47 |
-| FocusedSearch              | FederatedRunbooks | Typo          | 12.037 ms | 10.7719 ms | 2.7974 ms | 12.370 ms |  2.96 |    1.15 |                    - |                - |  625.0000 | 187.5000 | 62.5000 |   4.92 MB |        1.60 |
-|                            |                   |               |           |            |           |           |       |         |                      |                  |           |          |         |           |             |
-| **LocalFederatedSchemaSearch** | **FederatedRunbooks** | **NoMatch**       | **24.081 ms** | **10.1738 ms** | **2.6421 ms** | **23.107 ms** |  **8.13** |    **1.33** |               **2.0000** |                **-** | **1000.0000** | **400.0000** |       **-** |   **8.22 MB** |        **2.67** |
-| RankedGraphSearch          | FederatedRunbooks | NoMatch       |  3.011 ms |  1.6470 ms | 0.4277 ms |  2.917 ms |  1.02 |    0.19 |                    - |                - |  375.0000 | 125.0000 | 31.2500 |   3.08 MB |        1.00 |
-| Bm25Search                 | FederatedRunbooks | NoMatch       |  5.254 ms |  8.1622 ms | 2.1197 ms |  3.794 ms |  1.77 |    0.70 |                    - |                - |  312.5000 |  62.5000 |       - |   3.06 MB |        0.99 |
-| Bm25FuzzySearch            | FederatedRunbooks | NoMatch       |  9.023 ms | 19.5586 ms | 5.0793 ms |  7.048 ms |  3.05 |    1.63 |                    - |                - |  437.5000 | 125.0000 |       - |   4.06 MB |        1.32 |
-| SchemaSearch               | FederatedRunbooks | NoMatch       | 24.378 ms |  6.0424 ms | 1.5692 ms | 24.252 ms |  8.23 |    1.17 |              23.0000 |          42.7500 |  500.0000 | 250.0000 |       - |   4.53 MB |        1.47 |
-| FocusedSearch              | FederatedRunbooks | NoMatch       |  7.791 ms |  7.0330 ms | 1.8265 ms |  8.395 ms |  2.63 |    0.66 |                    - |                - |  625.0000 | 187.5000 | 62.5000 |   4.92 MB |        1.60 |
-
-### SchemaCatalogGraphSearchBenchmarks
-
-```
-
-BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
-Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
-.NET SDK 10.0.401
-  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-
-Job=Required  MinIterationTime=100ms  IterationCount=5
-LaunchCount=1  WarmupCount=2
-
-```
-| Method          | QueryScenario | Mean     | Error      | StdDev    | Ratio | RatioSD | Completed Work Items | Lock Contentions | Gen0      | Gen1      | Allocated | Alloc Ratio |
-|---------------- |-------------- |---------:|-----------:|----------:|------:|--------:|---------------------:|-----------------:|----------:|----------:|----------:|------------:|
-| **Unrestricted**    | **Exact**         | **78.14 ms** | **108.777 ms** | **28.249 ms** |  **1.19** |    **0.77** |             **310.0000** |                **-** | **1500.0000** |  **500.0000** |   **12.9 MB** |        **1.00** |
-| CandidateValues | Exact         | 12.10 ms |  11.517 ms |  1.782 ms |  0.18 |    0.10 |             365.0000 |           0.4375 |  687.5000 |  187.5000 |   5.95 MB |        0.46 |
-|                 |               |          |            |           |       |         |                      |                  |           |           |           |             |
-| **Unrestricted**    | **NoMatch**       | **49.33 ms** |   **4.199 ms** |  **1.090 ms** |  **1.00** |    **0.03** |               **1.0000** |                **-** | **2500.0000** | **1000.0000** |  **22.12 MB** |        **1.00** |
-| CandidateValues | NoMatch       | 13.38 ms |   9.581 ms |  2.488 ms |  0.27 |    0.05 |             188.0000 |           0.0625 |  500.0000 |  125.0000 |      4 MB |        0.18 |
-
-### SchemaGraphSearchBenchmarks
-
-```
-
-BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
-Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
-.NET SDK 10.0.401
-  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-
-Job=Required  MinIterationTime=100ms  IterationCount=5
-LaunchCount=1  WarmupCount=2
-
-```
-| Method          | CorpusProfile  | QueryScenario | Mean     | Error      | StdDev    | Ratio | RatioSD | Completed Work Items | Lock Contentions | Gen0      | Gen1     | Allocated | Alloc Ratio |
-|---------------- |--------------- |-------------- |---------:|-----------:|----------:|------:|--------:|---------------------:|-----------------:|----------:|---------:|----------:|------------:|
-| **Unrestricted**    | **ShortDocuments** | **Exact**         | **62.75 ms** | **105.867 ms** | **27.493 ms** |  **1.21** |    **0.77** |              **79.0000** |          **80.3333** | **1666.6667** | **666.6667** |  **14.84 MB** |        **1.00** |
-| CandidateValues | ShortDocuments | Exact         | 18.05 ms |  37.411 ms |  5.789 ms |  0.35 |    0.19 |              90.0000 |           0.3125 |  562.5000 | 187.5000 |   4.78 MB |        0.32 |
-|                 |                |               |          |            |           |       |         |                      |                  |           |          |           |             |
-| **Unrestricted**    | **ShortDocuments** | **NoMatch**       | **20.96 ms** |  **23.301 ms** |  **6.051 ms** |  **1.08** |    **0.43** |              **23.0000** |           **7.3125** |  **687.5000** | **250.0000** |   **5.85 MB** |        **1.00** |
-| CandidateValues | ShortDocuments | NoMatch       | 18.70 ms |  51.045 ms | 13.256 ms |  0.96 |    0.70 |              34.0000 |          14.7500 |  375.0000 | 125.0000 |   3.26 MB |        0.56 |
-|                 |                |               |          |            |           |       |         |                      |                  |           |          |           |             |
-| **Unrestricted**    | **LongDocuments**  | **Exact**         | **12.77 ms** |   **5.409 ms** |  **1.405 ms** |  **1.01** |    **0.15** |              **79.0000** |           **9.3125** |  **812.5000** | **250.0000** |   **6.65 MB** |        **1.00** |
-| CandidateValues | LongDocuments  | Exact         | 10.39 ms |   5.382 ms |  1.398 ms |  0.82 |    0.14 |              90.0000 |          13.3125 |  500.0000 | 125.0000 |   4.02 MB |        0.60 |
-|                 |                |               |          |            |           |       |         |                      |                  |           |          |           |             |
-| **Unrestricted**    | **LongDocuments**  | **NoMatch**       | **20.54 ms** |  **25.191 ms** |  **6.542 ms** |  **1.12** |    **0.55** |              **23.0000** |           **0.8125** |  **375.0000** |  **62.5000** |   **3.05 MB** |        **1.00** |
-| CandidateValues | LongDocuments  | NoMatch       | 20.28 ms |  22.283 ms |  5.787 ms |  1.10 |    0.52 |              34.0000 |           0.4375 |  312.5000 |  62.5000 |   2.56 MB |        0.84 |
-
-### TiktokenSearchBenchmarks
-
-```
-
-BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
-Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
-.NET SDK 10.0.401
-  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-
-Job=Required  MinIterationTime=100ms  IterationCount=5
-LaunchCount=1  WarmupCount=2
-
-```
-| Method                            | CorpusProfile        | QueryScenario | Mean        | Error        | StdDev       | Median    | Ratio | RatioSD | Completed Work Items | Lock Contentions | Gen0    | Allocated | Alloc Ratio |
-|---------------------------------- |--------------------- |-------------- |------------:|-------------:|-------------:|----------:|------:|--------:|---------------------:|-----------------:|--------:|----------:|------------:|
-| **ExactTokenDistanceSearch**          | **LongDocuments**        | **Exact**         |   **263.39 μs** |   **536.477 μs** |   **139.321 μs** | **168.44 μs** |  **1.22** |    **0.79** |                    **-** |                **-** | **12.6953** | **107.23 KB** |        **1.00** |
-| FuzzyCorrectedTokenDistanceSearch | LongDocuments        | Exact         |   184.87 μs |   162.829 μs |    42.286 μs | 159.81 μs |  0.85 |    0.38 |                    - |                - | 12.6953 | 108.34 KB |        1.01 |
-|                                   |                      |               |             |              |              |           |       |         |                      |                  |         |           |             |
-| **ExactTokenDistanceSearch**          | **LongDocuments**        | **Typo**          |   **177.45 μs** |    **28.937 μs** |     **4.478 μs** | **177.35 μs** |  **1.00** |    **0.03** |                    **-** |                **-** | **11.7188** | **107.87 KB** |        **1.00** |
-| FuzzyCorrectedTokenDistanceSearch | LongDocuments        | Typo          | 1,185.12 μs | 4,860.144 μs | 1,262.164 μs | 273.85 μs |  6.68 |    6.53 |                    - |                - |       - | 110.25 KB |        1.02 |
-|                                   |                      |               |             |              |              |           |       |         |                      |                  |         |           |             |
-| **ExactTokenDistanceSearch**          | **LongDocuments**        | **NoMatch**       |   **110.60 μs** |     **7.496 μs** |     **1.947 μs** | **110.58 μs** |  **1.00** |    **0.02** |                    **-** |                **-** | **12.6953** | **107.18 KB** |        **1.00** |
-| FuzzyCorrectedTokenDistanceSearch | LongDocuments        | NoMatch       |   107.61 μs |     1.813 μs |     0.280 μs | 107.69 μs |  0.97 |    0.02 |                    - |                - | 12.6953 | 108.01 KB |        1.01 |
-|                                   |                      |               |             |              |              |           |       |         |                      |                  |         |           |             |
-| **ExactTokenDistanceSearch**          | **Token(...)ngual [21]** | **Exact**         |   **102.90 μs** |     **3.014 μs** |     **0.466 μs** | **102.72 μs** |  **1.00** |    **0.01** |                    **-** |                **-** |  **7.8125** |  **70.81 KB** |        **1.00** |
-| FuzzyCorrectedTokenDistanceSearch | Token(...)ngual [21] | Exact         |   102.98 μs |     5.654 μs |     0.875 μs | 102.81 μs |  1.00 |    0.01 |                    - |                - |  8.7891 |  71.95 KB |        1.02 |
-|                                   |                      |               |             |              |              |           |       |         |                      |                  |         |           |             |
-| **ExactTokenDistanceSearch**          | **Token(...)ngual [21]** | **Typo**          |   **178.39 μs** |    **12.582 μs** |     **1.947 μs** | **178.31 μs** |  **1.00** |    **0.01** |                    **-** |                **-** |       **-** |   **71.3 KB** |        **1.00** |
-| FuzzyCorrectedTokenDistanceSearch | Token(...)ngual [21] | Typo          |   152.35 μs |     4.607 μs |     1.196 μs | 151.77 μs |  0.85 |    0.01 |                    - |                - |  8.7891 |  72.94 KB |        1.02 |
-|                                   |                      |               |             |              |              |           |       |         |                      |                  |         |           |             |
-| **ExactTokenDistanceSearch**          | **Token(...)ngual [21]** | **NoMatch**       |    **98.34 μs** |     **6.187 μs** |     **0.957 μs** |  **98.65 μs** |  **1.00** |    **0.01** |                    **-** |                **-** |  **7.8125** |  **70.54 KB** |        **1.00** |
-| FuzzyCorrectedTokenDistanceSearch | Token(...)ngual [21] | NoMatch       |    99.46 μs |     0.174 μs |     0.027 μs |  99.46 μs |  1.01 |    0.01 |                    - |                - |  7.8125 |  71.37 KB |        1.01 |
-
-### GraphPersistenceBenchmarks
-
-```
-
-BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
-Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
-.NET SDK 10.0.401
-  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
-
-Job=Required  MinIterationTime=100ms  IterationCount=5
-LaunchCount=1  WarmupCount=2
-
-```
-| Method                      | CorpusProfile  | Mean         | Error        | StdDev       | Median       | Ratio | RatioSD | Completed Work Items | Lock Contentions | Gen0       | Gen1      | Gen2      | Allocated   | Alloc Ratio |
-|---------------------------- |--------------- |-------------:|-------------:|-------------:|-------------:|------:|--------:|---------------------:|-----------------:|-----------:|----------:|----------:|------------:|------------:|
-| **ExportMermaidFlowchart**      | **ShortDocuments** |   **4,398.5 μs** |   **8,741.0 μs** |  **2,270.02 μs** |   **2,998.1 μs** |  **1.13** |    **0.75** |                    **-** |                **-** |   **250.0000** |  **125.0000** |         **-** |  **2498.88 KB** |        **1.24** |
-| ExportDotGraph              | ShortDocuments |   4,414.6 μs |   5,920.0 μs |  1,537.41 μs |   4,346.3 μs |  1.14 |    0.62 |                    - |                - |   281.2500 |  125.0000 |         - |   2615.7 KB |        1.30 |
-| LoadTurtleFromInMemoryStore | ShortDocuments |  32,980.6 μs |   9,360.5 μs |  2,430.89 μs |  32,549.5 μs |  8.50 |    3.63 |                    - |                - |   750.0000 |  250.0000 |         - |  6561.75 KB |        3.27 |
-| LoadJsonLdFromInMemoryStore | ShortDocuments |  49,204.3 μs |  57,967.6 μs | 15,054.01 μs |  46,804.4 μs | 12.69 |    6.57 |                    - |                - |  2000.0000 |  500.0000 |         - | 20267.02 KB |       10.10 |
-| LoadTurtleFromFile          | ShortDocuments |  33,797.8 μs |  12,913.2 μs |  3,353.51 μs |  34,772.4 μs |  8.72 |    3.76 |              50.0000 |                - |   750.0000 |  250.0000 |         - |  7332.88 KB |        3.65 |
-| LoadJsonLdFromFile          | ShortDocuments |  53,505.3 μs |  23,528.9 μs |  6,110.39 μs |  50,469.2 μs | 13.80 |    6.00 |              44.0000 |                - |  2500.0000 | 1000.0000 |         - | 20944.55 KB |       10.43 |
-| SaveTurtleToInMemoryStore   | ShortDocuments |  10,873.4 μs |  23,250.1 μs |  6,037.99 μs |   7,201.5 μs |  2.80 |    1.94 |                    - |                - |   875.0000 |  375.0000 |         - |  7839.85 KB |        3.91 |
-| SaveJsonLdToInMemoryStore   | ShortDocuments |  40,917.2 μs |  64,259.3 μs |  9,944.20 μs |  38,141.2 μs | 10.55 |    5.09 |                    - |                - |  1000.0000 |  500.0000 |         - | 11972.66 KB |        5.96 |
-| SaveTurtleToFile            | ShortDocuments |  13,275.7 μs |  19,549.7 μs |  5,077.01 μs |  15,924.7 μs |  3.42 |    1.93 |               2.0000 |                - |  1125.0000 |  687.5000 |  250.0000 | 12131.47 KB |        6.04 |
-| SaveJsonLdToFile            | ShortDocuments |   8,082.8 μs |   1,201.0 μs |    185.86 μs |   8,115.3 μs |  2.08 |    0.88 |               2.0000 |                - |  1437.5000 |  625.0000 |   62.5000 | 16160.15 KB |        8.05 |
-| CreateSnapshot              | ShortDocuments |   4,548.2 μs |   7,108.5 μs |  1,846.04 μs |   5,006.4 μs |  1.17 |    0.68 |                    - |                - |   218.7500 |   62.5000 |         - |  2007.21 KB |        1.00 |
-| SerializeTurtle             | ShortDocuments |   6,496.5 μs |  10,012.2 μs |  2,600.13 μs |   6,696.4 μs |  1.68 |    0.97 |                    - |                - |   500.0000 |  187.5000 |         - |  4788.95 KB |        2.39 |
-| SerializeJsonLd             | ShortDocuments |   3,535.1 μs |     210.8 μs |     32.62 μs |   3,541.4 μs |  0.91 |    0.39 |                    - |                - |   562.5000 |  312.5000 |   62.5000 |  5350.59 KB |        2.67 |
-|                             |                |              |              |              |              |       |         |                      |                  |            |           |           |             |             |
-| **ExportMermaidFlowchart**      | **LongDocuments**  |   **1,060.4 μs** |     **561.4 μs** |     **86.88 μs** |   **1,088.9 μs** |  **1.64** |    **0.44** |                    **-** |                **-** |    **93.7500** |   **15.6250** |         **-** |   **891.88 KB** |        **1.26** |
-| ExportDotGraph              | LongDocuments  |     703.4 μs |     712.1 μs |    184.93 μs |     620.2 μs |  1.09 |    0.39 |                    - |                - |   101.5625 |   31.2500 |         - |   981.17 KB |        1.39 |
-| LoadTurtleFromInMemoryStore | LongDocuments  |   9,820.3 μs |   7,732.4 μs |  2,008.08 μs |  11,116.4 μs | 15.22 |    4.88 |                    - |                - |   250.0000 |   62.5000 |         - |  2408.92 KB |        3.40 |
-| LoadJsonLdFromInMemoryStore | LongDocuments  |  11,427.7 μs |   9,242.5 μs |  2,400.26 μs |  11,487.8 μs | 17.71 |    5.73 |                    - |                - |  1062.5000 |  500.0000 |  125.0000 |  7670.32 KB |       10.83 |
-| LoadTurtleFromFile          | LongDocuments  |  11,659.5 μs |   2,295.0 μs |    596.00 μs |  11,430.8 μs | 18.07 |    4.70 |              20.0000 |                - |   312.5000 |  125.0000 |         - |  2698.81 KB |        3.81 |
-| LoadJsonLdFromFile          | LongDocuments  |  18,860.8 μs |   7,805.5 μs |  1,207.90 μs |  18,633.1 μs | 29.24 |    7.72 |              17.0000 |                - |   857.1429 |  285.7143 |         - |  7905.65 KB |       11.16 |
-| SaveTurtleToInMemoryStore   | LongDocuments  |   4,585.4 μs |   7,610.4 μs |  1,976.40 μs |   5,056.8 μs |  7.11 |    3.42 |                    - |                - |   312.5000 |  156.2500 |         - |  2858.95 KB |        4.04 |
-| SaveJsonLdToInMemoryStore   | LongDocuments  |   7,813.5 μs |   9,648.5 μs |  2,505.69 μs |   7,879.3 μs | 12.11 |    4.80 |                    - |                - |   500.0000 |  250.0000 |         - |  4447.34 KB |        6.28 |
-| SaveTurtleToFile            | LongDocuments  |   6,589.9 μs |   3,659.1 μs |    950.25 μs |   6,735.9 μs | 10.22 |    2.96 |               2.0000 |                - |   468.7500 |  312.5000 |  156.2500 |  7029.13 KB |        9.92 |
-| SaveJsonLdToFile            | LongDocuments  |   9,459.5 μs |   9,092.5 μs |  2,361.29 μs |   9,896.4 μs | 14.66 |    5.10 |               2.0000 |                - |   625.0000 |  312.5000 |  125.0000 |   8573.9 KB |       12.10 |
-| CreateSnapshot              | LongDocuments  |     686.8 μs |   1,253.4 μs |    193.96 μs |     693.8 μs |  1.06 |    0.39 |                    - |                - |    85.9375 |   15.6250 |         - |   708.32 KB |        1.00 |
-| SerializeTurtle             | LongDocuments  |   2,346.2 μs |   6,298.8 μs |  1,635.79 μs |   1,438.5 μs |  3.64 |    2.57 |                    - |                - |   187.5000 |   46.8750 |         - |  1679.52 KB |        2.37 |
-| SerializeJsonLd             | LongDocuments  |   3,210.7 μs |   6,276.3 μs |  1,629.95 μs |   3,573.2 μs |  4.98 |    2.71 |                    - |                - |   187.5000 |   62.5000 |         - |  1978.36 KB |        2.79 |
-|                             |                |              |              |              |              |       |         |                      |                  |            |           |           |             |             |
-| **ExportMermaidFlowchart**      | **LargeCorpus**    |  **10,141.3 μs** |   **5,305.6 μs** |  **1,377.84 μs** |   **9,554.2 μs** |  **1.02** |    **0.24** |                    **-** |                **-** |  **1000.0000** |  **312.5000** |         **-** |  **9980.44 KB** |        **1.25** |
-| ExportDotGraph              | LargeCorpus    |  11,244.9 μs |   5,166.1 μs |    799.46 μs |  10,907.3 μs |  1.13 |    0.24 |                    - |                - |  1062.5000 |  312.5000 |         - | 10395.25 KB |        1.30 |
-| LoadTurtleFromInMemoryStore | LargeCorpus    |  67,989.4 μs | 113,484.6 μs | 29,471.58 μs |  61,016.0 μs |  6.84 |    3.09 |                    - |                - |  3000.0000 | 1000.0000 |         - | 25889.96 KB |        3.25 |
-| LoadJsonLdFromInMemoryStore | LargeCorpus    | 126,159.3 μs |  23,264.1 μs |  3,600.15 μs | 125,517.3 μs | 12.70 |    2.59 |                    - |                - | 10500.0000 | 4500.0000 | 1000.0000 | 79751.71 KB |       10.01 |
-| LoadTurtleFromFile          | LargeCorpus    |  52,815.7 μs | 157,180.6 μs | 24,323.88 μs |  41,210.7 μs |  5.32 |    2.46 |             181.0000 |                - |  3000.0000 | 1000.0000 |         - | 28800.07 KB |        3.61 |
-| LoadJsonLdFromFile          | LargeCorpus    | 150,451.2 μs | 112,667.1 μs | 29,259.29 μs | 160,067.9 μs | 15.14 |    4.10 |             161.0000 |                - | 10500.0000 | 4000.0000 | 1000.0000 | 82320.89 KB |       10.33 |
-| SaveTurtleToInMemoryStore   | LargeCorpus    |  59,585.2 μs |  62,418.0 μs |  9,659.25 μs |  62,215.5 μs |  6.00 |    1.50 |                    - |                - |  3000.0000 | 1000.0000 |         - | 30780.22 KB |        3.86 |
-| SaveJsonLdToInMemoryStore   | LargeCorpus    |  55,835.2 μs |  63,747.4 μs | 16,554.99 μs |  50,227.6 μs |  5.62 |    1.92 |                    - |                - |  5000.0000 | 1500.0000 |         - | 46705.72 KB |        5.86 |
-| SaveTurtleToFile            | LargeCorpus    |  61,427.8 μs |  46,676.7 μs |  7,223.27 μs |  63,288.8 μs |  6.18 |    1.42 |               2.0000 |                - |  3000.0000 | 1000.0000 |         - | 35597.25 KB |        4.47 |
-| SaveJsonLdToFile            | LargeCorpus    |  56,027.2 μs |  96,817.5 μs | 25,143.21 μs |  44,340.6 μs |  5.64 |    2.61 |               2.0000 |                - |  5000.0000 | 1500.0000 |         - | 51439.95 KB |        6.45 |
-| CreateSnapshot              | LargeCorpus    |  10,322.5 μs |   8,446.1 μs |  2,193.43 μs |  10,773.3 μs |  1.04 |    0.29 |                    - |                - |   875.0000 |  312.5000 |         - |   7970.5 KB |        1.00 |
-| SerializeTurtle             | LargeCorpus    |  10,174.3 μs |   1,646.2 μs |    254.75 μs |  10,173.2 μs |  1.02 |    0.21 |                    - |                - |  2187.5000 |  937.5000 |  125.0000 | 18512.68 KB |        2.32 |
-| SerializeJsonLd             | LargeCorpus    |  24,505.3 μs |  66,106.7 μs | 17,167.70 μs |  15,331.9 μs |  2.47 |    1.68 |                    - |                - |  1666.6667 |  666.6667 |         - | 20812.08 KB |        2.61 |
+| Method     | CorpusProfile        | Mean      | Error    | StdDev    | Completed Work Items | Lock Contentions | Gen0      | Gen1      | Gen2     | Allocated |
+|----------- |--------------------- |----------:|---------:|----------:|---------------------:|-----------------:|----------:|----------:|---------:|----------:|
+| **BuildGraph** | **ShortDocuments**       |  **84.64 ms** | **51.62 ms** | **13.406 ms** |                    **-** |                **-** | **1500.0000** |  **500.0000** |        **-** |  **15.16 MB** |
+| **BuildGraph** | **LongDocuments**        |  **87.39 ms** | **90.88 ms** | **23.601 ms** |                    **-** |                **-** | **1500.0000** |  **500.0000** |        **-** |  **14.49 MB** |
+| **BuildGraph** | **LargeCorpus**          | **138.31 ms** | **68.25 ms** | **17.725 ms** |                    **-** |                **-** | **7000.0000** | **2000.0000** |        **-** |  **59.01 MB** |
+| **BuildGraph** | **Token(...)ngual [21]** |  **48.53 ms** | **37.63 ms** |  **9.772 ms** |                    **-** |                **-** | **2000.0000** | **1000.0000** | **333.3333** |  **18.25 MB** |
 
 ### GraphLifecycleBenchmarks
 
@@ -414,8 +163,287 @@ LaunchCount=1  WarmupCount=2
 ```
 | Method                       | Mean     | Error    | StdDev   | Ratio | RatioSD | Completed Work Items | Lock Contentions | Gen0      | Gen1      | Gen2     | Allocated | Alloc Ratio |
 |----------------------------- |---------:|---------:|---------:|------:|--------:|---------------------:|-----------------:|----------:|----------:|---------:|----------:|------------:|
-| BuildSearchSaveLoadAndExport | 108.8 ms | 70.30 ms | 18.26 ms |  1.02 |    0.22 |              52.5000 |                - | 6500.0000 | 2000.0000 | 500.0000 |  56.09 MB |        1.00 |
+| BuildSearchSaveLoadAndExport | 94.51 ms | 80.52 ms | 12.46 ms |  1.01 |    0.17 |              52.0000 |                - | 6000.0000 | 2000.0000 | 500.0000 |  51.85 MB |        1.00 |
 
+### GraphPersistenceBenchmarks
+
+```
+
+BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
+Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
+.NET SDK 10.0.401
+  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+
+Job=Required  MinIterationTime=100ms  IterationCount=5
+LaunchCount=1  WarmupCount=2
+
+```
+| Method                      | CorpusProfile  | Mean              | Error              | StdDev            | Median            | Ratio         | RatioSD      | Completed Work Items | Lock Contentions | Gen0       | Gen1      | Gen2      | Allocated  | Alloc Ratio |
+|---------------------------- |--------------- |------------------:|-------------------:|------------------:|------------------:|--------------:|-------------:|---------------------:|-----------------:|-----------:|----------:|----------:|-----------:|------------:|
+| **ExportMermaidFlowchart**      | **ShortDocuments** |     **405,352.83 ns** |     **286,010.318 ns** |     **74,275.972 ns** |     **374,538.73 ns** |     **35,011.42** |     **5,866.90** |                    **-** |                **-** |    **62.5000** |   **39.0625** |   **27.3438** |   **503791 B** |          **NA** |
+| ExportDotGraph              | ShortDocuments |     502,069.92 ns |     738,330.882 ns |    191,742.186 ns |     535,382.81 ns |     43,365.13 |    15,125.08 |                    - |                - |    70.3125 |   39.0625 |   31.2500 |   623172 B |          NA |
+| LoadTurtleFromInMemoryStore | ShortDocuments |  32,333,533.30 ns |  19,081,412.522 ns |  4,955,382.247 ns |  32,831,895.75 ns |  2,792,734.41 |   391,706.25 |                    - |                - |   750.0000 |  250.0000 |         - |  6719244 B |          NA |
+| LoadJsonLdFromInMemoryStore | ShortDocuments |  53,591,616.67 ns |  59,699,533.837 ns | 15,503,779.387 ns |  61,275,180.67 ns |  4,628,852.36 | 1,223,338.31 |                    - |                - |  2333.3333 |  666.6667 |         - | 20753253 B |          NA |
+| LoadTurtleFromFile          | ShortDocuments |  30,024,960.40 ns |  12,401,461.031 ns |  3,220,620.054 ns |  31,749,552.00 ns |  2,593,336.75 |   255,234.28 |              50.0000 |                - |   750.0000 |  250.0000 |         - |  7508876 B |          NA |
+| LoadJsonLdFromFile          | ShortDocuments |  58,566,683.20 ns |  23,963,684.161 ns |  6,223,292.690 ns |  61,680,729.00 ns |  5,058,562.26 |   493,243.31 |              44.0000 |                - |  2500.0000 | 1000.0000 |         - | 21447224 B |          NA |
+| SaveTurtleToInMemoryStore   | ShortDocuments |   5,568,167.33 ns |   9,182,779.758 ns |  1,421,045.330 ns |   5,066,528.66 ns |    480,937.62 |   109,166.28 |                    - |                - |   875.0000 |  375.0000 |         - |  8028002 B |          NA |
+| SaveJsonLdToInMemoryStore   | ShortDocuments |   7,570,165.10 ns |     787,429.278 ns |    204,492.883 ns |   7,650,760.44 ns |    653,855.56 |    17,367.10 |                    - |                - |  1437.5000 |  625.0000 |   62.5000 | 12177575 B |          NA |
+| SaveTurtleToFile            | ShortDocuments |   6,588,389.97 ns |   7,956,324.372 ns |  1,231,250.002 ns |   6,031,727.84 ns |    569,057.00 |    94,664.06 |               2.0000 |                - |  1000.0000 |  500.0000 |  125.0000 | 12422052 B |          NA |
+| SaveJsonLdToFile            | ShortDocuments |   8,975,189.59 ns |     733,109.528 ns |    190,386.217 ns |   8,981,901.03 ns |    775,211.31 |    16,848.29 |               2.0000 |                - |  1500.0000 |  687.5000 |  125.0000 | 16547765 B |          NA |
+| CreateSnapshot              | ShortDocuments |          11.58 ns |           0.482 ns |          0.125 ns |          11.56 ns |          1.00 |         0.01 |                    - |                - |          - |         - |         - |          - |          NA |
+| SerializeTurtle             | ShortDocuments |   6,167,413.04 ns |   9,674,336.557 ns |  2,512,394.487 ns |   6,128,718.78 ns |    532,696.09 |   198,174.04 |                    - |                - |   500.0000 |  187.5000 |         - |  4903888 B |          NA |
+| SerializeJsonLd             | ShortDocuments |   3,909,785.14 ns |  11,137,155.855 ns |  1,723,487.194 ns |   3,083,701.81 ns |    337,698.68 |   132,316.15 |                    - |                - |   500.0000 |  250.0000 |         - |  5478800 B |          NA |
+|                             |                |                   |                    |                   |                   |               |              |                      |                  |            |           |           |            |             |
+| **ExportMermaidFlowchart**      | **LongDocuments**  |      **67,583.50 ns** |       **5,310.830 ns** |        **821.857 ns** |      **67,646.99 ns** |      **5,021.06** |       **702.35** |                    **-** |                **-** |    **21.4844** |    **2.9297** |         **-** |   **187920 B** |          **NA** |
+| ExportDotGraph              | LongDocuments  |     194,112.40 ns |     340,497.905 ns |     88,426.225 ns |     159,534.75 ns |     14,421.41 |     6,374.39 |                    - |                - |    19.5313 |    7.8125 |    5.8594 |   224709 B |          NA |
+| LoadTurtleFromInMemoryStore | LongDocuments  |  10,548,820.82 ns |   9,924,500.219 ns |  2,577,361.196 ns |  11,224,966.12 ns |    783,715.62 |   207,219.01 |                    - |                - |   250.0000 |   62.5000 |         - |  2466743 B |          NA |
+| LoadJsonLdFromInMemoryStore | LongDocuments  |  10,941,377.62 ns |  13,090,956.831 ns |  3,399,679.924 ns |   9,431,638.00 ns |    812,880.29 |   258,575.18 |                    - |                - |  1062.5000 |  500.0000 |  125.0000 |  7853916 B |          NA |
+| LoadTurtleFromFile          | LongDocuments  |  11,024,611.99 ns |  10,391,780.650 ns |  2,698,712.440 ns |  11,366,648.44 ns |    819,064.12 |   216,862.76 |              20.0000 |                - |   312.5000 |  125.0000 |         - |  2763581 B |          NA |
+| LoadJsonLdFromFile          | LongDocuments  |  19,015,272.27 ns |   9,010,043.989 ns |  2,339,879.816 ns |  18,786,625.00 ns |  1,412,723.39 |   253,096.14 |              17.0000 |                - |   833.3333 |  333.3333 |         - |  8112691 B |          NA |
+| SaveTurtleToInMemoryStore   | LongDocuments  |   4,418,766.16 ns |   9,200,100.001 ns |  2,389,236.759 ns |   3,866,296.88 ns |    328,288.45 |   169,753.57 |                    - |                - |   312.5000 |  156.2500 |         - |  2927560 B |          NA |
+| SaveJsonLdToInMemoryStore   | LongDocuments  |   5,718,319.81 ns |  10,727,443.521 ns |  2,785,883.022 ns |   5,577,320.31 ns |    424,837.68 |   199,579.12 |                    - |                - |   500.0000 |  250.0000 |         - |  4520923 B |          NA |
+| SaveTurtleToFile            | LongDocuments  |   5,771,321.34 ns |   7,267,951.072 ns |  1,887,463.817 ns |   6,233,108.06 ns |    428,775.38 |   142,222.95 |               2.0000 |                - |   468.7500 |  312.5000 |  156.2500 |  7197836 B |          NA |
+| SaveJsonLdToFile            | LongDocuments  |   8,969,492.98 ns |   8,740,527.750 ns |  2,269,887.305 ns |   8,895,962.28 ns |    666,380.81 |   180,784.98 |               2.0000 |                - |   625.0000 |  375.0000 |  125.0000 |  8813166 B |          NA |
+| CreateSnapshot              | LongDocuments  |          13.70 ns |           7.611 ns |          1.977 ns |          14.84 ns |          1.02 |         0.20 |                    - |                - |          - |         - |         - |          - |          NA |
+| SerializeTurtle             | LongDocuments  |   3,012,246.61 ns |   2,927,536.050 ns |    760,271.817 ns |   2,512,669.25 ns |    223,792.29 |    60,594.10 |                    - |                - |   187.5000 |   31.2500 |         - |  1719920 B |          NA |
+| SerializeJsonLd             | LongDocuments  |   1,086,121.75 ns |     248,968.495 ns |     64,656.328 ns |   1,116,365.23 ns |     80,692.49 |    12,037.17 |                    - |                - |   234.3750 |  125.0000 |   46.8750 |  2025995 B |          NA |
+|                             |                |                   |                    |                   |                   |               |              |                      |                  |            |           |           |            |             |
+| **ExportMermaidFlowchart**      | **LargeCorpus**    |   **1,354,249.68 ns** |     **521,728.467 ns** |     **80,738.058 ns** |   **1,362,156.27 ns** |    **111,430.14** |     **6,009.82** |                    **-** |                **-** |   **156.2500** |   **62.5000** |   **31.2500** |  **2058288 B** |          **NA** |
+| ExportDotGraph              | LargeCorpus    |   1,403,207.75 ns |     369,849.520 ns |     96,048.746 ns |   1,345,538.74 ns |    115,458.49 |     7,311.45 |                    - |                - |   203.1250 |  109.3750 |   46.8750 |  2483368 B |          NA |
+| LoadTurtleFromInMemoryStore | LargeCorpus    |  43,072,546.88 ns |  55,969,420.742 ns |  8,661,329.800 ns |  39,068,583.25 ns |  3,544,087.76 |   638,092.79 |                    - |                - |  3000.0000 | 1000.0000 |         - | 26511328 B |          NA |
+| LoadJsonLdFromInMemoryStore | LargeCorpus    | 134,902,297.00 ns |  11,104,290.924 ns |  1,718,401.309 ns | 134,814,656.50 ns | 11,100,007.19 |   155,002.52 |                    - |                - | 10500.0000 | 4500.0000 | 1000.0000 | 81664840 B |          NA |
+| LoadTurtleFromFile          | LargeCorpus    |  37,591,067.75 ns |  12,310,257.395 ns |  1,905,025.955 ns |  37,661,979.25 ns |  3,093,061.66 |   142,411.41 |             181.0000 |                - |  3000.0000 | 1000.0000 |         - | 29491852 B |          NA |
+| LoadJsonLdFromFile          | LargeCorpus    | 123,992,970.80 ns |  48,452,313.912 ns | 12,582,912.084 ns | 125,421,229.00 ns | 10,202,367.92 |   953,643.69 |             161.0000 |                - | 10500.0000 | 3500.0000 | 1000.0000 | 84296332 B |          NA |
+| SaveTurtleToInMemoryStore   | LargeCorpus    |  55,382,129.20 ns |  59,884,835.386 ns | 15,551,901.611 ns |  58,103,229.50 ns |  4,556,942.66 | 1,174,881.62 |                    - |                - |  3000.0000 | 1000.0000 |         - | 31518944 B |          NA |
+| SaveJsonLdToInMemoryStore   | LargeCorpus    |  49,678,304.20 ns |  68,490,814.520 ns | 17,786,847.068 ns |  40,216,437.50 ns |  4,087,621.53 | 1,343,472.22 |                    - |                - |  5000.0000 | 1500.0000 |         - | 47825152 B |          NA |
+| SaveTurtleToFile            | LargeCorpus    |  73,157,870.80 ns | 148,104,762.414 ns | 38,462,336.557 ns |  56,793,750.00 ns |  6,019,563.12 | 2,904,664.90 |               2.0000 |                - |  3000.0000 | 1000.0000 |         - | 36451584 B |          NA |
+| SaveJsonLdToFile            | LargeCorpus    |  58,554,870.90 ns |  65,384,726.857 ns | 16,980,205.964 ns |  50,993,291.50 ns |  4,818,001.64 | 1,282,745.42 |               2.0000 |                - |  5000.0000 | 1500.0000 |         - | 52677064 B |          NA |
+| CreateSnapshot              | LargeCorpus    |          12.15 ns |           0.709 ns |          0.110 ns |          12.16 ns |          1.00 |         0.01 |                    - |                - |          - |         - |         - |          - |          NA |
+| SerializeTurtle             | LargeCorpus    |  10,503,969.41 ns |   7,802,650.922 ns |  1,207,468.865 ns |  10,008,774.75 ns |    864,285.77 |    89,140.04 |                    - |                - |  2187.5000 |  937.5000 |  125.0000 | 18956974 B |          NA |
+| SerializeJsonLd             | LargeCorpus    |  26,996,619.47 ns |  67,596,880.335 ns | 17,554,695.198 ns |  31,477,166.67 ns |  2,221,331.12 | 1,325,662.26 |                    - |                - |  1666.6667 |  666.6667 |         - | 21311568 B |          NA |
+
+### GraphSearchBenchmarks
+
+```
+
+BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
+Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
+.NET SDK 10.0.401
+  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+
+Job=Required  MinIterationTime=100ms  IterationCount=5
+LaunchCount=1  WarmupCount=2
+
+```
+| Method                     | CorpusProfile     | QueryScenario | Mean        | Error        | StdDev       | Median      | Ratio  | RatioSD | Completed Work Items | Lock Contentions | Gen0      | Gen1     | Allocated  | Alloc Ratio |
+|--------------------------- |------------------ |-------------- |------------:|-------------:|-------------:|------------:|-------:|--------:|---------------------:|-----------------:|----------:|---------:|-----------:|------------:|
+| **LocalFederatedSchemaSearch** | **ShortDocuments**    | **Exact**         | **26,078.3 μs** |  **2,066.79 μs** |    **536.74 μs** | **25,758.5 μs** |  **51.79** |    **1.03** |               **2.0000** |                **-** | **1000.0000** | **400.0000** |  **8430.4 KB** |        **9.48** |
+| RankedGraphSearch          | ShortDocuments    | Exact         |    503.6 μs |     14.19 μs |      3.69 μs |    501.7 μs |   1.00 |    0.01 |                    - |                - |  101.5625 |  23.4375 |  889.16 KB |        1.00 |
+| Bm25Search                 | ShortDocuments    | Exact         |    754.9 μs |    304.09 μs |     47.06 μs |    775.9 μs |   1.50 |    0.08 |                    - |                - |   93.7500 |  15.6250 |  892.65 KB |        1.00 |
+| Bm25FuzzySearch            | ShortDocuments    | Exact         |  1,701.8 μs |  1,076.73 μs |    166.62 μs |  1,714.1 μs |   3.38 |    0.29 |                    - |                - |  187.5000 |  31.2500 |  1620.5 KB |        1.82 |
+| SchemaSearch               | ShortDocuments    | Exact         | 11,488.1 μs |  4,865.07 μs |    752.88 μs | 11,390.7 μs |  22.81 |    1.34 |              23.0000 |          48.6667 |  500.0000 | 166.6667 |  4558.2 KB |        5.13 |
+| FocusedSearch              | ShortDocuments    | Exact         |    510.3 μs |    510.08 μs |    132.47 μs |    457.4 μs |   1.01 |    0.24 |                    - |                - |   54.6875 |   7.8125 |  481.53 KB |        0.54 |
+|                            |                   |               |             |              |              |             |        |         |                      |                  |           |          |            |             |
+| **LocalFederatedSchemaSearch** | **ShortDocuments**    | **Typo**          | **33,124.1 μs** | **21,363.55 μs** |  **5,548.05 μs** | **32,150.1 μs** |  **65.75** |   **10.67** |               **2.0000** |                **-** | **1000.0000** | **500.0000** | **8375.95 KB** |        **9.42** |
+| RankedGraphSearch          | ShortDocuments    | Typo          |    505.2 μs |    115.10 μs |     29.89 μs |    504.1 μs |   1.00 |    0.08 |                    - |                - |  101.5625 |  23.4375 |  889.16 KB |        1.00 |
+| Bm25Search                 | ShortDocuments    | Typo          |  1,154.8 μs |    613.93 μs |    159.44 μs |  1,202.9 μs |   2.29 |    0.31 |                    - |                - |   93.7500 |  31.2500 |  870.91 KB |        0.98 |
+| Bm25FuzzySearch            | ShortDocuments    | Typo          |  1,863.1 μs |  3,271.25 μs |    506.23 μs |  1,996.1 μs |   3.70 |    0.92 |                    - |                - |  187.5000 |  31.2500 | 1620.44 KB |        1.82 |
+| SchemaSearch               | ShortDocuments    | Typo          | 15,456.9 μs |  1,333.53 μs |    206.37 μs | 15,528.2 μs |  30.68 |    1.70 |              23.0000 |          65.0000 |  500.0000 | 166.6667 | 4556.94 KB |        5.13 |
+| FocusedSearch              | ShortDocuments    | Typo          |    538.5 μs |    549.33 μs |    142.66 μs |    559.8 μs |   1.07 |    0.27 |                    - |                - |   54.6875 |   7.8125 |  481.53 KB |        0.54 |
+|                            |                   |               |             |              |              |             |        |         |                      |                  |           |          |            |             |
+| **LocalFederatedSchemaSearch** | **ShortDocuments**    | **NoMatch**       | **23,006.4 μs** | **30,395.21 μs** |  **7,893.54 μs** | **28,366.3 μs** |  **48.90** |   **15.33** |               **2.0000** |                **-** | **1000.0000** | **400.0000** | **8259.75 KB** |        **9.29** |
+| RankedGraphSearch          | ShortDocuments    | NoMatch       |    470.6 μs |     22.69 μs |      5.89 μs |    471.2 μs |   1.00 |    0.02 |                    - |                - |  101.5625 |  23.4375 |  889.16 KB |        1.00 |
+| Bm25Search                 | ShortDocuments    | NoMatch       |    628.9 μs |     19.93 μs |      5.18 μs |    630.2 μs |   1.34 |    0.02 |                    - |                - |   93.7500 |  31.2500 |  870.46 KB |        0.98 |
+| Bm25FuzzySearch            | ShortDocuments    | NoMatch       |  1,161.4 μs |    144.71 μs |     22.39 μs |  1,156.3 μs |   2.47 |    0.05 |                    - |                - |  187.5000 |  31.2500 | 1598.42 KB |        1.80 |
+| SchemaSearch               | ShortDocuments    | NoMatch       | 16,646.6 μs |  4,106.25 μs |    635.45 μs | 16,428.1 μs |  35.38 |    1.27 |              23.0000 |          51.4000 |  400.0000 | 200.0000 |  4556.4 KB |        5.12 |
+| FocusedSearch              | ShortDocuments    | NoMatch       |    542.1 μs |    571.95 μs |    148.53 μs |    554.8 μs |   1.15 |    0.29 |                    - |                - |   54.6875 |   7.8125 |  481.53 KB |        0.54 |
+|                            |                   |               |             |              |              |             |        |         |                      |                  |           |          |            |             |
+| **LocalFederatedSchemaSearch** | **LongDocuments**     | **Exact**         | **15,918.7 μs** | **24,450.68 μs** |  **6,349.76 μs** | **14,909.1 μs** |  **58.53** |   **21.45** |               **2.0000** |                **-** |  **857.1429** | **285.7143** | **7354.75 KB** |        **5.26** |
+| RankedGraphSearch          | LongDocuments     | Exact         |    272.3 μs |     43.42 μs |     11.28 μs |    273.1 μs |   1.00 |    0.05 |                    - |                - |  167.9688 |  54.6875 |  1398.3 KB |        1.00 |
+| Bm25Search                 | LongDocuments     | Exact         |  1,173.4 μs |     25.48 μs |      6.62 μs |  1,173.0 μs |   4.31 |    0.17 |                    - |                - |  156.2500 |  62.5000 | 1400.67 KB |        1.00 |
+| Bm25FuzzySearch            | LongDocuments     | Exact         |  1,828.1 μs |  3,875.34 μs |    599.71 μs |  1,600.2 μs |   6.72 |    1.98 |                    - |                - |  343.7500 | 156.2500 | 2987.39 KB |        2.14 |
+| SchemaSearch               | LongDocuments     | Exact         |  8,904.0 μs |  6,985.01 μs |  1,813.98 μs |  8,989.1 μs |  32.74 |    6.22 |              23.0000 |           9.0000 |  250.0000 |        - | 2563.28 KB |        1.83 |
+| FocusedSearch              | LongDocuments     | Exact         |    335.0 μs |    312.91 μs |     81.26 μs |    295.3 μs |   1.23 |    0.28 |                    - |                - |   19.5313 |        - |  172.41 KB |        0.12 |
+|                            |                   |               |             |              |              |             |        |         |                      |                  |           |          |            |             |
+| **LocalFederatedSchemaSearch** | **LongDocuments**     | **Typo**          | **14,579.0 μs** | **28,967.47 μs** |  **7,522.76 μs** | **11,208.7 μs** |  **46.56** |   **23.35** |               **2.0000** |                **-** |  **833.3333** | **166.6667** | **7293.28 KB** |        **5.22** |
+| RankedGraphSearch          | LongDocuments     | Typo          |    319.3 μs |    175.44 μs |     45.56 μs |    327.9 μs |   1.02 |    0.21 |                    - |                - |  167.9688 |  54.6875 |  1398.3 KB |        1.00 |
+| Bm25Search                 | LongDocuments     | Typo          |  1,249.4 μs |    293.27 μs |     76.16 μs |  1,279.0 μs |   3.99 |    0.66 |                    - |                - |  156.2500 |  62.5000 | 1393.47 KB |        1.00 |
+| Bm25FuzzySearch            | LongDocuments     | Typo          |  3,759.7 μs |  8,340.73 μs |  2,166.06 μs |  2,414.1 μs |  12.01 |    6.66 |                    - |                - |  312.5000 | 125.0000 | 2987.32 KB |        2.14 |
+| SchemaSearch               | LongDocuments     | Typo          |  6,782.3 μs |  5,817.45 μs |  1,510.77 μs |  7,717.2 μs |  21.66 |    5.59 |              23.0000 |           9.8462 |  307.6923 |  76.9231 | 2553.09 KB |        1.83 |
+| FocusedSearch              | LongDocuments     | Typo          |    222.3 μs |    313.82 μs |     81.50 μs |    272.5 μs |   0.71 |    0.26 |                    - |                - |   19.5313 |        - |  172.41 KB |        0.12 |
+|                            |                   |               |             |              |              |             |        |         |                      |                  |           |          |            |             |
+| **LocalFederatedSchemaSearch** | **LongDocuments**     | **NoMatch**       | **24,069.3 μs** | **32,221.13 μs** |  **8,367.73 μs** | **18,566.7 μs** |  **71.57** |   **23.02** |               **2.0000** |                **-** |  **833.3333** | **166.6667** | **7295.07 KB** |        **5.22** |
+| RankedGraphSearch          | LongDocuments     | NoMatch       |    337.1 μs |     71.81 μs |     18.65 μs |    336.5 μs |   1.00 |    0.07 |                    - |                - |  167.9688 |  54.6875 |  1398.3 KB |        1.00 |
+| Bm25Search                 | LongDocuments     | NoMatch       |  2,076.9 μs |    786.31 μs |    204.20 μs |  2,206.0 μs |   6.18 |    0.64 |                    - |                - |  156.2500 |  62.5000 | 1392.88 KB |        1.00 |
+| Bm25FuzzySearch            | LongDocuments     | NoMatch       |  5,153.8 μs |  3,145.12 μs |    816.78 μs |  5,286.3 μs |  15.32 |    2.35 |                    - |                - |  312.5000 | 125.0000 | 2979.71 KB |        2.13 |
+| SchemaSearch               | LongDocuments     | NoMatch       | 14,032.2 μs |  8,028.84 μs |  2,085.07 μs | 14,055.4 μs |  41.72 |    6.04 |              23.0000 |           3.5000 |  250.0000 |        - |  2560.6 KB |        1.83 |
+| FocusedSearch              | LongDocuments     | NoMatch       |    279.9 μs |     85.21 μs |     22.13 μs |    292.2 μs |   0.83 |    0.07 |                    - |                - |   15.6250 |        - |  172.47 KB |        0.12 |
+|                            |                   |               |             |              |              |             |        |         |                      |                  |           |          |            |             |
+| **LocalFederatedSchemaSearch** | **FederatedRunbooks** | **Exact**         | **22,511.9 μs** | **10,933.23 μs** |  **2,839.32 μs** | **21,243.5 μs** |  **61.25** |   **13.31** |               **2.0000** |                **-** | **1000.0000** | **400.0000** |    **8372 KB** |        **8.86** |
+| RankedGraphSearch          | FederatedRunbooks | Exact         |    379.0 μs |    276.21 μs |     71.73 μs |    412.7 μs |   1.03 |    0.26 |                    - |                - |  113.2813 |  35.1563 |  945.27 KB |        1.00 |
+| Bm25Search                 | FederatedRunbooks | Exact         |  1,526.8 μs |  1,052.26 μs |    273.27 μs |  1,582.8 μs |   4.15 |    1.03 |                    - |                - |   93.7500 |  31.2500 |  948.83 KB |        1.00 |
+| Bm25FuzzySearch            | FederatedRunbooks | Exact         |  2,837.7 μs |  8,158.74 μs |  2,118.80 μs |  1,943.4 μs |   7.72 |    5.53 |                    - |                - |  218.7500 |  93.7500 | 1973.78 KB |        2.09 |
+| SchemaSearch               | FederatedRunbooks | Exact         | 15,525.9 μs |  5,675.24 μs |  1,473.84 μs | 16,090.1 μs |  42.24 |    8.58 |              23.0000 |          59.6667 |  500.0000 | 166.6667 | 4639.76 KB |        4.91 |
+| FocusedSearch              | FederatedRunbooks | Exact         |    519.6 μs |    592.67 μs |    153.91 μs |    580.0 μs |   1.41 |    0.47 |                    - |                - |   54.6875 |   7.8125 |  467.17 KB |        0.49 |
+|                            |                   |               |             |              |              |             |        |         |                      |                  |           |          |            |             |
+| **LocalFederatedSchemaSearch** | **FederatedRunbooks** | **Typo**          | **20,265.7 μs** | **12,686.55 μs** |  **1,963.26 μs** | **21,030.3 μs** |  **38.40** |    **9.89** |               **2.0000** |                **-** | **1000.0000** | **500.0000** | **8446.98 KB** |        **8.94** |
+| RankedGraphSearch          | FederatedRunbooks | Typo          |    562.9 μs |    646.24 μs |    167.83 μs |    469.6 μs |   1.07 |    0.39 |                    - |                - |  109.3750 |  31.2500 |  945.33 KB |        1.00 |
+| Bm25Search                 | FederatedRunbooks | Typo          |    816.9 μs |     19.03 μs |      4.94 μs |    814.4 μs |   1.55 |    0.37 |                    - |                - |   93.7500 |  31.2500 |  927.21 KB |        0.98 |
+| Bm25FuzzySearch            | FederatedRunbooks | Typo          |  3,356.3 μs |  7,261.52 μs |  1,885.79 μs |  2,222.1 μs |   6.36 |    3.68 |                    - |                - |  187.5000 |  62.5000 | 1973.79 KB |        2.09 |
+| SchemaSearch               | FederatedRunbooks | Typo          | 14,825.6 μs |  3,804.38 μs |    987.99 μs | 15,280.1 μs |  28.09 |    6.99 |              23.0000 |          66.5000 |  500.0000 | 166.6667 | 4639.21 KB |        4.91 |
+| FocusedSearch              | FederatedRunbooks | Typo          |    478.4 μs |    511.62 μs |    132.87 μs |    570.2 μs |   0.91 |    0.32 |                    - |                - |   54.6875 |   7.8125 |  467.17 KB |        0.49 |
+|                            |                   |               |             |              |              |             |        |         |                      |                  |           |          |            |             |
+| **LocalFederatedSchemaSearch** | **FederatedRunbooks** | **NoMatch**       | **58,615.0 μs** | **69,161.03 μs** | **17,960.90 μs** | **64,857.9 μs** | **104.07** |   **45.81** |               **2.0000** |                **-** | **1000.0000** | **500.0000** | **8459.74 KB** |        **8.95** |
+| RankedGraphSearch          | FederatedRunbooks | NoMatch       |    629.6 μs |    901.32 μs |    234.07 μs |    566.5 μs |   1.12 |    0.54 |                    - |                - |  109.3750 |  31.2500 |  945.33 KB |        1.00 |
+| Bm25Search                 | FederatedRunbooks | NoMatch       |  1,239.6 μs |    916.42 μs |    237.99 μs |  1,357.5 μs |   2.20 |    0.83 |                    - |                - |   93.7500 |  31.2500 |  926.63 KB |        0.98 |
+| Bm25FuzzySearch            | FederatedRunbooks | NoMatch       |  4,476.4 μs | 14,381.00 μs |  3,734.70 μs |  2,233.9 μs |   7.95 |    6.87 |                    - |                - |  187.5000 |  62.5000 | 1951.76 KB |        2.06 |
+| SchemaSearch               | FederatedRunbooks | NoMatch       | 15,506.1 μs | 20,620.50 μs |  3,191.04 μs | 15,916.8 μs |  27.53 |   10.50 |              23.0000 |          31.5000 |  500.0000 | 166.6667 | 4574.09 KB |        4.84 |
+| FocusedSearch              | FederatedRunbooks | NoMatch       |    361.2 μs |     62.42 μs |     16.21 μs |    364.5 μs |   0.64 |    0.21 |                    - |                - |   54.6875 |   7.8125 |  467.17 KB |        0.49 |
+
+### SchemaCatalogGraphSearchBenchmarks
+
+```
+
+BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
+Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
+.NET SDK 10.0.401
+  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+
+Job=Required  MinIterationTime=100ms  IterationCount=5
+LaunchCount=1  WarmupCount=2
+
+```
+| Method          | QueryScenario | Mean     | Error     | StdDev    | Ratio | RatioSD | Completed Work Items | Lock Contentions | Gen0      | Gen1      | Allocated | Alloc Ratio |
+|---------------- |-------------- |---------:|----------:|----------:|------:|--------:|---------------------:|-----------------:|----------:|----------:|----------:|------------:|
+| **Unrestricted**    | **Exact**         | **62.13 ms** | **80.511 ms** | **20.908 ms** |  **1.10** |    **0.49** |             **310.0000** |           **0.5000** | **1500.0000** |  **500.0000** |  **13.42 MB** |        **1.00** |
+| CandidateValues | Exact         | 14.16 ms | 11.638 ms |  3.022 ms |  0.25 |    0.09 |             365.0000 |           0.1875 |  687.5000 |  187.5000 |   5.93 MB |        0.44 |
+|                 |               |          |           |           |       |         |                      |                  |           |           |           |             |
+| **Unrestricted**    | **NoMatch**       | **46.60 ms** |  **3.670 ms** |  **0.568 ms** |  **1.00** |    **0.02** |               **1.0000** |                **-** | **2500.0000** | **1000.0000** |  **22.12 MB** |        **1.00** |
+| CandidateValues | NoMatch       | 10.78 ms |  5.984 ms |  0.926 ms |  0.23 |    0.02 |             188.0000 |           1.5000 |  500.0000 |  125.0000 |   3.99 MB |        0.18 |
+
+### SchemaGraphSearchBenchmarks
+
+```
+
+BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
+Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
+.NET SDK 10.0.401
+  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+
+Job=Required  MinIterationTime=100ms  IterationCount=5
+LaunchCount=1  WarmupCount=2
+
+```
+| Method          | CorpusProfile  | QueryScenario | Mean      | Error      | StdDev    | Ratio | RatioSD | Completed Work Items | Lock Contentions | Gen0      | Gen1     | Allocated | Alloc Ratio |
+|---------------- |--------------- |-------------- |----------:|-----------:|----------:|------:|--------:|---------------------:|-----------------:|----------:|---------:|----------:|------------:|
+| **Unrestricted**    | **ShortDocuments** | **Exact**         | **48.699 ms** | **20.5169 ms** | **5.3282 ms** |  **1.01** |    **0.14** |              **79.0000** |          **54.3333** | **1666.6667** | **666.6667** |  **14.84 MB** |        **1.00** |
+| CandidateValues | ShortDocuments | Exact         | 12.212 ms |  7.2656 ms | 1.8869 ms |  0.25 |    0.04 |              90.0000 |          17.9375 |  562.5000 | 187.5000 |   4.82 MB |        0.32 |
+|                 |                |               |           |            |           |       |         |                      |                  |           |          |           |             |
+| **Unrestricted**    | **ShortDocuments** | **NoMatch**       | **10.233 ms** |  **9.1896 ms** | **2.3865 ms** |  **1.04** |    **0.31** |              **23.0000** |          **15.2500** |  **687.5000** | **250.0000** |   **5.79 MB** |        **1.00** |
+| CandidateValues | ShortDocuments | NoMatch       |  8.146 ms |  5.2517 ms | 1.3639 ms |  0.83 |    0.21 |              34.0000 |           4.9375 |  375.0000 | 125.0000 |   3.26 MB |        0.56 |
+|                 |                |               |           |            |           |       |         |                      |                  |           |          |           |             |
+| **Unrestricted**    | **LongDocuments**  | **Exact**         | **10.492 ms** |  **8.6099 ms** | **1.3324 ms** |  **1.01** |    **0.17** |              **79.0000** |           **4.8750** |  **812.5000** | **250.0000** |   **6.52 MB** |        **1.00** |
+| CandidateValues | LongDocuments  | Exact         | 10.385 ms |  0.9202 ms | 0.1424 ms |  1.00 |    0.13 |              90.0000 |           7.1250 |  500.0000 | 125.0000 |   4.01 MB |        0.61 |
+|                 |                |               |           |            |           |       |         |                      |                  |           |          |           |             |
+| **Unrestricted**    | **LongDocuments**  | **NoMatch**       |  **8.039 ms** |  **3.4303 ms** | **0.5308 ms** |  **1.00** |    **0.08** |              **23.0000** |          **17.8750** |  **375.0000** | **125.0000** |   **3.08 MB** |        **1.00** |
+| CandidateValues | LongDocuments  | NoMatch       |  9.587 ms |  1.6316 ms | 0.4237 ms |  1.20 |    0.08 |              34.0000 |           2.4286 |  285.7143 |        - |   2.58 MB |        0.84 |
+
+### TiktokenGraphBuildBenchmarks
+
+```
+
+BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
+Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
+.NET SDK 10.0.401
+  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+
+Job=Required  MinIterationTime=100ms  IterationCount=5
+LaunchCount=1  WarmupCount=2
+
+```
+| Method                    | CorpusCopies | Mean     | Error    | StdDev   | Completed Work Items | Lock Contentions | Gen0       | Gen1       | Gen2      | Allocated |
+|-------------------------- |------------- |---------:|---------:|---------:|---------------------:|-----------------:|-----------:|-----------:|----------:|----------:|
+| **BuildRepeatedCatalogGraph** | **1**            | **135.0 ms** | **123.0 ms** | **31.94 ms** |                    **-** |                **-** |  **8500.0000** |  **3500.0000** |  **500.0000** |  **66.57 MB** |
+| **BuildRepeatedCatalogGraph** | **8**            | **606.6 ms** | **250.8 ms** | **65.14 ms** |                    **-** |                **-** | **56000.0000** | **18000.0000** | **2000.0000** | **461.04 MB** |
+
+### TiktokenSearchBenchmarks
+
+```
+
+BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
+Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
+.NET SDK 10.0.401
+  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+
+Job=Required  MinIterationTime=100ms  IterationCount=5
+LaunchCount=1  WarmupCount=2
+
+```
+| Method                            | CorpusProfile        | QueryScenario | Mean      | Error        | StdDev     | Median    | Ratio | RatioSD | Completed Work Items | Lock Contentions | Allocated | Alloc Ratio |
+|---------------------------------- |--------------------- |-------------- |----------:|-------------:|-----------:|----------:|------:|--------:|---------------------:|-----------------:|----------:|------------:|
+| **ExactTokenDistanceSearch**          | **LongDocuments**        | **Exact**         | **106.74 μs** |     **6.842 μs** |   **1.059 μs** | **107.21 μs** |  **1.00** |    **0.01** |                    **-** |                **-** |   **2.23 KB** |        **1.00** |
+| FuzzyCorrectedTokenDistanceSearch | LongDocuments        | Exact         | 108.20 μs |    21.291 μs |   3.295 μs | 106.65 μs |  1.01 |    0.03 |                    - |                - |   3.34 KB |        1.50 |
+|                                   |                      |               |           |              |            |           |       |         |                      |                  |           |             |
+| **ExactTokenDistanceSearch**          | **LongDocuments**        | **Typo**          | **159.43 μs** |    **12.387 μs** |   **3.217 μs** | **159.47 μs** |  **1.00** |    **0.03** |                    **-** |                **-** |   **2.95 KB** |        **1.00** |
+| FuzzyCorrectedTokenDistanceSearch | LongDocuments        | Typo          | 204.51 μs |     8.711 μs |   1.348 μs | 205.09 μs |  1.28 |    0.03 |                    - |                - |   5.25 KB |        1.78 |
+|                                   |                      |               |           |              |            |           |       |         |                      |                  |           |             |
+| **ExactTokenDistanceSearch**          | **LongDocuments**        | **NoMatch**       |  **86.91 μs** |     **3.024 μs** |   **0.468 μs** |  **86.87 μs** |  **1.00** |    **0.01** |                    **-** |                **-** |   **2.18 KB** |        **1.00** |
+| FuzzyCorrectedTokenDistanceSearch | LongDocuments        | NoMatch       | 353.78 μs | 1,305.588 μs | 339.057 μs | 128.14 μs |  4.07 |    3.58 |                    - |                - |   3.09 KB |        1.42 |
+|                                   |                      |               |           |              |            |           |       |         |                      |                  |           |             |
+| **ExactTokenDistanceSearch**          | **Token(...)ngual [21]** | **Exact**         |  **80.75 μs** |     **1.569 μs** |   **0.407 μs** |  **80.85 μs** |  **1.00** |    **0.01** |                    **-** |                **-** |   **2.45 KB** |        **1.00** |
+| FuzzyCorrectedTokenDistanceSearch | Token(...)ngual [21] | Exact         |  82.77 μs |    24.230 μs |   3.750 μs |  81.57 μs |  1.02 |    0.04 |                    - |                - |   3.59 KB |        1.46 |
+|                                   |                      |               |           |              |            |           |       |         |                      |                  |           |             |
+| **ExactTokenDistanceSearch**          | **Token(...)ngual [21]** | **Typo**          |  **93.92 μs** |     **2.746 μs** |   **0.713 μs** |  **93.72 μs** |  **1.00** |    **0.01** |                    **-** |                **-** |   **2.87 KB** |        **1.00** |
+| FuzzyCorrectedTokenDistanceSearch | Token(...)ngual [21] | Typo          | 122.55 μs |    79.655 μs |  12.327 μs | 120.32 μs |  1.30 |    0.12 |                    - |                - |   4.58 KB |        1.60 |
+|                                   |                      |               |           |              |            |           |       |         |                      |                  |           |             |
+| **ExactTokenDistanceSearch**          | **Token(...)ngual [21]** | **NoMatch**       |  **89.14 μs** |     **6.512 μs** |   **1.691 μs** |  **88.95 μs** |  **1.00** |    **0.02** |                    **-** |                **-** |   **2.18 KB** |        **1.00** |
+| FuzzyCorrectedTokenDistanceSearch | Token(...)ngual [21] | NoMatch       |  85.87 μs |     1.145 μs |   0.177 μs |  85.94 μs |  0.96 |    0.02 |                    - |                - |   3.01 KB |        1.38 |
+
+### TokenFocusedSearchBenchmarks
+
+```
+
+BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
+Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
+.NET SDK 10.0.401
+  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+
+Job=Required  MinIterationTime=100ms  IterationCount=5
+LaunchCount=1  WarmupCount=2
+
+```
+| Method             | DocumentCount | QueryScenario | Mean      | Error       | StdDev    | Median    | Completed Work Items | Lock Contentions | Gen0    | Allocated |
+|------------------- |-------------- |-------------- |----------:|------------:|----------:|----------:|---------------------:|-----------------:|--------:|----------:|
+| **FocusedTokenSearch** | **120**           | **Exact**         |  **81.08 μs** |    **75.45 μs** |  **19.59 μs** |  **77.77 μs** |                    **-** |                **-** |  **4.3945** |  **38.03 KB** |
+| **FocusedTokenSearch** | **120**           | **NoMatch**       |  **74.95 μs** |    **68.78 μs** |  **17.86 μs** |  **73.22 μs** |                    **-** |                **-** |  **4.3945** |  **38.25 KB** |
+| **FocusedTokenSearch** | **1000**          | **Exact**         | **749.36 μs** | **1,560.33 μs** | **405.21 μs** | **536.66 μs** |                    **-** |                **-** | **31.2500** | **269.61 KB** |
+| **FocusedTokenSearch** | **1000**          | **NoMatch**       | **474.86 μs** |   **147.53 μs** |  **22.83 μs** | **468.15 μs** |                    **-** |                **-** | **31.2500** | **269.83 KB** |
+
+### TokenVectorDistanceBenchmarks
+
+```
+
+BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
+Apple M2 Pro, 1 CPU, 12 logical and 12 physical cores
+.NET SDK 10.0.401
+  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+  Required : .NET 10.0.12 (10.0.12, 10.0.1226.42308), Arm64 RyuJIT armv8.0-a
+
+Job=Required  MinIterationTime=100ms  IterationCount=5
+LaunchCount=1  WarmupCount=2
+
+```
+| Method               | WeightCount | Mean      | Error      | StdDev    | Completed Work Items | Lock Contentions | Allocated |
+|--------------------- |------------ |----------:|-----------:|----------:|---------------------:|-----------------:|----------:|
+| **SparseVectorDistance** | **16**          |  **46.73 ns** |   **2.128 ns** |  **0.553 ns** |                    **-** |                **-** |         **-** |
+| **SparseVectorDistance** | **128**         | **414.73 ns** | **351.621 ns** | **91.315 ns** |                    **-** |                **-** |         **-** |
 
 ## Semantic snapshot and vector allocation qualification (2026-10-12)
 

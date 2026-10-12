@@ -1347,18 +1347,17 @@ For live allocation/GC investigation, see [Schema Search Profiling](docs/Perform
 
 BenchmarkDotNet performance runs are separate from TUnit correctness tests. Commands, workload profiles, profiler options, and full result tables live in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md). The build/test/pack validation job stays separate; PR validation, release validation, and the dedicated benchmark workflow run the complete BenchmarkDotNet suite as parallel suite jobs and upload suite-specific `benchmarkdotnet-results-*` artifacts.
 
-Current local snapshot from October 12, 2026: BenchmarkDotNet 0.15.8, Apple M2 Pro, .NET 10.0.12 / SDK 10.0.401. The complete `Required` suite ran 131 cases in 7 minutes 14 seconds. MB below follows BenchmarkDotNet (MiB).
+Current local snapshot from October 12, 2026: BenchmarkDotNet 0.15.8, Apple M2 Pro, .NET 10.0.12 / SDK 10.0.401. The complete `Required` suite ran 138 cases in 7 minutes 29 seconds. MiB/KiB are binary units.
 
 | Area | Current local result |
 | --- | --- |
-| Compact schema search | `ShortDocuments`: unrestricted 62.75 ms / 14.84 MB; ten candidates 18.05 ms / 4.78 MB |
-| Compact candidate no-match | `ShortDocuments`: 18.70 ms / 3.26 MB |
-| Rich catalog schema search | 120 Tiktoken documents: unrestricted 78.14 ms / 12.9 MB; one candidate 12.10 ms / 5.95 MB |
-| Rich catalog candidate no-match | 13.38 ms / 4 MB |
-| Tiktoken build | Repeated catalog: 159.8 ms / 67.09 MB |
-| Lifecycle | Build/search/save/load/export: 108.8 ms / 56.09 MB |
+| Repeated catalog build | 48 documents: 135.04 ms / 66.57 MiB; 384 documents: 606.65 ms / 461.04 MiB |
+| Normalized vector distance | 16/128 weights: 46.73/414.73 ns, both 0 B |
+| Warm focused exact search | 120 documents: 81.08 us / 38.03 KiB; 1,000: 749.36 us / 269.61 KiB |
+| Warm focused no-match | 120 documents: 74.95 us / 38.25 KiB; 1,000: 474.86 us / 269.83 KiB |
+| Lifecycle | Build/search/save/load/export: 94.52 ms / 51.85 MiB |
 
-Background Roslynk CPU load produced broad timing confidence intervals. These are observed means, not a reliable latency speedup claim or a cross-machine performance contract. The owner checkout also included pre-existing serialization/tokenization edits outside this release's scoped changes. Full result tables and that qualification context are in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md).
+These are observed means, not production SLOs or cross-machine speedup claims. The primary checkout also contained unrelated codec/serialization work that remains outside this release; exact committed-source verification comes from the canonical release suite. Full result tables and that qualification context are in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md).
 
 
 ## Explicit remote HTTP ownership and graph projection
@@ -1380,3 +1379,5 @@ The caller owns `httpClient`. Local service bindings continue to execute without
 The current `dotNetRdf.Query.Spin` package does not expose public RDF-command or explicit rule/constraint execution. That integration is blocked by [upstream issue 911](https://github.com/dotnetrdf/dotnetrdf/issues/911); supported ontology, inferencing, SPARQL and Lucene APIs remain available.
 
 Representative allocation measurements on Apple M4 / .NET 10.0.12: normalized vector distance 56 B -> 0 B; warm focused no-match at 120 documents 4.71 MB -> 38.27 KB (58.23 us), and at 1000 documents 44.48 MB -> 269.85 KB (458.22 us). These measure warm search; cold graph building and one immutable resident snapshot are separate costs. See [benchmark coverage](docs/Features/PerformanceBenchmarks.md) for workload details and full-suite qualification.
+
+Tiktoken related-segment builds avoid redundant comparisons once repeated segments have their final exact neighbors. Complete top-k choices, ordinal tie order and original floating-point distances are preserved. Distinct corpora without enough exact neighbors still use exhaustive evaluation. The repeated-catalog allocation benchmark covers 48 and 384 independently addressed documents; see [ADR-0011](docs/ADR/ADR-0011-exact-neighbor-pruning-for-repeated-segments.md).

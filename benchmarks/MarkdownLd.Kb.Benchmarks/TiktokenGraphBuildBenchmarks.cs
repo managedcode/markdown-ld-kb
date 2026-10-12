@@ -11,10 +11,15 @@ public class TiktokenGraphBuildBenchmarks
 {
     private MarkdownSourceDocument[] _sources = [];
 
+    [Params(1, 8)]
+    public int CorpusCopies { get; set; }
+
     [GlobalSetup]
     public void Setup()
     {
-        _sources = BenchmarkCorpusFactory.CreateSources(BenchmarkCorpusProfile.RepeatedCatalog);
+        var original = BenchmarkCorpusFactory.CreateSources(BenchmarkCorpusProfile.RepeatedCatalog);
+        _sources = Enumerable.Range(0, CorpusCopies).SelectMany(copy => original.Select(source =>
+            source with { Path = $"copy-{copy:D2}/{source.Path}" })).ToArray();
     }
 
     [Benchmark]

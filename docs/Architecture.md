@@ -593,3 +593,8 @@ Schema match/expansion URI identities select subject triples through official do
 ## Governed graph projection and allocation ownership
 
 One immutable semantic snapshot belongs to each `KnowledgeGraph`, is reused by readers and is invalidated by merge. Normalized token vectors own their dictionaries and avoid boxed hot-path enumeration. Explicit RDF projection filters subjects, resource objects and optional predicates before retrieval. Federated remote bindings use caller-owned official SPARQL HTTP clients and can require configured bindings for every remote endpoint. SPIN RDF-command/inference integration remains blocked by upstream public API issue 911. See [ADR-0010](ADR/ADR-0010-immutable-semantic-snapshots-and-explicit-graph-egress.md).
+
+
+## Exact-neighbor related-segment pruning
+
+Related segment construction orders stable IDs and excludes only pairs whose endpoints already have final zero-distance top-k sets. Original operand order retains exact floating-point behavior; unresolved and distinct segments preserve exhaustive choices. State belongs to one build. See [ADR-0011](ADR/ADR-0011-exact-neighbor-pruning-for-repeated-segments.md).
