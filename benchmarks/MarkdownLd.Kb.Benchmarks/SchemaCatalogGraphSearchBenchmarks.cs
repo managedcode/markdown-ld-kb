@@ -45,10 +45,14 @@ public class SchemaCatalogGraphSearchBenchmarks
     }
 
     [Benchmark(Baseline = true)]
-    public async Task<int> Unrestricted() => (await _build.Graph.SearchBySchemaAsync(_query, _all)).Matches.Count;
+    public async Task<int> Unrestricted() => CountResult(await _build.Graph.SearchBySchemaAsync(_query, _all));
 
     [Benchmark]
-    public async Task<int> CandidateValues() => (await _build.Graph.SearchBySchemaAsync(_query, _candidates)).Matches.Count;
+    public async Task<int> CandidateValues() => CountResult(await _build.Graph.SearchBySchemaAsync(_query, _candidates));
+
+    private static int CountResult(KnowledgeGraphSchemaSearchResult result) =>
+        result.Matches.Count + result.RelatedMatches.Count + result.NextStepMatches.Count
+        + result.FocusedGraph.Nodes.Count + result.FocusedGraph.Edges.Count;
 
     [GlobalCleanup]
     public void Cleanup() => _build.Graph.Dispose();

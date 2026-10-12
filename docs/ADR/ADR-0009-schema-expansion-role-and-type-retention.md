@@ -17,3 +17,21 @@ Expansion result mapping reads mandatory compiler-owned node/source/predicate bi
 Compile compact predicate VALUES for local graphs below 8,192 triples and indexed singleton predicate branches for larger graphs; unknown remote graphs use indexed branches. Measured None corpora contain 684 and 1,794 triples, the generated Tiktoken catalog 14,160 and actual gateway export 56,168. Subject metadata decorates all bound evidence once, related metadata stays in the relationship-only group, and expansion metadata decorates its mandatory union once. An empty target list always emits empty predicate VALUES, preventing identity-only groups from fabricating unbound evidence rows. Real rich-catalog and empty-target local/federated flows cover both compiler shapes.
 
 Replace the broad dotNetRdf meta dependency with the same-version official Core/Client/Spin split references plus existing graph capability packages. HTML/DataTables cease to be transitive runtime dependencies, honoring the narrowed graph/ontology/full-text/federation scope.
+
+## Indexed focused projection follow-up
+
+The published compiler repair leaves focused projection as a measured hotspot on the actual 56,168-triple gateway graph: 59.25% inclusive allocation samples enter BuildSchemaSearchFocusedGraph, dominated by enumerating every asserted triple. URI-only focus now selects subject triples with official dotNetRDF indexes before rendering identities. Object-index lookup retains selected nodes that exist only as objects without importing unselected incoming subjects. All selected-subject triples still contribute preferred labels and every edge with two selected endpoints; output retains ordinal sorting and node deduplication. No per-query reduced graph, custom index or hidden snapshot cache is introduced.
+
+When focus includes blank or rendered literal identities, use the existing general RDF projection because a rendered literal identity does not carry language/datatype. Literal expansion strings remain search metadata under the existing schema result contract; an URI-shaped literal must not fabricate an absent URI node. Graph read locking covers index access, and MergeAsync updates the official indexes; concurrent post-merge searches verify fresh labels. Move projection into its own feature-local partial file; the existing KnowledgeGraph partial-type exception still applies. This extracts the expansion runtime into a smaller file rather than adding another combined responsibility.
+
+```mermaid
+flowchart LR
+    Query["Schema primary and expansion matches"] --> Focus["Selected node identities"]
+    Focus --> URI["URI focus: subject/object indexes"]
+    Focus --> RDF["Non-URI focus: general RDF projection"]
+    URI --> Snapshot["Labels and induced edges, sorted"]
+    RDF --> Snapshot
+    Merge["MergeAsync under write lock"] --> URI
+```
+
+Validation uses generated Markdown plus real JSON-LD for induced-edge equivalence, selected labels, object-only targets, mixed RDF nodes, URI-shaped literals and concurrent searches after merge. Allocation budgets stay in BenchmarkDotNet rather than machine-sensitive TUnit assertions. Compare full 131-case suites and final gateway 12-case qualification after published 0.2.15 adoption.

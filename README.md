@@ -1346,15 +1346,15 @@ For live allocation/GC investigation, see [Schema Search Profiling](docs/Perform
 
 BenchmarkDotNet performance runs are separate from TUnit correctness tests. Commands, workload profiles, profiler options, and full result tables live in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md). The build/test/pack validation job stays separate; PR validation, release validation, and the dedicated benchmark workflow run the complete BenchmarkDotNet suite as parallel suite jobs and upload suite-specific `benchmarkdotnet-results-*` artifacts.
 
-Current local snapshot from October 12, 2026: BenchmarkDotNet 0.15.8, Apple M2 Pro, .NET 10.0.12 / SDK 10.0.401. The complete `Required` suite ran 131 cases in 6 minutes 45 seconds. MB below follows BenchmarkDotNet (MiB).
+Current local snapshot from October 12, 2026: BenchmarkDotNet 0.15.8, Apple M2 Pro, .NET 10.0.12 / SDK 10.0.401. The complete `Required` suite ran 131 cases in 7 minutes 14 seconds. MB below follows BenchmarkDotNet (MiB).
 
 | Area | Current local result |
 | --- | --- |
-| Compact schema search | `ShortDocuments`: unrestricted 36.204 ms / 15.36 MB; ten candidates 9.504 ms / 5.32 MB |
-| Compact candidate no-match | `ShortDocuments`: 8.609 ms / 3.26 MB |
-| Rich catalog schema search | 120 Tiktoken documents: unrestricted 69.734 ms / 16.88 MB; one candidate 10.577 ms / 9.41 MB |
-| Rich catalog candidate no-match | 9.838 ms / 4 MB |
-| Tiktoken build | Repeated catalog: 113.1 ms / 67.07 MB |
-| Lifecycle | Build/search/save/load/export: 117.0 ms / 56.09 MB |
+| Compact schema search | `ShortDocuments`: unrestricted 62.75 ms / 14.84 MB; ten candidates 18.05 ms / 4.78 MB |
+| Compact candidate no-match | `ShortDocuments`: 18.70 ms / 3.26 MB |
+| Rich catalog schema search | 120 Tiktoken documents: unrestricted 78.14 ms / 12.9 MB; one candidate 12.10 ms / 5.95 MB |
+| Rich catalog candidate no-match | 13.38 ms / 4 MB |
+| Tiktoken build | Repeated catalog: 159.8 ms / 67.09 MB |
+| Lifecycle | Build/search/save/load/export: 108.8 ms / 56.09 MB |
 
 Background Roslynk CPU load produced broad timing confidence intervals. These are observed means, not a reliable latency speedup claim or a cross-machine performance contract. The owner checkout also included pre-existing serialization/tokenization edits outside this release's scoped changes. Full result tables and that qualification context are in [Performance Benchmarks](docs/Features/PerformanceBenchmarks.md).
