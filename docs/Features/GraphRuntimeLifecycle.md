@@ -91,6 +91,27 @@ sequenceDiagram
 - caller-supplied schema files or inline schema text
 - caller-supplied N3 rule files or inline rule text
 
+## Full-Text Build Concurrency
+
+Each `BuildFullTextIndexAsync` call owns its graph snapshot, Lucene directory, analyzer, index schema and `IndexWriter`, so independent builds run concurrently. dotNetRDF.Query.FullText hashes every indexed document through one process-wide `SHA256Managed` instance (`FullTextExtensions.GetSha256Hash`), which throws on concurrent use. `KnowledgeGraphLuceneIndexer` therefore serializes only the engine's document creation; Lucene analysis, `AddDocument` and commits of independent builds overlap.
+
+```mermaid
+sequenceDiagram
+    participant A as Build A
+    participant B as Build B
+    participant Gate as Engine hash gate
+    participant Lucene as Own Lucene writers
+
+    A->>Gate: CreateDocument (engine SHA256)
+    B->>Gate: waits only for the hash
+    Gate-->>A: document
+    A->>Lucene: AddDocument and Commit into directory A
+    Gate-->>B: document
+    B->>Lucene: AddDocument and Commit into directory B
+```
+
+Flow tests run 16 concurrent builds on distinct graphs with exact, graph-local matches, and hold the gate to prove that two builds are inside their index phases at the same time.
+
 ## Linked Data Fragments Boundary
 
 Linked Data Fragments support is explicit and materializes fragment data into a local `KnowledgeGraph`. This keeps the rest of the runtime uniform: once loaded, callers use the same local SPARQL, search, SHACL, persistence, and inference APIs.
@@ -133,6 +154,7 @@ Flow tests cover:
 - RDF file round-trips through public file convenience APIs
 - inference changing caller-visible SPARQL results
 - full-text and dynamic adapters over the inferred graph
+- concurrent full-text builds over independent graphs
 - file-backed Linked Data Fragments materialization into a local queryable graph
 
 Verification commands:

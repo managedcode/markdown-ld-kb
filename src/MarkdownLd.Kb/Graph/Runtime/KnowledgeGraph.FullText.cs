@@ -3,7 +3,6 @@ using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Store;
 using Lucene.Net.Util;
 using VDS.RDF.Query.FullText.Indexing;
-using VDS.RDF.Query.FullText.Indexing.Lucene;
 using VDS.RDF.Query.FullText.Schema;
 using VDS.RDF.Query.FullText.Search.Lucene;
 using LuceneDirectory = Lucene.Net.Store.Directory;
@@ -12,8 +11,6 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed partial class KnowledgeGraph
 {
-    private static readonly object FullTextIndexSync = new();
-
     public Task<KnowledgeGraphFullTextIndex> BuildFullTextIndexAsync(
         KnowledgeGraphFullTextIndexOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -33,11 +30,8 @@ public sealed partial class KnowledgeGraph
         var schema = new DefaultIndexSchema();
         var directory = CreateLuceneDirectory(options);
         var indexer = CreateIndexer(options.Target, directory, analyzer, schema);
-        lock (FullTextIndexSync)
-        {
-            indexer.Index(snapshot);
-            indexer.Flush();
-        }
+        indexer.Index(snapshot);
+        indexer.Flush();
 
         var provider = new LuceneSearchProvider(LuceneVersion.LUCENE_48, directory, analyzer, schema, options.AutoSync);
         return new KnowledgeGraphFullTextIndex(directory, analyzer, indexer, provider, labels);
@@ -54,18 +48,19 @@ public sealed partial class KnowledgeGraph
         return FSDirectory.Open(new DirectoryInfo(options.DirectoryPath));
     }
 
-    private static IFullTextIndexer CreateIndexer(
+    private static KnowledgeGraphLuceneIndexer CreateIndexer(
         KnowledgeGraphFullTextIndexTarget target,
         LuceneDirectory directory,
         Analyzer analyzer,
         IFullTextIndexSchema schema)
     {
-        return target switch
+        var mode = target switch
         {
-            KnowledgeGraphFullTextIndexTarget.Subjects => new LuceneSubjectsIndexer(directory, analyzer, schema),
-            KnowledgeGraphFullTextIndexTarget.Objects => new LuceneObjectsIndexer(directory, analyzer, schema),
-            KnowledgeGraphFullTextIndexTarget.Predicates => new LucenePredicatesIndexer(directory, analyzer, schema),
+            KnowledgeGraphFullTextIndexTarget.Subjects => IndexingMode.Subjects,
+            KnowledgeGraphFullTextIndexTarget.Objects => IndexingMode.Objects,
+            KnowledgeGraphFullTextIndexTarget.Predicates => IndexingMode.Predicates,
             _ => throw new InvalidOperationException(target.ToString()),
         };
+        return new KnowledgeGraphLuceneIndexer(directory, analyzer, schema, mode);
     }
 }
