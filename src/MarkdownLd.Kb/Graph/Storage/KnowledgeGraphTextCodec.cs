@@ -13,7 +13,7 @@ internal static class KnowledgeGraphTextCodec
         return format switch
         {
             KnowledgeGraphFileFormat.Turtle => SaveGraph(snapshot, new CompressingTurtleWriter()),
-            KnowledgeGraphFileFormat.JsonLd => SaveStore(CreateStore(snapshot), new JsonLdWriter()),
+            KnowledgeGraphFileFormat.JsonLd => Rdf.KnowledgeGraphSerialization.SerializeJsonLd(snapshot),
             KnowledgeGraphFileFormat.RdfXml => SaveGraph(snapshot, new RdfXmlWriter()),
             KnowledgeGraphFileFormat.NTriples => SaveGraph(snapshot, new NTriplesWriter()),
             KnowledgeGraphFileFormat.Notation3 => SaveGraph(snapshot, new Notation3Writer()),

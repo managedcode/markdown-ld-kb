@@ -28,8 +28,8 @@ Purpose: Production library for Markdown-LD Knowledge Bank.
 ## Commands
 
 - build: `dotnet build ../../MarkdownLd.Kb.slnx --no-restore`
-- test: `(cd ../.. && dotnet test --solution MarkdownLd.Kb.slnx --configuration Release)`
-- coverage: `(cd ../.. && dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings")`
+- test: `(cd ../.. && dotnet test --solution MarkdownLd.Kb.slnx --configuration Debug)`
+- coverage: `(cd ../.. && dotnet test --solution MarkdownLd.Kb.slnx --configuration Debug -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings")`
 
 ## Local Risks
 

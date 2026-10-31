@@ -91,9 +91,9 @@ List only the skills this solution actually uses.
 
 - `restore`: `dotnet restore MarkdownLd.Kb.slnx`
 - `build`: `dotnet build MarkdownLd.Kb.slnx --no-restore`
-- `test`: `dotnet test --solution MarkdownLd.Kb.slnx --configuration Release`
+- `test`: `dotnet test --solution MarkdownLd.Kb.slnx --configuration Debug`
 - `format`: `dotnet format MarkdownLd.Kb.slnx --verify-no-changes`
-- `coverage`: `dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings"`
+- `coverage`: `dotnet test --solution MarkdownLd.Kb.slnx --configuration Debug -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings"`
 - `outdated packages`: `dotnet package list --outdated`
 - `vulnerable packages`: `dotnet package list --vulnerable --include-transitive`
 

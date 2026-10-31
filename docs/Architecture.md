@@ -560,6 +560,10 @@ Coverage requirement: 95%+ line coverage for changed production code.
 - Graph creation contracts feature: `docs/Features/GraphCreationContracts.md`
 - Federated SPARQL decision: `docs/ADR/ADR-0006-federated-sparql-adapter.md`
 
+### Large JSON-LD serialization
+
+URI/literal triples are serialized through dotNetRDF in batches of 512 and written into one expanded JSON-LD array. Repeated subject entries preserve RDF semantics while bounding the writer's per-property duplicate scans. The runtime, snapshot and storage JSON-LD entrypoints use this same writer. This batch size is not a graph-size limit. All triples mentioning blank nodes stay together so shared RDF lists retain their full reference set during dotNetRDF list compaction; blank-node-heavy graphs may still require a large writer batch.
+
 ### Schema candidate VALUES
 
 Schema profiles optionally carry absolute `CandidateNodeIds`. The compiler binds subject VALUES independently inside every local/federated evidence branch on the existing graph. Primary retrieval is constrained; relationship evidence and expansion remain graph-backed. See [ADR-0007](ADR/ADR-0007-schema-search-candidate-values.md).

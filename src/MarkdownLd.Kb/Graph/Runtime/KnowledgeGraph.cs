@@ -169,12 +169,7 @@ public sealed partial class KnowledgeGraph : IDisposable
         _graphLock.EnterReadLock();
         try
         {
-            using var writer = new StringWriter();
-            var store = new TripleStore();
-            store.Add(_graph);
-            var jsonLdWriter = new JsonLdWriter();
-            jsonLdWriter.Save(store, writer, false);
-            return writer.ToString();
+            return Rdf.KnowledgeGraphSerialization.SerializeJsonLd(_graph);
         }
         finally
         {

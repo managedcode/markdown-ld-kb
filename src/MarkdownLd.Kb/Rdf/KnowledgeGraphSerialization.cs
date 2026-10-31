@@ -20,8 +20,9 @@ public static class KnowledgeGraphSerialization
     {
         ArgumentNullException.ThrowIfNull(graph);
 
-        var writer = new JsonLdWriter();
-        return writer.SerializeStore(CreateStore(graph)).ToString();
+        using var writer = new System.IO.StringWriter(CultureInfo.InvariantCulture);
+        WriteJsonLd(graph, writer);
+        return writer.ToString();
     }
 
     public static void WriteTurtle(IGraph graph, TextWriter writer)
@@ -38,14 +39,7 @@ public static class KnowledgeGraphSerialization
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(writer);
 
-        var jsonWriter = new JsonLdWriter();
-        jsonWriter.Save(CreateStore(graph), writer, false);
+        BatchedJsonLdWriter.Write(graph, writer);
     }
 
-    private static TripleStore CreateStore(IGraph graph)
-    {
-        var store = new TripleStore();
-        store.Add(graph);
-        return store;
-    }
 }

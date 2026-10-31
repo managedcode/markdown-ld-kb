@@ -44,6 +44,10 @@ var fromYaml = KnowledgeGraphContract.LoadYaml(contractYaml);
 
 Use the contract as the handoff between preprocessing and querying. If an app or agent builds the graph ahead of time, store the JSON-LD graph plus the JSON/YAML contract. A later process can load both and search without rerunning extraction.
 
+## Source text in prepared graphs
+
+`KnowledgeGraphBuildOptions.IncludeDocumentText` is opt-in and defaults to false. When enabled, each materialized Markdown document keeps its existing subject and a standard `schema:text` literal containing its original body. This is source provenance, not extraction or generated knowledge. A process that loads only the saved JSON-LD can search body-only facts using schema-aware SPARQL without the original Markdown files, an embedding index or a model. Empty bodies add no literal. `MarkdownBodySparqlFlowTests.PreparedJsonLd_ShouldPreserveBodyOnlyFactsForModelFreeSparql` verifies fresh-load retrieval, source identity, escaped input and an explicit no-match result.
+
 ## Generating JSON-LD
 
 When the library owns preprocessing:

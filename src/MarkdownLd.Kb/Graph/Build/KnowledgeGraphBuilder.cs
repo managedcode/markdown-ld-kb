@@ -6,6 +6,7 @@ namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
 public sealed partial class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentRdfMappingOptions? documentRdfMappingOptions = null)
 {
+    private static readonly Uri DocumentTextPredicate = new(SchemaTextText);
     private readonly Uri _baseUri = KnowledgeNaming.NormalizeBaseUri(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
     private readonly DocumentRdfFrontMatterMapper _documentRdfMapper = new(documentRdfMappingOptions);
     private readonly KnowledgeGraphSemanticLayerBuilder _semanticLayerBuilder = new(baseUri ?? new Uri(DefaultBaseUriText, UriKind.Absolute));
@@ -38,7 +39,7 @@ public sealed partial class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentR
 
         foreach (var document in documents)
         {
-            AddDocument(context, document);
+            AddDocument(context, document, buildOptions.IncludeDocumentText);
         }
 
         foreach (var entity in normalization.Facts.Entities)
@@ -64,7 +65,7 @@ public sealed partial class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentR
         KnowledgeGraphNamespaces.Register(graph);
     }
 
-    private void AddDocument(KnowledgeGraphMaterializationContext context, MarkdownDocument document)
+    private void AddDocument(KnowledgeGraphMaterializationContext context, MarkdownDocument document, bool includeDocumentText)
     {
         if (!KnowledgeGraphDocumentMaterialization.ShouldMaterialize(document))
         {
@@ -90,6 +91,7 @@ public sealed partial class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentR
         graph.Assert(new Triple(article, rdfType, schemaArticle));
         graph.Assert(new Triple(article, schemaName, context.LiteralNode(document.Title)));
         graph.Assert(new Triple(article, provWasDerivedFrom, article));
+        AddDocumentText(context, article, document.Body, includeDocumentText);
 
         AddDocumentAdditionalTypes(context, article, rdfType, document.FrontMatter);
         AddDocumentEntryMetadata(graph, article, kbEntryType, document.FrontMatter, EntryTypeKey, EntryTypeCamelKey);
@@ -101,6 +103,14 @@ public sealed partial class KnowledgeGraphBuilder(Uri? baseUri = null, DocumentR
         AddDocumentAbout(context, article, schemaAbout, document.FrontMatter, _baseUri);
         AddDocumentAuthors(context, article, schemaAuthor, document.FrontMatter, _baseUri);
         _documentRdfMapper.Apply(graph, article, document.FrontMatter, prefixes);
+    }
+
+    private static void AddDocumentText(KnowledgeGraphMaterializationContext context, INode article, string body, bool includeDocumentText)
+    {
+        if (includeDocumentText && !string.IsNullOrWhiteSpace(body))
+        {
+            context.Graph.Assert(new Triple(article, context.UriNode(DocumentTextPredicate), context.LiteralNode(body)));
+        }
     }
 
     private static void AddDocumentAdditionalTypes(

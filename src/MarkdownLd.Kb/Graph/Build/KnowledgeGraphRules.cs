@@ -6,6 +6,8 @@ public sealed record KnowledgeGraphBuildOptions
 
     public bool IncludeFrontMatterRules { get; init; } = true;
 
+    public bool IncludeDocumentText { get; init; }
+
     public bool IncludeAssertionReification { get; init; }
 
     public KnowledgeGraphNormalizationOptions Normalization { get; init; } = KnowledgeGraphNormalizationOptions.Default;

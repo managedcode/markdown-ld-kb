@@ -37,6 +37,31 @@ public sealed class TiktokenRepeatedCatalogFlowTests
         matches.ShouldNotBeEmpty();
     }
 
+    [Test]
+    public async Task Large_repeated_document_builds_serializes_and_finds_its_final_record()
+    {
+        const string marker = "FINAL-SUPPLIER-RECORD";
+        var markdown = string.Concat(Enumerable.Repeat(
+            "Product reference includes complete supplier specifications.\n", 35_000)) + marker;
+        var bank = new MarkdownKnowledgeBank(new MarkdownKnowledgeBankOptions
+        {
+            PipelineOptions = new MarkdownKnowledgePipelineOptions
+            {
+                BaseUri = new Uri(BaseUriText),
+                ExtractionMode = MarkdownKnowledgeExtractionMode.Tiktoken,
+            },
+        });
+
+        var build = await bank.BuildAsync([new MarkdownSourceDocument("large.md", markdown)]);
+        using var graph = build.Graph;
+        var json = graph.SerializeJsonLd();
+        using var parsed = System.Text.Json.JsonDocument.Parse(json);
+        parsed.RootElement.GetArrayLength().ShouldBeGreaterThan(35_000);
+        json.ShouldContain(marker);
+        var matches = await graph.SearchByTokenDistanceAsync(marker, 5);
+        matches.ShouldContain(match => match.Text.Contains(marker, StringComparison.Ordinal));
+    }
+
     private static MarkdownSourceDocument[] CreateDocuments()
     {
         return Enumerable.Range(0, DocumentCount)

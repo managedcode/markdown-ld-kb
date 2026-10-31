@@ -66,6 +66,37 @@ SELECT ?entity WHERE {
         jsonWriter.ToString().ShouldContain(KnowledgeGraphTitle);
     }
 
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public void High_fanout_and_cross_batch_blank_nodes_roundtrip_without_lost_triples(bool named)
+    {
+        using var graph = new Graph(named ? new UriNode(new Uri("https://example.com/graph")) : null);
+        var subject = graph.CreateUriNode(new Uri("https://example.com/root"));
+        var predicate = graph.CreateUriNode(new Uri("https://example.com/contains"));
+        var head = graph.CreateBlankNode("head");
+        var tail = graph.CreateBlankNode("tail");
+        var first = graph.CreateUriNode(new Uri(RdfSpecsHelper.RdfListFirst));
+        var rest = graph.CreateUriNode(new Uri(RdfSpecsHelper.RdfListRest));
+        graph.Assert(subject, predicate, head);
+        graph.Assert(head, first, graph.CreateLiteralNode("bonjour", "fr"));
+        graph.Assert(head, rest, tail);
+        graph.Assert(tail, first, graph.CreateLiteralNode("42", new Uri(XmlSpecsHelper.XmlSchemaDataTypeInteger)));
+        graph.Assert(tail, rest, graph.CreateUriNode(new Uri(RdfSpecsHelper.RdfListNil)));
+        for (var index = 0; index < 4096; index++)
+        {
+            graph.Assert(subject, predicate, graph.CreateUriNode(new Uri($"https://example.com/item/{index}")));
+        }
+
+        graph.Assert(graph.CreateUriNode(new Uri("https://example.com/other")), predicate, tail);
+        graph.Triples.Count.ShouldBe(4102);
+        var json = KnowledgeGraphSerialization.SerializeJsonLd(graph);
+        using var store = new TripleStore();
+        new JsonLdParser().Load(store, new StringReader(json));
+        store.Graphs.Single().Name.ShouldBe(graph.Name);
+        store.Graphs.Single().Equals(graph).ShouldBeTrue();
+    }
+
     private static bool ContainsStringValue(JsonElement element, string expected)
     {
         return element.ValueKind switch

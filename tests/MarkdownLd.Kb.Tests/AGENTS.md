@@ -22,8 +22,8 @@ Purpose: Flow-level verification for Markdown-LD Knowledge Bank.
 
 ## Commands
 
-- focused tests: `(cd ../.. && dotnet test --solution MarkdownLd.Kb.slnx --configuration Release)`
-- coverage: `(cd ../.. && dotnet test --solution MarkdownLd.Kb.slnx --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings")`
+- focused tests: `(cd ../.. && dotnet test --solution MarkdownLd.Kb.slnx --configuration Debug)`
+- coverage: `(cd ../.. && dotnet test --solution MarkdownLd.Kb.slnx --configuration Debug -- --coverage --coverage-output-format cobertura --coverage-output "$PWD/TestResults/TUnitCoverage/coverage.cobertura.xml" --coverage-settings "$PWD/CodeCoverage.runsettings")`
 
 ## Local Risks
 
