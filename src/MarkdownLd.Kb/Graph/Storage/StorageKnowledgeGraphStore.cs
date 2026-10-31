@@ -161,7 +161,7 @@ public sealed class StorageKnowledgeGraphStore(IStorage storage) : IKnowledgeGra
 
     private static void ThrowIfFailed<T>(Result<T> result, string message)
     {
-        if (!result.IsSuccess)
+        if (result.IsFailed)
         {
             throw new InvalidOperationException(message + Environment.NewLine + result.ToDisplayMessage());
         }
