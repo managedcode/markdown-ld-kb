@@ -143,6 +143,12 @@ Built-in implementations:
 - `StorageKnowledgeGraphStore` for any configured `IStorage`
 - `FileSystemKnowledgeGraphStore` for local file-path convenience over `ManagedCode.Storage.FileSystem`
 
+## Snapshot Materialization
+
+Complete and semantic snapshot projections keep ordinal node/edge ordering and the existing label precedence. Projection work renders sorting identities once, sorts compact indices with stable ties, shares predicate labels within the call, and allocates the exact edge array size. Temporary projection state is local to the existing graph read boundary.
+
+`SnapshotProjectionFlowTests` proves Markdown/merged-JSON-LD label precedence, blank and object-only nodes, typed-literal edge multiplicity, reversed source order, empty input, and real SPARQL/search results. The diagnostic probe compares full serialized snapshots as well as allocation, retained heap, peak RSS, and process CPU costs; see [runtime performance measurements](../Performance/RuntimePerformance-2026-11-02.md).
+
 ## Testing Methodology
 
 Flow tests cover:

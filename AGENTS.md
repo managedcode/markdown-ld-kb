@@ -75,6 +75,7 @@ List only the skills this solution actually uses.
 
 - `mcaf-testing` — use for test strategy, coverage gates, and flow-level verification.
 - `mcaf-adr-writing` — use when adding or changing architecture decisions such as RDF library choice, AI adapter boundaries, or SPARQL execution strategy.
+- `blazing-fast-dotnet` — use for measured runtime performance investigations and correctness-preserving optimizations.
 
 `.NET` skill-management rules:
 
@@ -83,6 +84,7 @@ List only the skills this solution actually uses.
 - Keep exactly one framework skill when installed: `mcaf-dotnet-tunit`.
 - Add tool-specific `.NET` skills only when the repository actually uses those tools in CI or local verification.
 - Keep only `mcaf-*` skills in agent skill directories.
+- Owner-requested exception (2026-11-02): retain `blazing-fast-dotnet` from the ManagedCode catalog for measured performance work.
 - When upgrading skills, recheck `build`, `test`, `format`, `analyze`, and `coverage` commands against the repo toolchain.
 
 ## Rules to Follow (Mandatory)

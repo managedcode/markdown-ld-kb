@@ -560,6 +560,10 @@ Coverage requirement: 95%+ line coverage for changed production code.
 - Graph creation contracts feature: `docs/Features/GraphCreationContracts.md`
 - Federated SPARQL decision: `docs/ADR/ADR-0006-federated-sparql-adapter.md`
 
+### Exact repeated-segment neighbor pruning
+
+The Tiktoken relation builder visits segments in ordinal ID order. Once a segment has its requested number of zero-distance neighbors, later IDs cannot improve that segment's choices. Pairs are omitted only when both endpoints already have preferred zero-distance neighbors. Unresolved endpoints remain candidates, preserving distinct tail records and the exact top-k union. Distance operands keep their original input order to preserve floating-point results. Distinct-vector corpora retain exhaustive distance comparison.
+
 ### Large JSON-LD serialization
 
 URI/literal triples are serialized through dotNetRDF in batches of 512 and written into one expanded JSON-LD array. Repeated subject entries preserve RDF semantics while bounding the writer's per-property duplicate scans. The runtime, snapshot and storage JSON-LD entrypoints use this same writer. This batch size is not a graph-size limit. All triples mentioning blank nodes stay together so shared RDF lists retain their full reference set during dotNetRDF list compaction; blank-node-heavy graphs may still require a large writer batch.
@@ -593,6 +597,24 @@ Schema SPARQL compilation selects compact predicate VALUES for small local graph
 ### Indexed schema focused projection
 
 Schema match/expansion URI identities select subject triples through official dotNetRDF indexes before rendering graph nodes. Object-index lookup keeps object-only selected nodes. Non-URI focus retains the general RDF projection. Both paths preserve labels, sorted induced edges and deduplicated focus nodes under the graph read lock; MergeAsync updates the indexes under its write lock. See ADR-0009 and the profiling report for measured attribution and qualification.
+
+### Snapshot projection materialization
+
+Snapshot projection renders each triple's subject/predicate/object identity once, sorts those identities with original-order tie retention, reuses each predicate's rendered label within the projection, and sizes the edge array from the triple count. Label priority remains schema:name, SKOS preferred label, then RDFS label; empty labels are skipped. All state belongs to one projection under the existing graph read boundary.
+
+```mermaid
+classDiagram
+    KnowledgeGraph --> SnapshotProjectionTriple : renders and sorts
+    KnowledgeGraph --> KnowledgeGraphSnapshot : returns
+    KnowledgeGraphSnapshot --> KnowledgeGraphNode : ordered nodes
+    KnowledgeGraphSnapshot --> KnowledgeGraphEdge : ordered edges
+    class SnapshotProjectionTriple {
+        Triple Value
+        string SubjectId
+        string PredicateId
+        string ObjectId
+    }
+```
 
 ## Governed graph projection and allocation ownership
 
