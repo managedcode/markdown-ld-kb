@@ -50,7 +50,7 @@ The result contains bounded strongly connected components with stable node and e
 - Turtle and JSON-LD serialization remain complete RDF exchange formats.
 - Instance Mermaid and DOT diagram export uses the semantic projection. To diagram retrieval internals deliberately, serialize `ToCompleteSnapshot()` through the static snapshot serializer.
 
-The semantic projection removes nodes in the repository-owned `token-section/`, `token-segment/`, and `token-topic/` namespaces and every incident edge. Authored entity hints and relationships remain, so a UI can use `KnowledgeGraphEdge.SubjectId` and `ObjectId` to focus and highlight a selected related node.
+The semantic projection removes URI nodes in the repository-owned `token-section/`, `token-segment/`, and `token-topic/` namespaces and every incident edge. Literal text containing those path segments remains ordinary authored data. Authored entity hints and relationships remain, so a UI can use `KnowledgeGraphEdge.SubjectId` and `ObjectId` to focus and highlight a selected related node.
 
 ## Testing Methodology
 

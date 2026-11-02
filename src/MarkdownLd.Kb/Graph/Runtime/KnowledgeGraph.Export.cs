@@ -116,17 +116,6 @@ public sealed partial class KnowledgeGraph
 
     private static string RenderGraphNodeLabel(INode node)
     {
-        return RenderGraphNodeLabel(node, new Dictionary<string, string>(StringComparer.Ordinal));
-    }
-
-    private static string RenderGraphNodeLabel(INode node, IReadOnlyDictionary<string, string> labels)
-    {
-        var id = RenderGraphNodeId(node);
-        if (labels.TryGetValue(id, out var label))
-        {
-            return label;
-        }
-
         return node switch
         {
             IUriNode uriNode => CompactUri(uriNode.Uri),

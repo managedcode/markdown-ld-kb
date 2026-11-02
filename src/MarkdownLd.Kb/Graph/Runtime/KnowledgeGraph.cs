@@ -346,6 +346,8 @@ public sealed partial class KnowledgeGraph : IDisposable
     public void Dispose()
     {
         Volatile.Write(ref _semanticSnapshot, null);
+        _tokenIndex = null;
+        _graph.Dispose();
         _graphLock.Dispose();
     }
 }

@@ -9,17 +9,22 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 
-if (args.Length != 1 && (args.Length != 3 || args[1] is not ("profile" or "memory")))
+if (args.Length != 1 && (args.Length != 3 || args[1] is not ("profile" or "memory" or "cold" or "semantic" or "dispose" or "soak")))
 {
-    throw new ArgumentException("Usage: <repository-owned result directory> [profile|memory <case name>]");
+    throw new ArgumentException("Usage: <repository-owned result directory> [profile|memory|cold|semantic|dispose|soak <case name>]");
 }
 
 var output = Path.GetFullPath(args[0]);
 Directory.CreateDirectory(output);
 var probeMode = args.Length == 3 ? args[1] : "measure";
-if (args.Length == 3 && args[2] is not ("metadata-250" or "metadata-2500" or "tiktoken-120"))
+if (args.Length == 3 && args[2] is not ("metadata-250" or "metadata-2500" or "tiktoken-120" or "repeated-2500" or "unicode-250"))
 {
     throw new ArgumentException("Unknown snapshot case.");
+}
+
+if (probeMode == "cold" && args[2] == "tiktoken-120")
+{
+    throw new ArgumentException("Cold-cache identity validation uses metadata-only cases.");
 }
 
 foreach (var (name, documents, mode) in new[]
@@ -27,6 +32,8 @@ foreach (var (name, documents, mode) in new[]
     ("metadata-250", 250, MarkdownKnowledgeExtractionMode.None),
     ("metadata-2500", 2500, MarkdownKnowledgeExtractionMode.None),
     ("tiktoken-120", 120, MarkdownKnowledgeExtractionMode.Tiktoken),
+    ("repeated-2500", 2500, MarkdownKnowledgeExtractionMode.None),
+    ("unicode-250", 250, MarkdownKnowledgeExtractionMode.None),
 })
 {
     if (args.Length == 1 || name == args[2])
@@ -37,7 +44,7 @@ foreach (var (name, documents, mode) in new[]
 
 static async Task RunCaseAsync(string output, string name, int documents, MarkdownKnowledgeExtractionMode mode, string probeMode)
 {
-    var sources = Enumerable.Range(0, documents).Select(index => new MarkdownSourceDocument($"docs/item-{index:D4}.md", $"---\ntitle: Catalog item {index:D4}\ntags: [graph, catalog]\n---\n# Catalog item {index:D4}\n\nFind weather forecast and archive evidence for city number {index.ToString(CultureInfo.InvariantCulture)}.\n\n## Details\nInspect graph neighbors and source provenance.")).ToArray();
+    var sources = CreateSources(name, documents);
     var pipeline = new MarkdownKnowledgePipeline(new Uri("https://snapshot.probe.example/"), extractionMode: mode);
     var build = await pipeline.BuildAsync(sources);
     using var graph = build.Graph;
@@ -50,20 +57,32 @@ static async Task RunCaseAsync(string output, string name, int documents, Markdo
         _ = graph.ToCompleteSnapshot();
     }
 
-    if (probeMode == "profile")
-    {
-        await RunProfileAsync(name, documents, graph, expected, expectedBytes, expectedHash);
-        return;
-    }
+    await RunMeasurementAsync(output, name, documents, probeMode, graph, expected, expectedBytes, expectedHash);
+}
 
-    if (probeMode == "memory")
-    {
-        await MeasureRetainedMemoryAsync(output, name, graph, expected, expectedBytes, expectedHash);
-        return;
-    }
+static Task RunMeasurementAsync(string output, string name, int documents, string probeMode,
+    KnowledgeGraph graph, KnowledgeGraphSnapshot expected, byte[] expectedBytes, string expectedHash) => probeMode switch
+{
+    "profile" => RunProfileAsync(name, documents, graph, expected, expectedBytes, expectedHash),
+    "memory" => MeasureRetainedMemoryAsync(output, name, graph, expected, expectedBytes, expectedHash),
+    "cold" => MeasureColdSnapshotAsync(output, name, graph, expectedBytes),
+    "semantic" => MeasureSemanticSnapshotAsync(output, name, graph, expectedBytes),
+    "dispose" => MeasureDisposedMemoryAsync(output, name, graph, expected, expectedBytes),
+    "soak" => MeasureSoakAsync(output, name, graph, expected, expectedBytes),
+    "measure" => WriteMetricsAsync(output, name, documents, graph.TripleCount, expectedHash, MeasureBatches(graph, expected, expectedBytes)),
+    _ => throw new ArgumentException("Unknown measurement mode.")
+};
 
-    var batches = MeasureBatches(graph, expected, expectedBytes);
-    await WriteMetricsAsync(output, name, documents, graph.TripleCount, expectedHash, batches);
+static MarkdownSourceDocument[] CreateSources(string name, int documents)
+{
+    return Enumerable.Range(0, documents).Select(index =>
+    {
+        var contentIndex = name == "repeated-2500" ? 0 : index;
+        var title = name == "unicode-250" ? $"Обсерваторія {index:D4} 天気 🌦️" : $"Catalog item {contentIndex:D4}";
+        var evidence = name == "unicode-250" ? "Прогноз погоди, українська обсерваторія, 天気予報 및 관측 기록 🌦️." :
+            $"Find weather forecast and archive evidence for city number {contentIndex.ToString(CultureInfo.InvariantCulture)}.";
+        return new MarkdownSourceDocument($"docs/item-{index:D4}.md", $"---\ntitle: {title}\ntags: [graph, catalog]\n---\n# {title}\n\n{evidence}\n\n## Details\nInspect graph neighbors and source provenance.");
+    }).ToArray();
 }
 
 static List<object> MeasureBatches(KnowledgeGraph graph, KnowledgeGraphSnapshot expected, byte[] expectedBytes)
@@ -164,7 +183,50 @@ static async Task MeasureRetainedMemoryAsync(string output, string name, Knowled
     await File.WriteAllTextAsync(Path.Combine(output, name + ".memory.json"), json);
     Console.WriteLine(json);
     GC.KeepAlive(retained);
+    GC.KeepAlive(expected);
     GC.KeepAlive(graph);
+}
+
+static async Task MeasureColdSnapshotAsync(string output, string name, KnowledgeGraph graph, byte[] expectedBytes)
+{
+    const int readerCount = 16;
+    using var ready = new CountdownEvent(readerCount);
+    using var start = new ManualResetEventSlim();
+    using var process = Process.GetCurrentProcess();
+    var snapshots = new KnowledgeGraphSnapshot[readerCount];
+    var errors = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+    var threads = Enumerable.Range(0, readerCount).Select(index => new Thread(() =>
+    {
+        ready.Signal();
+        start.Wait();
+        try { snapshots[index] = graph.ToSemanticSnapshot(); }
+        catch (Exception error) { errors.Enqueue(error); }
+    })).ToArray();
+    foreach (var thread in threads) { thread.Start(); }
+    ready.Wait();
+    process.Refresh();
+    var cpuBefore = process.TotalProcessorTime;
+    var before = GC.GetTotalAllocatedBytes(true);
+    var clock = Stopwatch.StartNew();
+    start.Set();
+    foreach (var thread in threads) { thread.Join(); }
+    var elapsedMilliseconds = clock.Elapsed.TotalMilliseconds;
+    var allocatedBytes = GC.GetTotalAllocatedBytes(true) - before;
+    process.Refresh();
+    var cpuMilliseconds = (process.TotalProcessorTime - cpuBefore).TotalMilliseconds;
+    if (!errors.IsEmpty) { throw new AggregateException(errors); }
+    var resultBytes = JsonSerializer.SerializeToUtf8Bytes(snapshots[0]);
+    if (snapshots.Any(snapshot => !ReferenceEquals(snapshot, snapshots[0])) || !resultBytes.AsSpan().SequenceEqual(expectedBytes))
+    {
+        throw new InvalidOperationException("Cold readers did not share the complete metadata projection.");
+    }
+    var result = new { name, readerCount, elapsedMilliseconds, cpuMilliseconds, allocatedBytes,
+        moduleVersionId = typeof(KnowledgeGraph).Assembly.ManifestModule.ModuleVersionId,
+        snapshotHash = Convert.ToHexString(SHA256.HashData(resultBytes)),
+        methodology = "16 dedicated threads rendezvous before one cold semantic snapshot; join all readers; verify shared result and complete metadata identity. No attached profiler." };
+    var json = JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+    await File.WriteAllTextAsync(Path.Combine(output, name + ".cold.json"), json);
+    Console.WriteLine(json);
 }
 
 static async Task WriteMetricsAsync(string output, string name, int documents, int triples, string expectedHash, List<object> batches)
@@ -174,4 +236,85 @@ static async Task WriteMetricsAsync(string output, string name, int documents, i
     var json = JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     await File.WriteAllTextAsync(Path.Combine(output, name + ".metrics.json"), json);
     Console.WriteLine(json);
+}
+
+static async Task MeasureSemanticSnapshotAsync(string output, string name, KnowledgeGraph graph, byte[] expectedComplete)
+{
+    using var process = Process.GetCurrentProcess();
+    process.Refresh();
+    var cpuBefore = process.TotalProcessorTime;
+    var before = GC.GetTotalAllocatedBytes(true);
+    var clock = Stopwatch.StartNew();
+    var snapshot = graph.ToSemanticSnapshot();
+    var elapsedMilliseconds = clock.Elapsed.TotalMilliseconds;
+    var allocatedBytes = GC.GetTotalAllocatedBytes(true) - before;
+    process.Refresh();
+    var cpuMilliseconds = (process.TotalProcessorTime - cpuBefore).TotalMilliseconds;
+    if (!ReferenceEquals(snapshot, graph.ToSemanticSnapshot()))
+    {
+        throw new InvalidOperationException("Warm semantic snapshot was not reused.");
+    }
+    VerifyFullResult(graph, expectedComplete);
+    var bytes = JsonSerializer.SerializeToUtf8Bytes(snapshot);
+    await File.WriteAllBytesAsync(Path.Combine(output, name + ".semantic.snapshot.json"), bytes);
+    var result = new { name, snapshot.Nodes.Count, edgeCount = snapshot.Edges.Count, allocatedBytes, elapsedMilliseconds, cpuMilliseconds,
+        moduleVersionId = typeof(KnowledgeGraph).Assembly.ManifestModule.ModuleVersionId,
+        snapshotHash = Convert.ToHexString(SHA256.HashData(bytes)),
+        methodology = "One cold semantic projection after10 complete-projection warmups; exact complete graph result preserved and warm semantic reference reused. No profiler." };
+    var json = JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+    await File.WriteAllTextAsync(Path.Combine(output, name + ".semantic.metrics.json"), json);
+    Console.WriteLine(json);
+}
+
+static async Task MeasureDisposedMemoryAsync(string output, string name, KnowledgeGraph graph, KnowledgeGraphSnapshot expected, byte[] expectedComplete)
+{
+    _ = graph.ToSemanticSnapshot();
+    VerifyFullResult(graph, expectedComplete);
+    var before = GC.GetTotalMemory(forceFullCollection: true);
+    var clock = Stopwatch.StartNew();
+    graph.Dispose();
+    var disposalMilliseconds = clock.Elapsed.TotalMilliseconds;
+    var after = GC.GetTotalMemory(forceFullCollection: true);
+    var result = new { name, managedBytesBefore = before, managedBytesAfter = after, releasedManagedBytes = before - after,
+        disposalMilliseconds, tokenSearchAvailableAfterDispose = graph.CanSearchByTokenDistance,
+        moduleVersionId = typeof(KnowledgeGraph).Assembly.ManifestModule.ModuleVersionId,
+        methodology = "Force GC before/after Dispose while graph and reference complete snapshot remain live. Measures managed retained delta, not returned OS pages." };
+    var json = JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+    await File.WriteAllTextAsync(Path.Combine(output, name + ".dispose.memory.json"), json);
+    Console.WriteLine(json);
+    GC.KeepAlive(expected);
+    GC.KeepAlive(graph);
+}
+
+static async Task MeasureSoakAsync(string output, string name, KnowledgeGraph graph, KnowledgeGraphSnapshot expected, byte[] expectedBytes)
+{
+    var semantic = graph.ToSemanticSnapshot();
+    var initialManagedBytes = GC.GetTotalMemory(forceFullCollection: true);
+    var batches = new List<object>();
+    for (var batch = 0; batch < 5; batch++)
+    {
+        var before = GC.GetTotalAllocatedBytes(true);
+        var clock = Stopwatch.StartNew();
+        for (var iteration = 0; iteration < 100; iteration++)
+        {
+            ValidateCardinality(graph.ToCompleteSnapshot(), expected);
+            if (!ReferenceEquals(semantic, graph.ToSemanticSnapshot()))
+            {
+                throw new InvalidOperationException("Warm semantic cache changed during read-only soak.");
+            }
+        }
+        var elapsedMilliseconds = clock.Elapsed.TotalMilliseconds;
+        var allocatedBytes = GC.GetTotalAllocatedBytes(true) - before;
+        VerifyFullResult(graph, expectedBytes);
+        batches.Add(new { batch, elapsedMilliseconds, allocatedBytes, retainedManagedBytes = GC.GetTotalMemory(forceFullCollection: true) });
+    }
+    var result = new { name, initialManagedBytes, batches,
+        moduleVersionId = typeof(KnowledgeGraph).Assembly.ManifestModule.ModuleVersionId,
+        methodology = "5 batches of100 complete+semantic reads on one graph; full result identity and warm cache reference checked; force GC only outside timed batches; five tiny result rows remain live." };
+    var json = JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+    await File.WriteAllTextAsync(Path.Combine(output, name + ".soak.json"), json);
+    Console.WriteLine(json);
+    GC.KeepAlive(expected);
+    GC.KeepAlive(semantic);
+    GC.KeepAlive(graph);
 }

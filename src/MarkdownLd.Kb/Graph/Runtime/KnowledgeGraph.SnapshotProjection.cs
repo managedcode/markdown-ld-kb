@@ -93,7 +93,8 @@ public sealed partial class KnowledgeGraph
     {
         if (!nodes.TryGetValue(id, out var graphNode))
         {
-            graphNode = new KnowledgeGraphNode(id, RenderGraphNodeLabel(node, labels), GetGraphNodeKind(node));
+            var label = labels.TryGetValue(id, out var preferredLabel) ? preferredLabel : RenderGraphNodeLabel(node);
+            graphNode = new KnowledgeGraphNode(id, label, GetGraphNodeKind(node));
             nodes.Add(id, graphNode);
         }
 
@@ -101,4 +102,5 @@ public sealed partial class KnowledgeGraph
     }
 
     private readonly record struct SnapshotProjectionTriple(Triple Value, string SubjectId, string PredicateId, string ObjectId);
+
 }

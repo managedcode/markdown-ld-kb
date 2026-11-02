@@ -145,9 +145,13 @@ Built-in implementations:
 
 ## Snapshot Materialization
 
+The caller owns each `KnowledgeGraph` and disposes it after joining its operations. Disposal releases the graph-owned official RDF store, token-distance index, and cached semantic snapshot. Previously returned immutable semantic snapshots remain readable. Token-distance availability becomes false after disposal; graph operations requiring the disposed runtime are unavailable.
+
 Complete and semantic snapshot projections keep ordinal node/edge ordering and the existing label precedence. Projection work renders sorting identities once, sorts compact indices with stable ties, shares predicate labels within the call, and allocates the exact edge array size. Temporary projection state is local to the existing graph read boundary.
 
 `SnapshotProjectionFlowTests` proves Markdown/merged-JSON-LD label precedence, blank and object-only nodes, typed-literal edge multiplicity, reversed source order, empty input, and real SPARQL/search results. The diagnostic probe compares full serialized snapshots as well as allocation, retained heap, peak RSS, and process CPU costs; see [runtime performance measurements](../Performance/RuntimePerformance-2026-11-02.md).
+
+The semantic projection filters retrieval URI triples before materialization and publishes immutable arrays owned exclusively by that projection. Concurrent cold initialization uses the existing upgradeable read lock; warm readers use the normal read lock. `SemanticProjectionBoundaryFlowTests`, `SemanticSnapshotIdentityFlowTests`, `SemanticSnapshotLifetimeTests`, and `KnowledgeGraphDisposalFlowTests` cover data preservation, immutable ownership, repeated merge/read races, and disposal. See [0.3.0 review evidence](../Reviews/Release-0.3.0-PerformanceReview.md).
 
 ## Testing Methodology
 

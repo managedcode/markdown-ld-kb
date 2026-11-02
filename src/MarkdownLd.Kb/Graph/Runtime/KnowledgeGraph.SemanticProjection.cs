@@ -1,4 +1,6 @@
-using System.Collections.Immutable;
+using System.Runtime.InteropServices;
+using VDS.RDF;
+using static ManagedCode.MarkdownLd.Kb.Pipeline.PipelineConstants;
 
 namespace ManagedCode.MarkdownLd.Kb.Pipeline;
 
@@ -15,60 +17,106 @@ public sealed partial class KnowledgeGraph
             {
                 return cached;
             }
-            var snapshot = BuildSemanticSnapshot();
-            return Interlocked.CompareExchange(ref _semanticSnapshot, snapshot, null) ?? snapshot;
         }
         finally
         {
             _graphLock.ExitReadLock();
         }
+
+        return InitializeSemanticSnapshot();
+    }
+
+    private KnowledgeGraphSnapshot InitializeSemanticSnapshot()
+    {
+        _graphLock.EnterUpgradeableReadLock();
+        try
+        {
+            if (Volatile.Read(ref _semanticSnapshot) is { } cached)
+            {
+                return cached;
+            }
+
+            var snapshot = BuildSemanticSnapshot();
+            Volatile.Write(ref _semanticSnapshot, snapshot);
+            return snapshot;
+        }
+        finally
+        {
+            _graphLock.ExitUpgradeableReadLock();
+        }
     }
 
     private KnowledgeGraphSnapshot BuildSemanticSnapshot()
     {
-        var complete = CreateGraphSnapshot(_graph.Triples);
-        var excluded = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var node in complete.Nodes)
-        {
-            if (IsRetrievalInternalNode(node.Id))
-            {
-                excluded.Add(node.Id);
-            }
-        }
+        var complete = CreateGraphSnapshot(EnumerateSemanticTriples());
         var keys = new HashSet<(string, string, string)>();
-        var included = new HashSet<string>(StringComparer.Ordinal);
-        var edges = ImmutableArray.CreateBuilder<KnowledgeGraphEdge>();
-        foreach (var edge in complete.Edges)
+        // This private projection owns fresh arrays that have never escaped to a caller.
+        var nodes = (KnowledgeGraphNode[])complete.Nodes;
+        var edges = (KnowledgeGraphEdge[])complete.Edges;
+        var edgeCount = 0;
+        foreach (var edge in edges)
         {
-            if (!excluded.Contains(edge.SubjectId) && !excluded.Contains(edge.ObjectId)
-                && keys.Add((edge.SubjectId, edge.PredicateId, edge.ObjectId)))
+            if (keys.Add((edge.SubjectId, edge.PredicateId, edge.ObjectId)))
             {
-                edges.Add(edge);
-                included.Add(edge.SubjectId);
-                included.Add(edge.ObjectId);
+                edges[edgeCount++] = edge;
             }
         }
-        var nodes = complete.Nodes.Where(node => included.Contains(node.Id)).ToImmutableArray();
-        return new KnowledgeGraphSnapshot(nodes, edges.ToImmutable());
+
+        if (edgeCount != edges.Length)
+        {
+            Array.Resize(ref edges, edgeCount);
+        }
+
+        return new KnowledgeGraphSnapshot(
+            ImmutableCollectionsMarshal.AsImmutableArray(nodes), ImmutableCollectionsMarshal.AsImmutableArray(edges));
     }
 
-    private static bool IsRetrievalInternalNode(string nodeId)
+    private IEnumerable<Triple> EnumerateSemanticTriples()
     {
-        if (!Uri.TryCreate(nodeId, UriKind.Absolute, out var uri))
+        var classifications = new Dictionary<INode, bool>();
+        foreach (var triple in _graph.Triples)
+        {
+            var excludedSubject = IsRetrievalInternalNode(triple.Subject, classifications);
+            var excludedObject = IsRetrievalInternalNode(triple.Object, classifications);
+            if (!excludedSubject && !excludedObject)
+            {
+                yield return triple;
+            }
+        }
+    }
+
+    private static bool IsRetrievalInternalNode(INode node, Dictionary<INode, bool> classifications)
+    {
+        if (node is ILiteralNode or IBlankNode)
         {
             return false;
         }
 
+        if (node is not IUriNode uriNode)
+        {
+            throw new InvalidOperationException(UnsupportedGraphNodeMessagePrefix + node.NodeType);
+        }
+
+        if (!classifications.TryGetValue(node, out var excluded))
+        {
+            excluded = IsRetrievalInternalUri(uriNode.Uri);
+            classifications.Add(node, excluded);
+        }
+
+        return excluded;
+    }
+
+    private static bool IsRetrievalInternalUri(Uri uri)
+    {
         foreach (var segment in uri.Segments)
         {
-            if (segment.Equals(PipelineConstants.TokenSectionIdPrefix, StringComparison.Ordinal) ||
-                segment.Equals(PipelineConstants.TokenSegmentIdPrefix, StringComparison.Ordinal) ||
-                segment.Equals(PipelineConstants.TokenTopicIdPrefix, StringComparison.Ordinal))
+            if (segment.Equals(TokenSectionIdPrefix, StringComparison.Ordinal) ||
+                segment.Equals(TokenSegmentIdPrefix, StringComparison.Ordinal) ||
+                segment.Equals(TokenTopicIdPrefix, StringComparison.Ordinal))
             {
                 return true;
             }
         }
-
         return false;
     }
 }

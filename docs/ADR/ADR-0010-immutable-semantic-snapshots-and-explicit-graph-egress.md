@@ -4,7 +4,22 @@ Status: Accepted
 
 The gateway's real allocation profile attributed the no-match fallback predominantly to repeated semantic snapshot materialization. Separate uninstrumented BenchmarkDotNet workloads reproduced 4.71 MB per search at 120 documents and 44.48 MB at 1000 documents. Distance profiling also identified boxed dictionary enumeration, verified separately at 56 B per distance.
 
-Retain exactly one immutable semantic snapshot per `KnowledgeGraph`. Build it under the graph read lock, publish through atomic reference exchange and invalidate under the merge write lock. Immutable node/edge collections keep previous readers safe. Graph disposal releases the cached reference. This preserves complete semantic roles, object-only nodes, RDF identity, shared groups, ordering and no-match fallback rather than guessing a truncated retrieval neighborhood.
+Retain exactly one immutable semantic snapshot per `KnowledgeGraph`. Warm readers check it under the graph read lock. A cold reader releases that lock, enters the existing upgradeable read lock, and rechecks the cache before building and publishing it. Only one cold builder can enter; ordinary graph readers remain concurrent and merge invalidation still requires the write lock. Immutable node/edge collections keep previous readers safe. Graph disposal releases the cached reference. This preserves complete semantic roles, object-only nodes, RDF identity, shared groups, ordering and no-match fallback rather than guessing a truncated retrieval neighborhood.
+
+```mermaid
+flowchart TD
+    Reader[Snapshot reader] --> Fast[Read lock and cache check]
+    Fast -->|Cached| Return[Return immutable snapshot]
+    Fast -->|Cold| Gate[Release read lock and enter upgradeable read lock]
+    Gate --> Recheck[Recheck cache]
+    Recheck -->|Published by another reader| Return
+    Recheck -->|Still cold| Build[Build and publish one projection]
+    Build --> Return
+    Merge[Merge under write lock] --> Invalidate[Invalidate cache]
+    Invalidate --> Fast
+```
+
+The 2026-11-02 review confirmed that publishing one winner after concurrent read-lock builds still allocated sixteen projections for sixteen cold readers. Serialized cold initialization removes that burst without a second cache or a new synchronization field. Retrieval namespace filtering applies only to URI nodes, so authored literal values containing reserved-looking path segments retain their incident edges. Filter triples before rendering the semantic projection, memoizing URI classification only within that build. Its freshly created arrays have no external aliases, so they can transfer into immutable arrays without copying; compact duplicate rendered edges before publication. The complete projection remains independent. Regression and measurement evidence is recorded in the [0.3.0 review](../Reviews/Release-0.3.0-PerformanceReview.md).
 
 Internally owned token vectors retain normalized dictionaries and enumerate their concrete dictionary type. No public search scoring or ownership contract changes. Unequal-density/symmetry tests match a dense reference and confirm input dictionary mutations cannot alter owned vectors. Distance allocation becomes zero in both measured densities.
 

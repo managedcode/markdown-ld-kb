@@ -618,7 +618,7 @@ classDiagram
 
 ## Governed graph projection and allocation ownership
 
-One immutable semantic snapshot belongs to each `KnowledgeGraph`, is reused by readers and is invalidated by merge. Normalized token vectors own their dictionaries and avoid boxed hot-path enumeration. Explicit RDF projection filters subjects, resource objects and optional predicates before retrieval. Federated remote bindings use caller-owned official SPARQL HTTP clients and can require configured bindings for every remote endpoint. SPIN RDF-command/inference integration remains blocked by upstream public API issue 911. See [ADR-0010](ADR/ADR-0010-immutable-semantic-snapshots-and-explicit-graph-egress.md).
+One immutable semantic snapshot belongs to each `KnowledgeGraph`, is reused by readers and is invalidated by merge. A cold builder rechecks and publishes under the existing upgradeable read lock, avoiding duplicate concurrent materializations while warm readers retain the normal read path. Only URI nodes participate in retrieval namespace exclusion; literal text is preserved. Normalized token vectors own their dictionaries and avoid boxed hot-path enumeration. Explicit RDF projection filters subjects, resource objects and optional predicates before retrieval. Federated remote bindings use caller-owned official SPARQL HTTP clients and can require configured bindings for every remote endpoint. SPIN RDF-command/inference integration remains blocked by upstream public API issue 911. See [ADR-0010](ADR/ADR-0010-immutable-semantic-snapshots-and-explicit-graph-egress.md).
 
 
 ## Exact-neighbor related-segment pruning
