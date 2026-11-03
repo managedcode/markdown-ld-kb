@@ -35,6 +35,12 @@ The local primary search now bounds evidence before reading provenance from dotN
 
 On a fresh-process Release probe using the real 1,000-tool MCPGateway fixture, the warmed discovery, schema and invocation cycle allocated 4,120,107,976 bytes on the published 0.3.1 DLL and 15,092,504 bytes on the candidate. Elapsed time in that pair was 5.46 seconds and 30.01 milliseconds, with a 1,794-byte discovery response in both runs. An independent EventPipe run observed 15,080,888 bytes in the candidate cycle. The clean measurements and sampled trace are under `artifacts/schema-provenance-fanout`. These measurements describe the warmed operation and leave the catalog's retained memory as a separate capacity cost.
 
+### Stable evidence selection
+
+MCPGateway's [Linux release test](https://github.com/managedcode/MCPGateway/actions/runs/41620565010/job/125864895770) found that the unordered evidence limit could omit the forecast tool for a query matching its description. Repeated calls on the same graph reproduced the loss in a local Linux x64 container. The evidence query now binds each row's literal priority once and sorts before the limit. Exact literal matches take precedence, followed by the number of matching terms in any-term mode and direct evidence. Tests exercise the bound with 128 weaker matches and both graph insertion orders.
+
+Across eight warmed cycles on the 1,000-tool gateway fixture, median allocation was 15.03 MB on published 0.3.2, 17.38 MB with inline sort expressions and 15.92 MB with a bound priority. The final candidate preserved the 1,794-byte discovery payload in all eight cycles. [Schema-aware search](../Features/SchemaAwareSparqlSearch.md)
+
 ## Verification
 
 Focused TUnit covers exhaustive distance and tie parity, actual generated Markdown RDF, repeated content and distinct tails. The full suite passed 451 tests with no skips. Overall line coverage was 96.63%, and all three changed production files reached 100%. Formatting, strict build and package audits passed. The existing AngleSharp 1.9.0 transitive pin is retained. The local gateway receipts under `artifacts/benchmark-ci-repair` contain the captured SPARQL, raw relation digests, and control/candidate measurements. Complete Linux benchmark qualification remains separate from the library and gateway releases.

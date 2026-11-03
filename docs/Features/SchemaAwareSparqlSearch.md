@@ -136,6 +136,8 @@ Relationship evidence lets a source node match because a configured related node
 
 Local search ranks the bounded evidence rows and then attaches the complete source set for each selected match. Direct evidence gets its subject's sources. Relationship evidence gets the union of its subject's and related node's sources. Source IDs are deduplicated and sorted. Labels use the first available predicate in the order `schema:name`, `rdfs:label`, and `skos:prefLabel`, with ordinal selection among nonblank values of the preferred predicate. The indexed lookup avoids multiplying source rows into the evidence budget.
 
+Before applying the local evidence limit, the query prefers exact literals, then literals covering more query terms in any-term mode, then direct evidence. RDF bindings break ties. This keeps weaker hits from displacing stronger evidence when a query matches more rows than its budget. The configured predicate weights continue to rank the selected evidence.
+
 `GeneratedSparql` expresses the same evidence subselect and provenance joins as a replayable diagnostic. Replaying it with raw `ExecuteSelectAsync` returns joined rows, which can be large when a node has many sources. The grouped local search result uses indexed projection for this step.
 
 Relationship evidence can be outbound, inbound, or multi-hop through `PredicatePath`:

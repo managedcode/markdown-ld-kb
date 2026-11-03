@@ -332,7 +332,7 @@ flowchart LR
     FederatedSelect --> Federation["Federated SPARQL adapter"]
     Federation --> LocalBindings["Allowlisted local graph bindings"]
     Federation --> RemoteEndpoints["Allowlisted remote endpoints"]
-    LocalGraph --> LocalEvidence["Bounded local evidence"]
+    LocalGraph --> LocalEvidence["Relevance-ordered local evidence"]
     LocalEvidence --> Sources["Indexed RDF source projection"]
     Sources --> Evidence["Predicate-level evidence"]
     LocalBindings --> Evidence
@@ -342,7 +342,7 @@ flowchart LR
 
 `KnowledgeGraphBuildProfile` and `MarkdownKnowledgeBuildResult.Contract` connect graph creation to this boundary. A built graph can describe its actual RDF shape through `DescribeSchema`, validate a profile through `ValidateSchemaSearchProfile`, and then execute `SearchBySchemaAsync` with the validated profile. `SearchFocusedAsync` can route through this boundary when `KnowledgeGraphFocusedSearchOptions.SchemaSearchProfile` is supplied. The compatibility `SearchAsync` helper remains available for legacy callers, but application search should prefer schema-aware SPARQL or raw SPARQL.
 
-Local primary search applies the evidence row limit before resolving source context. It reads provenance and source labels through dotNetRDF's subject/predicate indexes under the same graph read lock as the evidence SELECT. [Schema-aware search](Features/SchemaAwareSparqlSearch.md) documents the diagnostic query and source grouping.
+Local primary search orders evidence by relevance before applying its row limit, then resolves source context for the selected matches. It reads provenance and source labels through dotNetRDF's subject/predicate indexes under the same graph read lock as the evidence SELECT. [Schema-aware search](Features/SchemaAwareSparqlSearch.md) documents the diagnostic query and source grouping.
 
 Focused graph snapshots are result handoff objects. They can be serialized as JSON-LD, Turtle, Mermaid, or DOT without re-running the original search.
 

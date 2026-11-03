@@ -220,9 +220,15 @@ public sealed partial class KnowledgeGraph
         else
         {
             AppendSchemaSearchBody(builder, query, profile, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, SparqlIndent, TripleCount >= SchemaSearchFixedPredicateMinimumTriples, includeSources: false);
+            AppendEvidencePriority(builder, query, profile.TermMode);
         }
 
         builder.AppendLine(SparqlCloseBrace);
+        if (!federated)
+        {
+            builder.AppendLine(EvidenceOrder);
+        }
+
         AppendLimit(builder, profile.MaxResults * SchemaSearchEvidenceRowMultiplier);
         var evidence = builder.ToString();
         return federated ? (evidence, evidence) : (evidence, BuildLocalSchemaSearchDiagnostic(evidence, prefixLength));
