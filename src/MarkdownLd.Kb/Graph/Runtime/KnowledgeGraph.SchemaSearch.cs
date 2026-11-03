@@ -14,8 +14,7 @@ public sealed partial class KnowledgeGraph
         cancellationToken.ThrowIfCancellationRequested();
 
         var plan = CreateSchemaSearchPlan(query, profile ?? KnowledgeGraphSchemaSearchProfile.Default, federated: false);
-        var rows = await ExecuteSelectAsync(plan.GeneratedSparql, cancellationToken).ConfigureAwait(false);
-        var primary = BuildPrimaryMatches(rows, plan).Take(plan.Profile.MaxResults).ToArray();
+        var primary = await ReadLocalSchemaMatchesAsync(plan, cancellationToken).ConfigureAwait(false);
         var expansion = await ResolveSchemaSearchExpansionAsync(primary, plan, cancellationToken).ConfigureAwait(false);
 
         return new KnowledgeGraphSchemaSearchResult(
@@ -80,12 +79,13 @@ public sealed partial class KnowledgeGraph
         var facetFilters = profile.FacetFilters.Select(filter => new ResolvedSchemaFacetFilter(
             ResolveSchemaSearchIri(filter.Predicate, prefixes),
             ResolveSchemaSearchIri(filter.Object, prefixes))).ToArray();
-        var sparql = BuildSchemaSearchSparql(query, prefixes, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, profile, federated);
+        var (evidenceSparql, generatedSparql) = BuildSchemaSearchSparql(query, prefixes, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, profile, federated);
 
         return new KnowledgeGraphSchemaSearchPlan(
             profile,
             query.Trim(),
-            sparql,
+            generatedSparql,
+            evidenceSparql,
             textPredicates,
             relationships,
             expansion,
@@ -196,7 +196,7 @@ public sealed partial class KnowledgeGraph
         return path.Select(item => ResolveSchemaSearchIri(item, prefixes)).ToArray();
     }
 
-    private string BuildSchemaSearchSparql(
+    private (string Evidence, string Diagnostic) BuildSchemaSearchSparql(
         string query,
         IReadOnlyDictionary<string, string> prefixes,
         IReadOnlyList<ResolvedSchemaTextPredicate> textPredicates,
@@ -209,7 +209,8 @@ public sealed partial class KnowledgeGraph
     {
         var builder = new StringBuilder();
         AppendPrefixLines(builder, prefixes);
-        AppendSchemaSearchSelect(builder);
+        var prefixLength = builder.Length;
+        AppendSchemaSearchSelect(builder, includeSources: federated);
         builder.AppendLine(SparqlWhereKeyword + SpaceText + SparqlOpenBrace);
 
         if (federated)
@@ -218,11 +219,27 @@ public sealed partial class KnowledgeGraph
         }
         else
         {
-            AppendSchemaSearchBody(builder, query, profile, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, SparqlIndent, TripleCount >= SchemaSearchFixedPredicateMinimumTriples);
+            AppendSchemaSearchBody(builder, query, profile, textPredicates, relationships, typeFilters, excludedTypes, facetFilters, SparqlIndent, TripleCount >= SchemaSearchFixedPredicateMinimumTriples, includeSources: false);
         }
 
         builder.AppendLine(SparqlCloseBrace);
         AppendLimit(builder, profile.MaxResults * SchemaSearchEvidenceRowMultiplier);
+        var evidence = builder.ToString();
+        return federated ? (evidence, evidence) : (evidence, BuildLocalSchemaSearchDiagnostic(evidence, prefixLength));
+    }
+
+    private static string BuildLocalSchemaSearchDiagnostic(string evidence, int prefixLength)
+    {
+        var builder = new StringBuilder();
+        builder.Append(evidence.AsSpan(0, prefixLength));
+        AppendSchemaSearchSelect(builder, includeSources: true);
+        builder.AppendLine(SparqlWhereKeyword + SpaceText + SparqlOpenBrace);
+        builder.AppendLine(SparqlIndent + SparqlOpenBrace);
+        builder.Append(evidence.AsSpan(prefixLength));
+        builder.AppendLine(SparqlIndent + SparqlCloseBrace);
+        AppendOptionalSource(builder, SparqlSubjectVariable, SparqlSourceVariable, SparqlSourceLabelVariable, SparqlIndent);
+        AppendOptionalSource(builder, SparqlRelatedNodeVariable, SparqlRelatedSourceVariable, SparqlRelatedSourceLabelVariable, SparqlIndent, relationshipOnly: true);
+        builder.AppendLine(SparqlCloseBrace);
         return builder.ToString();
     }
 
@@ -243,7 +260,7 @@ public sealed partial class KnowledgeGraph
         }
     }
 
-    private static void AppendSchemaSearchSelect(StringBuilder builder)
+    private static void AppendSchemaSearchSelect(StringBuilder builder, bool includeSources)
     {
         builder
             .Append(SparqlSelectKeyword)
@@ -268,15 +285,21 @@ public sealed partial class KnowledgeGraph
             .Append(SpaceCharacter)
             .Append(SparqlRelatedLabelVariable)
             .Append(SpaceCharacter)
-            .Append(SparqlViaPredicateVariable)
-            .Append(SpaceCharacter)
-            .Append(SparqlSourceVariable)
-            .Append(SpaceCharacter)
-            .Append(SparqlSourceLabelVariable)
-            .Append(SpaceCharacter)
-            .Append(SparqlRelatedSourceVariable)
-            .Append(SpaceCharacter)
-            .Append(SparqlRelatedSourceLabelVariable)
+            .Append(SparqlViaPredicateVariable);
+        if (includeSources)
+        {
+            builder
+                .Append(SpaceCharacter)
+                .Append(SparqlSourceVariable)
+                .Append(SpaceCharacter)
+                .Append(SparqlSourceLabelVariable)
+                .Append(SpaceCharacter)
+                .Append(SparqlRelatedSourceVariable)
+                .Append(SpaceCharacter)
+                .Append(SparqlRelatedSourceLabelVariable);
+        }
+
+        builder
             .Append(SpaceCharacter)
             .Append(SparqlServiceEndpointVariable)
             .AppendLine();
@@ -305,6 +328,7 @@ internal sealed record KnowledgeGraphSchemaSearchPlan(
     KnowledgeGraphSchemaSearchProfile Profile,
     string Query,
     string GeneratedSparql,
+    string EvidenceSparql,
     IReadOnlyList<ResolvedSchemaTextPredicate> TextPredicates,
     IReadOnlyList<ResolvedSchemaRelationshipPredicate> RelationshipPredicates,
     IReadOnlyList<ResolvedSchemaExpansionPredicate> ExpansionPredicates,

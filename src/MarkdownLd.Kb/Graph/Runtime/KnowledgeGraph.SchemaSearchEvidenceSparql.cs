@@ -15,7 +15,8 @@ public sealed partial class KnowledgeGraph
         IReadOnlyList<string> excludedTypes,
         IReadOnlyList<ResolvedSchemaFacetFilter> facetFilters,
         string indent,
-        bool useFixedPredicateBranches)
+        bool useFixedPredicateBranches,
+        bool includeSources = true)
     {
         builder.AppendLine(indent + SparqlOpenBrace);
         var evidenceIndent = indent + SparqlIndent;
@@ -30,11 +31,11 @@ public sealed partial class KnowledgeGraph
         if (relationships.Count > 0)
         {
             AppendEvidenceBranchStart(builder, evidenceIndent, hasBranch);
-            AppendRelationshipEvidenceGroup(builder, query, profile, relationships, typeFilters, excludedTypes, facetFilters, evidenceIndent + SparqlIndent, useFixedPredicateBranches);
+            AppendRelationshipEvidenceGroup(builder, query, profile, relationships, typeFilters, excludedTypes, facetFilters, evidenceIndent + SparqlIndent, useFixedPredicateBranches, includeSources);
             builder.AppendLine(evidenceIndent + SparqlCloseBrace);
         }
         builder.AppendLine(indent + SparqlCloseBrace);
-        AppendSubjectMetadata(builder, indent);
+        AppendSubjectMetadata(builder, indent, includeSources);
     }
 
     private static void AppendRelationshipEvidenceGroup(
@@ -46,7 +47,8 @@ public sealed partial class KnowledgeGraph
         IReadOnlyList<string> excludedTypes,
         IReadOnlyList<ResolvedSchemaFacetFilter> facetFilters,
         string indent,
-        bool useFixedPredicateBranches)
+        bool useFixedPredicateBranches,
+        bool includeSources)
     {
         builder.AppendLine(indent + SparqlOpenBrace);
         var hasBranch = false;
@@ -61,7 +63,10 @@ public sealed partial class KnowledgeGraph
             }
         }
         builder.AppendLine(indent + SparqlCloseBrace);
-        AppendOptionalSource(builder, SparqlRelatedNodeVariable, SparqlRelatedSourceVariable, SparqlRelatedSourceLabelVariable, indent);
+        if (includeSources)
+        {
+            AppendOptionalSource(builder, SparqlRelatedNodeVariable, SparqlRelatedSourceVariable, SparqlRelatedSourceLabelVariable, indent);
+        }
         AppendOptionalLabel(builder, SparqlRelatedNodeVariable, SparqlRelatedLabelVariable, indent);
     }
 
@@ -129,11 +134,14 @@ public sealed partial class KnowledgeGraph
         AppendBindText(builder, SchemaSearchRelationshipEvidenceKind, SparqlEvidenceKindVariable, indent);
     }
 
-    private static void AppendSubjectMetadata(StringBuilder builder, string indent)
+    private static void AppendSubjectMetadata(StringBuilder builder, string indent, bool includeSources)
     {
         AppendOptionalLabel(builder, SparqlSubjectVariable, SparqlLabelVariable, indent);
         AppendOptionalPredicate(builder, SparqlSubjectVariable, SchemaDescriptionText, SparqlDescriptionVariable, indent);
-        AppendOptionalSource(builder, SparqlSubjectVariable, SparqlSourceVariable, SparqlSourceLabelVariable, indent);
+        if (includeSources)
+        {
+            AppendOptionalSource(builder, SparqlSubjectVariable, SparqlSourceVariable, SparqlSourceLabelVariable, indent);
+        }
     }
 
     private static void AppendRelationshipPathTriple(

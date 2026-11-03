@@ -29,6 +29,12 @@ One warm 1,000-tool discovery/schema/invocation cycle took 2.5–2.7 seconds and
 
 Grounding the singleton subject, changing label fallback to MINUS and scoping related metadata with subqueries did not yield a useful result-preserving improvement. The remaining query work needs a separate evidence and provenance design that preserves label priority, caller-visible context and deterministic result budgets. The cold build repair keeps the query path intact.
 
+### Follow-up on provenance fanout
+
+The local primary search now bounds evidence before reading provenance from dotNetRDF's subject/predicate indexes. The previous joined row limit could consume all slots on sources for one direct fact and omit an independent relationship fact. The regression exercises both roles with 32 sources each and verifies complete source context in the grouped result and a replay of the diagnostic SELECT.
+
+On a fresh-process Release probe using the real 1,000-tool MCPGateway fixture, the warmed discovery, schema and invocation cycle allocated 4,120,107,976 bytes on the published 0.3.1 DLL and 15,092,504 bytes on the candidate. Elapsed time in that pair was 5.46 seconds and 30.01 milliseconds, with a 1,794-byte discovery response in both runs. An independent EventPipe run observed 15,080,888 bytes in the candidate cycle. The clean measurements and sampled trace are under `artifacts/schema-provenance-fanout`. These measurements describe the warmed operation and leave the catalog's retained memory as a separate capacity cost.
+
 ## Verification
 
 Focused TUnit covers exhaustive distance and tie parity, actual generated Markdown RDF, repeated content and distinct tails. The full suite passed 451 tests with no skips. Overall line coverage was 96.63%, and all three changed production files reached 100%. Formatting, strict build and package audits passed. The existing AngleSharp 1.9.0 transitive pin is retained. The local gateway receipts under `artifacts/benchmark-ci-repair` contain the captured SPARQL, raw relation digests, and control/candidate measurements. Complete Linux benchmark qualification remains separate from the library and gateway releases.

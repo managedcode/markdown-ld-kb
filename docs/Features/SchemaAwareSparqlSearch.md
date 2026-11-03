@@ -124,12 +124,19 @@ sequenceDiagram
     SPARQL->>Graph: Match ?subject ex:requires ?relatedNode
     SPARQL->>Graph: Match ?relatedNode ex:symptom ?evidenceValue
     Graph-->>SPARQL: Primary subject + related evidence
+    SPARQL-->>Search: Bounded evidence rows
+    Search->>Graph: Read sources by subject and provenance predicate
+    Graph-->>Search: Deduplicated source context
     Search->>SPARQL: Expansion SELECT for configured relationships
     SPARQL-->>Search: Related and next-step nodes
     Search-->>Caller: Matches, evidence, focused graph, generated SPARQL
 ```
 
 Relationship evidence lets a source node match because a configured related node contains the literal evidence. Expansion then returns configured related and next-step nodes so the caller can show a compact graph around the match instead of a flat list.
+
+Local search ranks the bounded evidence rows and then attaches the complete source set for each selected match. Direct evidence gets its subject's sources. Relationship evidence gets the union of its subject's and related node's sources. Source IDs are deduplicated and sorted. Labels use the first available predicate in the order `schema:name`, `rdfs:label`, and `skos:prefLabel`, with ordinal selection among nonblank values of the preferred predicate. The indexed lookup avoids multiplying source rows into the evidence budget.
+
+`GeneratedSparql` expresses the same evidence subselect and provenance joins as a replayable diagnostic. Replaying it with raw `ExecuteSelectAsync` returns joined rows, which can be large when a node has many sources. The grouped local search result uses indexed projection for this step.
 
 Relationship evidence can be outbound, inbound, or multi-hop through `PredicatePath`:
 

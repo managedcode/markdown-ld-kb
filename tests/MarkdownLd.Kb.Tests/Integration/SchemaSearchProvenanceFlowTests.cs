@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ManagedCode.MarkdownLd.Kb.Pipeline;
 using Shouldly;
 
@@ -89,6 +90,51 @@ public sealed class SchemaSearchProvenanceFlowTests
         sources.Single(source => source.SourceId.EndsWith("/dataset", StringComparison.Ordinal)).SourceLabel.ShouldBe("Dataset");
         sources.Single(source => source.SourceId.EndsWith("/unlabelled", StringComparison.Ordinal)).SourceLabel.ShouldBeNull();
     }
+
+    [Test]
+    public async Task Large_source_sets_preserve_direct_and_relationship_evidence()
+    {
+        var primarySources = CreateSourceIds("manual");
+        var relatedSources = CreateSourceIds("dataset");
+        using var graph = KnowledgeGraph.LoadJsonLd(GraphJson.Replace("Weather forecast", "Rainfall forecast", StringComparison.Ordinal));
+        using var provenance = KnowledgeGraph.LoadJsonLd($$"""
+            { "@context": { "p": "http://www.w3.org/ns/prov#", "r": "http://www.w3.org/2000/01/rdf-schema#" }, "@graph": [
+              { "@id": "https://provenance.example/tool", "p:wasDerivedFrom": {{RenderSourceIds(primarySources)}} },
+              { "@id": "https://provenance.example/topic", "p:wasDerivedFrom": {{RenderSourceIds(relatedSources)}} },
+              { "@id": "{{relatedSources[0]}}", "r:label": "Rainfall dataset" }
+            ] }
+            """);
+        await graph.MergeAsync(provenance);
+
+        var result = await graph.SearchBySchemaAsync("Rainfall", new KnowledgeGraphSchemaSearchProfile
+        {
+            TypeFilters = ["schema:SoftwareApplication"],
+            TextPredicates = [new("schema:name")],
+            RelationshipPredicates = [new("schema:about", ["rdfs:label"])],
+            ExpansionPredicates = [],
+            MaxResults = 1
+        });
+
+        var evidence = result.Matches.Single().Evidence;
+        var direct = evidence.Single(item => item.Kind == KnowledgeGraphSchemaSearchEvidenceKind.Direct);
+        var related = evidence.Single(item => item.Kind == KnowledgeGraphSchemaSearchEvidenceKind.Relationship);
+        direct.SourceContexts.Select(source => source.SourceId).ShouldBe(primarySources);
+        related.SourceContexts.Select(source => source.SourceId).ShouldBe(relatedSources.Concat(primarySources));
+        related.SourceContexts[0].SourceLabel.ShouldBe("Rainfall dataset");
+
+        var diagnostic = await graph.ExecuteSelectAsync(result.GeneratedSparql);
+        var directRows = diagnostic.Rows.Where(row => row.Values["evidenceKind"] == "direct").ToArray();
+        directRows.Select(row => row.Values["source"]).Distinct().Order(StringComparer.Ordinal).ShouldBe(primarySources);
+        directRows.ShouldAllBe(row => !row.Values.ContainsKey("relatedSource"));
+        diagnostic.Rows.Where(row => row.Values["evidenceKind"] == "relationship")
+            .Select(row => row.Values["relatedSource"]).Distinct().Order(StringComparer.Ordinal).ShouldBe(relatedSources);
+    }
+
+    private static string[] CreateSourceIds(string kind) =>
+        Enumerable.Range(0, 32).Select(index => $"https://provenance.example/{kind}/{index:D2}").ToArray();
+
+    private static string RenderSourceIds(IEnumerable<string> ids) =>
+        JsonSerializer.Serialize(ids.Select(id => new Dictionary<string, string> { ["@id"] = id }));
 
     [Test]
     [Arguments(false)]

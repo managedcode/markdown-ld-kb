@@ -184,6 +184,15 @@ public sealed partial class KnowledgeGraph : IDisposable
         string? expectedQueryTypeMessage = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var query = ParseReadOnlyQuery(sparql, expectedQueryType, expectedQueryTypeMessage);
+        return await Task.Run(() => ProcessQuery(query, cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
+
+    private static SparqlQuery ParseReadOnlyQuery(
+        string sparql,
+        Func<SparqlQueryType, bool>? expectedQueryType,
+        string? expectedQueryTypeMessage)
+    {
         var safety = SparqlSafety.EnforceReadOnly(sparql);
         if (!safety.IsAllowed)
         {
@@ -198,8 +207,7 @@ public sealed partial class KnowledgeGraph : IDisposable
         }
 
         EnsureExpectedQueryType(query.QueryType, expectedQueryType, expectedQueryTypeMessage);
-
-        return await Task.Run(() => ProcessQuery(query, cancellationToken), cancellationToken).ConfigureAwait(false);
+        return query;
     }
 
     private static void EnsureExpectedQueryType(
@@ -255,23 +263,28 @@ public sealed partial class KnowledgeGraph : IDisposable
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var dataset = new InMemoryDataset(_graph);
-            // Each caller already owns an asynchronous query worker. Keep native
-            // evaluation in that worker instead of nesting PLINQ work and URI-cache contention.
-            var processor = new LeviathanQueryProcessor(dataset, options =>
-            {
-                options.UsePLinqEvaluation = false;
-                if (queryExecutionTimeoutMilliseconds is int timeout)
-                {
-                    options.QueryExecutionTimeout = timeout;
-                }
-            });
-            return processor.ProcessQuery(query);
+            return ProcessQueryUnderReadLock(query, queryExecutionTimeoutMilliseconds);
         }
         finally
         {
             _graphLock.ExitReadLock();
         }
+    }
+
+    private object ProcessQueryUnderReadLock(SparqlQuery query, int? queryExecutionTimeoutMilliseconds = null)
+    {
+        var dataset = new InMemoryDataset(_graph);
+        // Each caller already owns an asynchronous query worker. Keep native
+        // evaluation in that worker instead of nesting PLINQ work and URI-cache contention.
+        var processor = new LeviathanQueryProcessor(dataset, options =>
+        {
+            options.UsePLinqEvaluation = false;
+            if (queryExecutionTimeoutMilliseconds is int timeout)
+            {
+                options.QueryExecutionTimeout = timeout;
+            }
+        });
+        return processor.ProcessQuery(query);
     }
 
     internal object ProcessFederatedLocalQuery(
