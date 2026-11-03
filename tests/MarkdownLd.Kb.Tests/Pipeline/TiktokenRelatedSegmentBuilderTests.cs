@@ -75,6 +75,25 @@ public sealed class TiktokenRelatedSegmentBuilderTests
     }
 
     [Test]
+    public void Shared_vectors_preserve_top_k_distances_in_original_operand_order()
+    {
+        var random = new Random(307);
+        var shared = new[]
+        {
+            Segment("reference-a", (1, 0.1d), (2, 0.4d), (3, 0.9d)),
+            Segment("reference-b", (3, 0.7d), (1, 0.3d), (2, 0.2d)),
+            Segment("reference-c", (2, 0.6d), (3, 0.1d), (1, 0.8d)),
+        };
+        var segments = Enumerable.Range(0, 72)
+            .Select(index => index % 4 == 0
+                ? Segment(index.ToString("D3", System.Globalization.CultureInfo.InvariantCulture), (1, random.NextDouble()), (3, 1d))
+                : shared[index % shared.Length] with { Id = DocumentId + index.ToString("D3", System.Globalization.CultureInfo.InvariantCulture) })
+            .OrderBy(_ => random.Next()).ToArray();
+
+        CreateBuilder(6).BuildRelations(segments).ShouldBe(BuildCurrentTopKUnion(segments, 6));
+    }
+
+    [Test]
     public void Large_repeated_vectors_retain_every_source_and_the_distinct_tail()
     {
         const int count = 35_000;
@@ -121,12 +140,14 @@ public sealed class TiktokenRelatedSegmentBuilderTests
         for (var sourceIndex = 0; sourceIndex < segments.Count; sourceIndex++)
         {
             var source = segments[sourceIndex];
-            var candidates = segments
-                .Where((_, index) => index != sourceIndex)
-                .Select(candidate => new
+            var candidates = Enumerable.Range(0, segments.Count)
+                .Where(index => index != sourceIndex)
+                .Select(index => new
                 {
-                    Segment = candidate,
-                    Distance = source.Vector.EuclideanDistanceTo(candidate.Vector),
+                    Segment = segments[index],
+                    Distance = sourceIndex < index
+                        ? source.Vector.EuclideanDistanceTo(segments[index].Vector)
+                        : segments[index].Vector.EuclideanDistanceTo(source.Vector),
                 })
                 .OrderBy(static candidate => candidate.Distance)
                 .ThenBy(static candidate => candidate.Segment.Id, StringComparer.Ordinal)

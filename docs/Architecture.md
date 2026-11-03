@@ -623,4 +623,4 @@ One immutable semantic snapshot belongs to each `KnowledgeGraph`, is reused by r
 
 ## Exact-neighbor related-segment pruning
 
-Related segment construction orders stable IDs and excludes only pairs whose endpoints already have final zero-distance top-k sets. Original operand order retains exact floating-point behavior; unresolved and distinct segments preserve exhaustive choices. State belongs to one build. See [ADR-0011](ADR/ADR-0011-exact-neighbor-pruning-for-repeated-segments.md).
+Related segment construction orders stable IDs and excludes only pairs whose endpoints already have final zero-distance top-k sets. An indexed chain tracks unresolved positions without per-source copies. Repeated texts share fitted vectors, and a bounded build-local cache reuses distances while preserving original operand order. Unresolved and distinct segments preserve exhaustive choices. See [ADR-0011](ADR/ADR-0011-exact-neighbor-pruning-for-repeated-segments.md).

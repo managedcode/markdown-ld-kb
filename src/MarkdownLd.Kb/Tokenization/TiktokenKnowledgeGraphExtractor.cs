@@ -75,9 +75,17 @@ internal sealed class TiktokenKnowledgeGraphExtractor
         TokenVectorSpace vectorSpace)
     {
         var segments = new TokenizedKnowledgeSegment[candidates.Count];
+        var vectorsByText = new Dictionary<string, TokenVector>(StringComparer.Ordinal);
         for (var index = 0; index < candidates.Count; index++)
         {
-            segments[index] = CreateSegment(candidates[index], vectorSpace);
+            var candidate = candidates[index];
+            if (!vectorsByText.TryGetValue(candidate.Text, out var vector))
+            {
+                vector = vectorSpace.CreateVector(candidate.TokenIds);
+                vectorsByText.Add(candidate.Text, vector);
+            }
+
+            segments[index] = CreateSegment(candidate, vector);
         }
 
         return segments;
@@ -85,7 +93,7 @@ internal sealed class TiktokenKnowledgeGraphExtractor
 
     private static TokenizedKnowledgeSegment CreateSegment(
         TokenizedSegmentCandidate candidate,
-        TokenVectorSpace vectorSpace)
+        TokenVector vector)
     {
         return new TokenizedKnowledgeSegment(
             candidate.Id,
@@ -93,7 +101,7 @@ internal sealed class TiktokenKnowledgeGraphExtractor
             candidate.ParentId,
             candidate.Text,
             candidate.LineNumber,
-            vectorSpace.CreateVector(candidate.TokenIds));
+            vector);
     }
 
 }

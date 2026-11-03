@@ -48,48 +48,95 @@ internal sealed class TiktokenRelatedSegmentBuilder
     {
         var ordered = Enumerable.Range(0, segments.Count)
             .OrderBy(index => segments[index].Id, StringComparer.Ordinal).ToArray();
-        var unresolved = new SortedSet<int>(Enumerable.Range(0, segments.Count));
+        var nextUnresolved = Enumerable.Range(1, ordered.Length).ToArray();
+        var firstUnresolved = 0;
+        var distances = RelatedSegmentDistanceCache.Create(segments);
         for (var position = 0; position < ordered.Length; position++)
         {
-            unresolved.Remove(position);
-            var sourceIndex = ordered[position];
-            var candidates = HasExactNeighbors(relatedBySegment[sourceIndex])
-                ? unresolved.ToArray()
-                : Enumerable.Range(position + 1, ordered.Length - position - 1);
-            foreach (var candidatePosition in candidates)
-            {
-                var candidateIndex = ordered[candidatePosition];
-                AddPair(segments, relatedBySegment, sourceIndex, candidateIndex);
-                if (HasExactNeighbors(relatedBySegment[candidateIndex]))
-                {
-                    unresolved.Remove(candidatePosition);
-                }
-            }
+            AddLaterPairs(segments, relatedBySegment, ordered, distances, position, nextUnresolved, ref firstUnresolved);
         }
     }
 
-    private bool HasExactNeighbors(IReadOnlyList<RelatedSegmentCandidate> related) =>
+    private void AddLaterPairs(
+        IReadOnlyList<TokenizedKnowledgeSegment> segments,
+        IReadOnlyList<List<RelatedSegmentCandidate>> relatedBySegment,
+        int[] ordered,
+        RelatedSegmentDistanceCache? distances,
+        int sourcePosition,
+        int[] nextUnresolved,
+        ref int firstUnresolved)
+    {
+        var sourceIndex = ordered[sourcePosition];
+        var sourceComplete = firstUnresolved != sourcePosition;
+        if (!sourceComplete)
+        {
+            firstUnresolved = nextUnresolved[sourcePosition];
+        }
+
+        // The remaining unresolved positions are always in ascending ID order.
+        var unresolved = firstUnresolved;
+        var previousUnresolved = -1;
+        var position = sourceComplete ? unresolved : sourcePosition + 1;
+        while (position < ordered.Length)
+        {
+            var candidateIndex = ordered[position];
+            var candidateComplete = position != unresolved;
+            AddPair(segments, relatedBySegment, distances, sourceIndex, candidateIndex, sourceComplete, candidateComplete);
+            if (!candidateComplete)
+            {
+                unresolved = nextUnresolved[position];
+                if (!HasExactNeighbors(relatedBySegment[candidateIndex]))
+                {
+                    previousUnresolved = position;
+                }
+                else if (previousUnresolved >= 0)
+                {
+                    nextUnresolved[previousUnresolved] = unresolved;
+                }
+                else
+                {
+                    firstUnresolved = unresolved;
+                }
+            }
+
+            sourceComplete |= HasExactNeighbors(relatedBySegment[sourceIndex]);
+            position = sourceComplete ? unresolved : position + 1;
+        }
+    }
+
+    private bool HasExactNeighbors(List<RelatedSegmentCandidate> related) =>
         related.Count == _options.MaxRelatedSegments && related[^1].Distance == 0d;
 
     private void AddPair(
         IReadOnlyList<TokenizedKnowledgeSegment> segments,
         IReadOnlyList<List<RelatedSegmentCandidate>> relatedBySegment,
+        RelatedSegmentDistanceCache? distances,
         int sourceIndex,
-        int candidateIndex)
+        int candidateIndex,
+        bool sourceComplete,
+        bool candidateComplete)
     {
         var source = segments[sourceIndex];
         var candidate = segments[candidateIndex];
         // Preserve the original operand order, including floating-point accumulation.
-        var distance = sourceIndex < candidateIndex
-            ? source.Vector.EuclideanDistanceTo(candidate.Vector)
-            : candidate.Vector.EuclideanDistanceTo(source.Vector);
+        var distance = distances?.GetDistance(sourceIndex, candidateIndex) ??
+            (sourceIndex < candidateIndex
+                ? source.Vector.EuclideanDistanceTo(candidate.Vector)
+                : candidate.Vector.EuclideanDistanceTo(source.Vector));
         if (distance > _options.MaximumRelatedDistance)
         {
             return;
         }
 
-        AddBoundedRelatedCandidate(relatedBySegment[sourceIndex], new RelatedSegmentCandidate(candidate, distance));
-        AddBoundedRelatedCandidate(relatedBySegment[candidateIndex], new RelatedSegmentCandidate(source, distance));
+        if (!sourceComplete)
+        {
+            AddBoundedRelatedCandidate(relatedBySegment[sourceIndex], new RelatedSegmentCandidate(candidate, distance));
+        }
+
+        if (!candidateComplete)
+        {
+            AddBoundedRelatedCandidate(relatedBySegment[candidateIndex], new RelatedSegmentCandidate(source, distance));
+        }
     }
 
     private static void AddRelations(
@@ -123,6 +170,11 @@ internal sealed class TiktokenRelatedSegmentBuilder
         List<RelatedSegmentCandidate> related,
         RelatedSegmentCandidate candidate)
     {
+        if (related.Count == _options.MaxRelatedSegments && CompareRelatedCandidates(candidate, related[^1]) >= 0)
+        {
+            return;
+        }
+
         var insertIndex = FindRelatedInsertIndex(related, candidate);
         if (insertIndex >= 0)
         {
